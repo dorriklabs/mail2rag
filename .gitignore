@@ -1,0 +1,67 @@
+# ============================================
+# FICHIERS SENSIBLES (NE JAMAIS COMMIT)
+# ============================================
+.env
+.env.local
+.env.production
+*.key
+*.pem
+*.crt
+
+# ============================================
+# DONNÉES ET ÉTATS LOCAUX
+# ============================================
+state/
+logs/
+*.log
+*.log.*
+
+# Volumes Docker (montés localement)
+mail2rag/archive/
+anythingllm_storage/
+qdrant_data/
+bm25_data/
+
+# ============================================
+# PYTHON
+# ============================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# Environnements virtuels
+.venv/
+venv/
+ENV/
+env/
+
+# ============================================
+# IDE / ÉDITEURS
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================
+# DOCKER
+# ============================================
+*.backup
+*.bak
+
+# ============================================
+# TEMPORAIRES
+# ============================================
+tmp/
+temp/
+*.tmp

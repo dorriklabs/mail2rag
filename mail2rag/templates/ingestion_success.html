@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block container_class %}success{% endblock %}
+
+{% block content %}
+<h2>Ingestion terminée avec succès</h2>
+
+<p>
+    Vos documents ont été reçus, archivés et indexés dans le moteur de recherche documentaire.
+</p>
+
+<div class="content" style="background-color: #f0fff4;">
+    <p style="margin: 0;">
+        <strong>Espace de travail :</strong>
+        <span style="color: #2c3e50;">{{ workspace }}</span><br>
+        <strong>Nombre de fichiers indexés :</strong> {{ files|length }}
+    </p>
+</div>
+
+{% if email_summary %}
+<div class="content" style="background-color: #f0f8ff; margin-top: 15px;">
+    <p style="margin: 0;">
+        <strong>📝 Aperçu de l'email :</strong><br>
+        <em style="color: #2c3e50;">{{ email_summary }}</em>
+    </p>
+</div>
+{% endif %}
+
+<p style="margin-top: 15px;">
+    Les documents sont désormais disponibles pour&nbsp;:
+</p>
+<ul>
+    <li>la recherche et le questionnement via votre RAG d'entreprise ;</li>
+    <li>la consultation directe depuis l'archive sécurisée.</li>
+</ul>
+
+<h3 style="color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+    Détail des fichiers traités
+</h3>
+<ul>
+    {% for file in files %}
+    <li>📎 {{ file }}</li>
+    {% endfor %}
+</ul>
+
+<div style="margin-top: 20px; text-align: center;">
+    <a href="{{ archive_url }}" class="btn">Consulter les documents archivés</a>
+</div>
+
+<p style="font-size: 12px; color: #7f8c8d; margin-top: 15px;">
+    Vous pouvez interroger ces documents en envoyant un nouvel email à cette même adresse
+    avec un sujet commençant par <strong>"Chat:"</strong> ou <strong>"Question:"</strong> suivi de votre
+    demande.
+    Aucune action supplémentaire n'est requise de votre part.
+</p>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block container_class %}info{% endblock %}
+
+{% block content %}
+<h2>Aucun document indexé pour ce message</h2>
+
+<div class="content">
+    <p>
+        Aucun document n'a été ingéré pour le sujet :
+        <strong>{{ subject }}</strong>.
+    </p>
+
+    <p>Cela peut être dû notamment à :</p>
+    <ul>
+        <li>l'absence de pièce jointe exploitable ;</li>
+        <li>des fichiers vides ou corrompus ;</li>
+        <li>des extensions de fichiers non supportées ou bloquées par la politique de sécurité.</li>
+    </ul>
+
+    <p>
+        Aucun contenu n'a été ajouté au moteur de recherche pour ce message.
+        Les données déjà indexées précédemment restent inchangées.
+    </p>
+
+    <p>
+        Si vous pensez qu'un document aurait dû être pris en compte, vous pouvez :
+    </p>
+    <ul>
+        <li>vérifier le format des fichiers concernés et renvoyer l'email ;</li>
+        <li>contacter l'équipe en charge de Mail2RAG en joignant ce message.</li>
+    </ul>
+</div>
+{% endblock %}

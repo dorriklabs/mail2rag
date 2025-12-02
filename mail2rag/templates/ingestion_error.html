@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block container_class %}error{% endblock %}
+
+{% block content %}
+<h2>Problème lors de l'indexation des documents</h2>
+
+<div class="content">
+    <p>
+        Vos fichiers ont bien été reçus et archivés, mais une erreur est survenue lors de leur
+        indexation dans le moteur AnythingLLM. Les documents ne sont donc pas encore consultables via l'IA.
+    </p>
+
+    <p><strong>Ce qui a été fait :</strong></p>
+    <ul>
+        <li>le message et ses pièces jointes ont été stockés dans l'archive sécurisée ;</li>
+        <li>aucun contenu n'a été perdu.</li>
+    </ul>
+
+    <p><strong>Ce que cela implique :</strong></p>
+    <ul>
+        <li>les documents n'apparaîtront pas encore dans les réponses de Mail2RAG ;</li>
+        <li>l'archive reste disponible pour consultation manuelle.</li>
+    </ul>
+
+    <p><strong>Actions possibles :</strong></p>
+    <ul>
+        <li>réessayer l'envoi ultérieurement ;</li>
+        <li>vérifier l'état du service AnythingLLM et la configuration du workspace associé ;</li>
+        <li>si le problème persiste, transmettre ce message à l'équipe technique en mentionnant
+            la date, le sujet de l'email initial et les éventuels messages d'erreur côté serveur.</li>
+    </ul>
+</div>
+{% endblock %}

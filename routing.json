@@ -1,0 +1,14 @@
+{
+    "rules": [
+        {
+            "type": "sender",
+            "value": "boss@example.com",
+            "workspace": "urgent_workspace"
+        },
+        {
+            "type": "subject",
+            "value": "Invoice",
+            "workspace": "finance_workspace"
+        }
+    ]
+}

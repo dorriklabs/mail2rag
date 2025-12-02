@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="color: #2c3e50;">🤖 Réponse AI</h2>
+
+{% if workspace %}
+<p style="color:#7f8c8d; font-size: 13px; margin-top: 0;">
+    Workspace utilisé : <strong>{{ workspace }}</strong>
+</p>
+{% endif %}
+
+<div class="content">
+    {{ response_text | replace('\n', '<br>') | safe }}
+</div>
+
+{% if sources %}
+<h3 style="color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 20px;">
+    📚 Sources Documentaires
+</h3>
+<ul>
+    {% for source in sources %}
+    <li>
+        <a href="{{ source.link }}" style="color: #3498db; text-decoration: none;">📄 {{ source.name }}</a>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

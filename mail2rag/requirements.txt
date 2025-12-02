@@ -1,0 +1,9 @@
+imapclient
+requests
+pdfplumber
+pdf2image
+pytesseract
+urllib3
+certifi
+Pillow
+jinja2

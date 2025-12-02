@@ -1,0 +1,13 @@
+{
+    "support-client": {
+        "temperature": 0.1,
+        "refusal_response": "Je ne peux pas répondre précisément à cette question sur la base des informations de support disponibles.",
+        "type": "support",
+        "qa_rewrite": true
+    },
+    "finance-factures": {
+        "temperature": 0.0,
+        "refusal_response": "Je ne peux pas confirmer ce point à partir des factures disponibles.",
+        "type": "finance"
+    }
+}

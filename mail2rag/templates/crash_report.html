@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block container_class %}error{% endblock %}
+
+{% block content %}
+<h2>Erreur technique lors du traitement de votre message</h2>
+
+<div class="content">
+    <p>
+        Une erreur technique inattendue est survenue pendant le traitement de votre email.
+        L'ingestion a été interrompue et aucun document n'a été indexé pour ce message.
+    </p>
+
+    <p>
+        Vos emails d'origine et vos pièces jointes ne sont pas modifiés.
+        Vous pouvez réessayer l'envoi une fois le problème corrigé.
+    </p>
+
+    <p><strong>Détail technique (pour l'équipe en charge) :</strong></p>
+    <div style="background-color: #fff; padding: 10px; border-radius: 4px;
+                border: 1px solid #e6b0aa; margin: 10px 0;">
+        <pre style="overflow-x: auto; color: #c0392b; font-size: 12px;">{{ error_message }}</pre>
+    </div>
+
+    <p style="font-size: 12px; color: #7f8c8d;">
+        Ce bloc est destiné à l'analyse par l'équipe technique responsable de Mail2RAG / AnythingLLM.
+        En cas de contact avec le support, vous pouvez leur transmettre le contenu de ce message.
+    </p>
+</div>
+{% endblock %}

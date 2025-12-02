@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+requests
+qdrant-client
+rank-bm25
