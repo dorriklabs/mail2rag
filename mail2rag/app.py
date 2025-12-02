@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 import requests
 
-from mail2rag.version import __version__ as APP_VERSION
+from version import __version__ as APP_VERSION
 from config import Config
 from services.email_parser import EmailParser
 from services.state_manager import StateManager
@@ -110,7 +110,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
             return
 
         base = config.rag_proxy_url.rstrip("/")
-        candidates = ["/bm25/rebuild-index", "/bm25/rebuild"]
+        candidates = ["/admin/auto-rebuild-bm25"]
 
         for path in candidates:
             url = f"{base}{path}"
@@ -158,7 +158,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         get_secure_id=get_secure_id,
     )
 
-    email_parser = EmailParser(config, logger)
+    email_parser = EmailParser(logger)
 
     return {
         "config": config,
@@ -308,7 +308,7 @@ def main() -> None:
 
     args = parse_args()
 
-logger.info("Mail2RAG démarré - version %s", APP_VERSION)
+    logger.info("Mail2RAG démarré - version %s", APP_VERSION)
 
     context = build_context(config, logger)
 

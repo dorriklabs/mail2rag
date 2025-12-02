@@ -25,3 +25,5 @@ REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "20"))  # secondes
 MAX_QUERY_CHARS = int(os.getenv("RAG_MAX_QUERY_CHARS", "10240"))
 MAX_TOP_K = int(os.getenv("RAG_MAX_TOP_K", "200"))
 # final_k est validé dynamiquement comme <= top_k, donc pas besoin d'un max dédié
+
+MAX_RERANK_PASSAGES = int(os.getenv("MAX_RERANK_PASSAGES", "50"))
