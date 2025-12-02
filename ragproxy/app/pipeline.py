@@ -15,6 +15,7 @@ from .config import (
     VECTOR_DB_COLLECTION,
     BM25_INDEX_PATH,
     REQUEST_TIMEOUT,
+    MAX_RERANK_PASSAGES,
 )
 from .http_client import HTTPClient
 from .embeddings import EmbeddingService
@@ -48,40 +49,78 @@ class RAGPipeline:
 
         # 2) Vector search
         vec_hits = self.vdb.search(emb, top_k)
+        for p in vec_hits:
+            meta = p.get("metadata") or {}
+            # Conserver le score de similarité vectorielle dans les métadonnées
+            meta["vector_score"] = float(p.get("score", 0.0))
+            p["metadata"] = meta
 
         # 3) BM25 (optionnel)
         if use_bm25 and self.bm25.is_ready():
             bm_hits = self.bm25.search(query, top_k)
+            for p in bm_hits:
+                meta = p.get("metadata") or {}
+                # Conserver le score BM25 dans les métadonnées
+                meta["bm25_score"] = float(p.get("score", 0.0))
+                p["metadata"] = meta
         else:
             bm_hits = []
 
         passages = vec_hits + bm_hits
 
-        # 4) Unicité par texte
-        passages = list({p["text"]: p for p in passages}.values())
+        # 4) Unicité par texte :
+        #    pour chaque texte, on garde le passage avec le meilleur score actuel
+        unique: Dict[str, Dict] = {}
+        for p in passages:
+            text = p.get("text", "")
+            if not text:
+                continue
+            prev = unique.get(text)
+            if prev is None or float(p.get("score", 0.0)) > float(prev.get("score", 0.0)):
+                unique[text] = p
+        passages = list(unique.values())
 
         if not passages:
-            logger.info(f"No passages found for query='{query[:50]}...'")
+            logger.info("No passages found for query='%s...'", query[:50])
             return []
 
-        # 5) Reranking avec fallback
+        # 5) Limiter le nombre de passages envoyés au reranker
+        #    pour maîtriser la taille du payload vers LM Studio
+        if len(passages) > MAX_RERANK_PASSAGES:
+            logger.warning(
+                "Too many passages (%d), limiting to top %d for reranking",
+                len(passages),
+                MAX_RERANK_PASSAGES,
+            )
+            passages_for_rerank = sorted(
+                passages,
+                key=lambda x: float(x.get("score", 0.0)),
+                reverse=True,
+            )[:MAX_RERANK_PASSAGES]
+        else:
+            passages_for_rerank = passages
+
+        # 6) Reranking avec fallback
         try:
-            ranked = self.reranker.rerank(query, passages)
+            ranked = self.reranker.rerank(query, passages_for_rerank)
         except HTTPException as e:
             if 500 <= e.status_code < 600:
                 logger.warning(
-                    f"Reranker failed, falling back to original passages (status={e.status_code})"
+                    "Reranker failed, falling back to original passages (status=%s)",
+                    e.status_code,
                 )
-                ranked = passages
+                ranked = passages_for_rerank
             else:
                 raise
 
-        # 6) Top final_k
+        # 7) Top final_k
         final = ranked[:final_k]
 
         logger.info(
-            f"RAG finished in {round(time.time() - t0, 3)}s "
-            f"(n={len(passages)}, returned={len(final)})"
+            "RAG finished in %ss (n=%d, returned=%d)",
+            round(time.time() - t0, 3),
+            len(passages),
+            len(final),
         )
 
         return final

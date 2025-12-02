@@ -22,3 +22,7 @@ BM25_INDEX_PATH = os.getenv("BM25_INDEX", "/bm25/bm25.pkl")
 USE_BM25_DEFAULT = str_to_bool(os.getenv("USE_BM25", "true"), default=True)
 
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "20"))  # secondes
+
+# Nombre maximum de passages envoyés au reranker pour éviter
+# des payloads très volumineux vers LM Studio.
+MAX_RERANK_PASSAGES = int(os.getenv("MAX_RERANK_PASSAGES", "50"))
