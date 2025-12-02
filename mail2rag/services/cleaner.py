@@ -1,14 +1,19 @@
 import re
 import logging
+from typing import Optional
+
+from config import Config
 
 logger = logging.getLogger(__name__)
 
 
 class CleanerService:
-    def __init__(self, config):
+    def __init__(self, config: Config) -> None:
         self.config = config
 
+        # ------------------------------------------------------------------
         # Regex pré-compilées pour la performance
+        # ------------------------------------------------------------------
 
         # Signatures courantes (FR/EN)
         self.regex_signatures = re.compile(
@@ -19,7 +24,7 @@ class CleanerService:
             r'\n\s*kind regards[,. ]|'  # "Kind regards"
             r'\n\s*regards[,. ])'
             r'.*',                      # tout ce qui suit
-            re.DOTALL
+            re.DOTALL,
         )
 
         # Disclaimers FR/EN fréquents
@@ -33,18 +38,19 @@ class CleanerService:
             r'please consider the environment before printing this email'
             r')'
             r'.*',
-            re.DOTALL
+            re.DOTALL,
         )
 
-        # Footer "envoyé depuis"
+        # Footer "envoyé depuis ..."
         self.regex_mobile_footers = re.compile(
             r'(?i)envoy[ée] depuis mon (iphone|android|ipad|mobile)',
-            re.MULTILINE
+            re.MULTILINE,
         )
 
-        # Réponses / historiques (on ne s'en sert plus directement pour sub(),
-        # mais on garde quelques patterns réutilisés)
-        # On va utiliser une approche "find earliest marker + tronquer"
+        # Lignes citées ("> ...")
+        self.regex_quoted_lines = re.compile(r'^\s*>')
+
+        # Réponses / historiques : patterns de headers de reply
         self.reply_header_patterns = [
             # FR
             r'^\s*Le .+ a écrit :\s*$',
@@ -59,6 +65,10 @@ class CleanerService:
             # DE / autres
             r'^\s*Am .+ schrieb .+:\s*$',
             r'^\s*Von: .+\s*$',
+        ]
+        # Regex compilées une seule fois
+        self.reply_header_regexes = [
+            re.compile(p, re.IGNORECASE) for p in self.reply_header_patterns
         ]
 
     # -------------------------------------------------------------------------
@@ -78,16 +88,11 @@ class CleanerService:
         if not text:
             return ""
 
-        # On parcourt une seule fois le texte ligne par ligne, et on détecte
-        # la première ligne qui matche un des patterns.
         lines = text.splitlines(keepends=True)
-        cutoff_index = None
-
-        # Compile tous les patterns une fois
-        compiled_patterns = [re.compile(p, re.IGNORECASE) for p in self.reply_header_patterns]
+        cutoff_index: Optional[int] = None
 
         for idx, line in enumerate(lines):
-            for pattern in compiled_patterns:
+            for pattern in self.reply_header_regexes:
                 if pattern.search(line):
                     cutoff_index = idx
                     break
@@ -96,8 +101,9 @@ class CleanerService:
 
         if cutoff_index is not None:
             logger.debug(
-                f"Historique de réponse détecté à la ligne {cutoff_index}, "
-                f"tronquage du corps à cet endroit."
+                "Historique de réponse détecté à la ligne %s, "
+                "tronquage du corps à cet endroit.",
+                cutoff_index,
             )
             return "".join(lines[:cutoff_index])
 
@@ -106,15 +112,15 @@ class CleanerService:
     def _remove_quoted_lines(self, text: str) -> str:
         """
         Supprime les lignes citées typiques qui commencent par '>'.
+
         Cela permet d'éviter de réindexer tout l'historique de conversation.
         """
         if not text:
             return ""
 
-        cleaned_lines = []
+        cleaned_lines: list[str] = []
         for line in text.splitlines():
-            # On ignore les lignes strictement citées ("> ..." ou " > ...")
-            if re.match(r'^\s*>', line):
+            if self.regex_quoted_lines.match(line):
                 continue
             cleaned_lines.append(line)
 
@@ -124,7 +130,7 @@ class CleanerService:
         """Nettoie le corps du mail (reply chain, signatures, disclaimers, quotes)."""
         if not text:
             return ""
-        
+
         # Normalisation des retours à la ligne
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         original_len = len(text)
@@ -145,13 +151,10 @@ class CleanerService:
         text = self._remove_quoted_lines(text)
 
         # 6. Trim et réduction des multiples lignes vides
-        #    (on évite que le texte final soit une bouillie de blancs)
-        # Supprimer les espaces en début/fin global
         text = text.strip()
 
-        # Réduire les séquences de plus de 2 lignes vides successives en max 2
         lines = text.splitlines()
-        cleaned_lines = []
+        cleaned_lines: list[str] = []
         empty_run = 0
         for line in lines:
             if line.strip() == "":
@@ -161,51 +164,62 @@ class CleanerService:
             else:
                 empty_run = 0
                 cleaned_lines.append(line)
+
         text = "\n".join(cleaned_lines).strip()
 
-        logger.debug(f"Nettoyage Body: {original_len} -> {len(text)} chars conservés")
+        logger.debug(
+            "Nettoyage Body: %s -> %s chars conservés",
+            original_len,
+            len(text),
+        )
         return text
 
     # -------------------------------------------------------------------------
     # Validation des pièces jointes
     # -------------------------------------------------------------------------
-    def is_valid_attachment(self, filename: str, content: bytes) -> bool:
+    def is_valid_attachment(self, filename: str, content: Optional[bytes]) -> bool:
         """
         Valide une pièce jointe (Taille min, Extensions autorisées / interdites).
         - Filtre les logos trop petits
         - Bloque les extensions explicitement interdites
         - N'autorise que les extensions listées dans ALLOWED_EXTENSIONS (si défini)
         """
-        # Récupérer l'extension sans le point
-        ext = filename.split('.')[-1].lower() if '.' in filename else ''
-        size_kb = len(content) / 1024
+        if not filename:
+            logger.debug("PJ ignorée (nom de fichier vide).")
+            return False
+
+        if not content:
+            logger.debug("PJ ignorée (contenu vide ou None): %s", filename)
+            return False
+
+        ext = filename.split(".")[-1].lower() if "." in filename else ""
+        size_kb = len(content) / 1024.0
 
         # Règle 1 : Ignorer les images minuscules (Logos, Icônes)
-        # On considère qu'une image < MIN_IMAGE_SIZE_KB est probablement un logo de signature
-        if ext in ['png', 'jpg', 'jpeg', 'gif'] and size_kb < self.config.min_image_size_kb:
+        if ext in ["png", "jpg", "jpeg", "gif"] and size_kb < self.config.min_image_size_kb:
             logger.debug(
-                f"PJ ignorée (Trop petite/Logo): {filename} "
-                f"({size_kb:.1f} Ko, seuil: {self.config.min_image_size_kb} Ko)"
+                "PJ ignorée (Trop petite/Logo): %s (%.1f Ko, seuil: %.1f Ko)",
+                filename,
+                size_kb,
+                self.config.min_image_size_kb,
             )
             return False
 
-        # Construire la forme ".ext" pour comparer avec les sets de config
         ext_with_dot = f".{ext}" if ext else ""
 
         # Règle 2 : Extensions interdites (sécurité)
         if ext_with_dot in self.config.blocked_extensions:
-            logger.warning(f"PJ bloquée (Extension interdite): {filename}")
+            logger.warning("PJ bloquée (Extension interdite): %s", filename)
             return False
 
         # Règle 3 : Extensions autorisées (whitelist)
-        # Si ALLOWED_EXTENSIONS est défini, on n'autorise que ce qui est dedans
         if self.config.allowed_extensions:
             if ext_with_dot not in self.config.allowed_extensions:
                 logger.debug(
-                    f"PJ ignorée (Extension non autorisée): {filename} "
-                    f"(ext: '{ext_with_dot}', allowed: {self.config.allowed_extensions})"
+                    "PJ ignorée (Extension non autorisée): %s (ext: '%s')",
+                    filename,
+                    ext_with_dot,
                 )
                 return False
 
-        # Si on arrive ici, la PJ est considérée comme valide
         return True

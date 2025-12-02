@@ -1,4 +1,3 @@
-# Définition des volumes persistants nommés (Gestionnée par Docker)
 volumes:
   anythingllm_storage:
   mail2rag_archive:
@@ -11,7 +10,7 @@ networks:
     driver: bridge
 
 services:
-  # 1. ANYTHINGLLM (MISE À JOUR DES DÉPENDANCES V44)
+  # 1. ANYTHINGLLM
   anythingllm:
     image: mintplexlabs/anythingllm:latest
     container_name: anythingllm
@@ -37,7 +36,7 @@ services:
       qdrant:
         condition: service_started
 
-  # 2. QDRANT (Base de Données Vectorielle)
+  # 2. QDRANT (Vector Database)
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
@@ -46,14 +45,14 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    restart: always
+    restart: unless-stopped
     networks:
       - rag_net
 
   # 3. RAG PROXY (FastAPI + Qdrant + BM25 + LM Studio)
   rag_proxy:
     build:
-      context: ./ragproxy # contient Dockerfile, requirements.txt, main.py, app/
+      context: ./ragproxy
       dockerfile: Dockerfile
     container_name: rag_proxy
     env_file:
@@ -61,23 +60,23 @@ services:
     environment:
       TZ: Europe/Paris
 
-      # LM Studio tourne sur la machine hôte, port à adapter si besoin
+      # LM Studio sur la machine hôte
       LM_STUDIO_URL: "http://host.docker.internal:1234"
 
-      # Accès à la base vectorielle dans le réseau docker
+      # Accès à Qdrant dans le réseau Docker
       VECTOR_DB_HOST: "qdrant"
       VECTOR_DB_PORT: "6333"
       VECTOR_DB_COLLECTION: "documents"
 
-      # BM25 index (optionnel, ignoré si le fichier n'existe pas)
+      # BM25 index (optionnel)
       BM25_INDEX: "/bm25/bm25.pkl"
       USE_BM25: "true"
 
       REQUEST_TIMEOUT: "20"
     volumes:
-      - bm25_data:/bm25 # /bm25/bm25.pkl dans le conteneur
+      - bm25_data:/bm25
     ports:
-      - "8000:8000" # pratique pour tester depuis l’hôte
+      - "8000:8000"
     depends_on:
       qdrant:
         condition: service_started
@@ -87,7 +86,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # 4. MAIL2RAG (Votre application Python)
+  # 4. MAIL2RAG (Application Python)
   mail2rag:
     build:
       context: ./mail2rag
@@ -97,21 +96,16 @@ services:
       - ./.env
     environment:
       TZ: Europe/Paris
-      ANYTHINGLLM_BASE_URL: "http://anythingllm:3001"
-      PYTHONUNBUFFERED: "1"
-      STATE_PATH: "/var/lib/mail2rag/state.json"
-      ARCHIVE_PATH: "/var/lib/mail2rag/mail2rag_archive"
-      ROUTING_PATH: "/etc/mail2rag/routing.json"
     volumes:
-      # Montage des fichiers sources (pour le développement)
+      # Code source (dev hot-reload)
       - ./mail2rag:/app
       # Routing configuration
       - ./routing.json:/etc/mail2rag/routing.json:ro
-      # NEW: Prompts directory
+      # Prompts directory
       - ./mail2rag/prompts:/etc/mail2rag/prompts:ro
-      # Montage des logs (pour le débogage)
+      # Logs
       - ./logs:/var/log/mail2rag
-      # State and data
+      # State
       - ./state:/var/lib/mail2rag
       # Archive (volume nommé)
       - mail2rag_archive:/var/lib/mail2rag/mail2rag_archive
@@ -119,6 +113,8 @@ services:
       anythingllm:
         condition: service_healthy
       qdrant:
+        condition: service_started
+      rag_proxy:
         condition: service_started
     security_opt:
       - no-new-privileges:true
@@ -135,10 +131,10 @@ services:
     volumes:
       # Custom Nginx configuration
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # Archive servie en lecture seule
+      # Archive en lecture seule
       - mail2rag_archive:/usr/share/nginx/html:ro
     depends_on:
       - mail2rag
-    restart: always
+    restart: unless-stopped
     networks:
       - rag_net

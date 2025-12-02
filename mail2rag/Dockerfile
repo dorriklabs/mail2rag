@@ -1,6 +1,8 @@
 FROM python:3.11-slim
 
-# Installer les dépendances système
+# -----------------------------
+# Dépendances système
+# -----------------------------
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     tesseract-ocr \
@@ -10,15 +12,22 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copier les requirements en premier pour utiliser le cache
+# -----------------------------
+# Requirements
+# -----------------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code de l'application
+# -----------------------------
+# Code de l'application
+# -----------------------------
 COPY . .
 
-# Créer les répertoires nécessaires
-RUN mkdir -p /var/lib/mail2rag /app/logs
+# Répertoires internes (state / logs si jamais non montés)
+RUN mkdir -p /var/lib/mail2rag /var/log/mail2rag /app/logs
 
-# Définir le point d'entrée
+# -----------------------------
+# Commande de démarrage
+# -----------------------------
+# app.py est à la racine de /app (mail2rag3/app.py)
 CMD ["python", "app.py"]

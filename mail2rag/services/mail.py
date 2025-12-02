@@ -3,32 +3,54 @@ import smtplib
 import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from pathlib import Path
+from typing import Dict, Any, Optional, TYPE_CHECKING, List
+
 from imapclient import IMAPClient
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from config import Config
+
 
 class MailService:
-    def __init__(self, config):
-        self.config = config
-        self.server = None
+    """
+    Service responsable des interactions IMAP/SMTP.
 
-        # Timeouts (en secondes). Si le Config n'a pas ces attributs,
-        # on utilise des valeurs raisonnables par défaut.
+    - Connexion IMAP robuste avec reconnexion automatique.
+    - Lecture des nouveaux messages à partir d'un UID donné.
+    - Envoi de réponses ou d'emails synthétiques via SMTP.
+    """
+
+    def __init__(self, config: "Config") -> None:
+        self.config = config
+        self.server: Optional[IMAPClient] = None
+
+        # Timeouts (en secondes).
         self.imap_timeout = getattr(config, "imap_timeout", 30)
         self.smtp_timeout = getattr(config, "smtp_timeout", 30)
 
-    # ============================
-    #  IMAP (Réception des emails)
-    # ============================
-    def _connect(self):
+        # Dossier IMAP à surveiller
+        self.imap_folder = getattr(config, "imap_folder", "INBOX") or "INBOX"
+        # Critère IMAP configurable (UNSEEN, ALL, ou critère avancé)
+        self.imap_search_criteria = (
+            getattr(config, "imap_search_criteria", "UNSEEN") or "UNSEEN"
+        ).strip()
+
+    # ------------------------------------------------------------------ #
+    # IMAP (Réception des emails)
+    # ------------------------------------------------------------------ #
+    def _connect(self) -> None:
         """Établit une nouvelle connexion IMAP avec gestion d'erreurs fine."""
         try:
             logger.info(
-                f"Connexion IMAP à {self.config.imap_server}:"
-                f"{self.config.imap_port} (timeout={self.imap_timeout}s)..."
+                "Connexion IMAP à %s:%s (timeout=%ss, folder=%s)...",
+                self.config.imap_server,
+                self.config.imap_port,
+                self.imap_timeout,
+                self.imap_folder,
             )
-            # timeout est supporté par IMAPClient (propage vers la socket interne)
             self.server = IMAPClient(
                 self.config.imap_server,
                 port=self.config.imap_port,
@@ -38,19 +60,21 @@ class MailService:
             self.server.login(self.config.imap_user, self.config.imap_password)
             logger.debug("Authentification IMAP réussie.")
         except IMAPClient.Error as e:
-            logger.error(f"Échec connexion IMAP (protocole IMAP) : {e}")
+            logger.error("Échec connexion IMAP (protocole IMAP) : %s", e)
             self.server = None
             raise
         except (socket.timeout, socket.gaierror, OSError) as e:
-            logger.error(f"Échec connexion IMAP (erreur réseau) : {e}")
+            logger.error("Échec connexion IMAP (erreur réseau) : %s", e)
             self.server = None
             raise
         except Exception as e:
-            logger.error(f"Échec connexion IMAP (erreur inattendue) : {e}", exc_info=True)
+            logger.error(
+                "Échec connexion IMAP (erreur inattendue) : %s", e, exc_info=True
+            )
             self.server = None
             raise
 
-    def ensure_connection(self):
+    def ensure_connection(self) -> None:
         """
         Vérifie que la connexion IMAP est vivante, sinon tente une reconnexion.
         Laisse remonter les exceptions pour que la boucle principale puisse gérer.
@@ -62,70 +86,105 @@ class MailService:
         try:
             self.server.noop()
         except (IMAPClient.Error, socket.timeout, socket.error, OSError) as e:
-            logger.warning(f"Connexion IMAP perdue ({e}), tentative de reconnexion...")
+            logger.warning(
+                "Connexion IMAP perdue (%s), tentative de reconnexion...", e
+            )
             self.server = None
             self._connect()
 
-    def fetch_new_messages(self, last_uid):
+    def _build_search_criteria(self, last_uid: int) -> List[str]:
+        """
+        Construit la liste de critères IMAP à partir de la config et du last_uid.
+
+        - IMAP_SEARCH_CRITERIA (ex: UNSEEN, ALL, critère avancé)
+        - Filtre UID last_uid+1:* pour éviter de retraiter les anciens messages.
+        """
+        # Exemple: ["UNSEEN", "UID", "123:*"]
+        criteria: List[str] = []
+
+        user_criteria = (self.imap_search_criteria or "").strip()
+        if user_criteria and user_criteria.upper() != "ALL":
+            # On laisse IMAPClient splitter la chaîne (ex: 'UNSEEN FROM "foo"')
+            criteria.append(user_criteria)
+
+        # Filtre UID pour ne pas retraiter les anciens messages
+        criteria.extend(["UID", f"{last_uid + 1}:*"])
+
+        logger.debug("Critères IMAP utilisés pour la recherche : %r", criteria)
+        return criteria
+
+    def fetch_new_messages(self, last_uid: int) -> Dict[int, Any]:
         """
         Récupère les nouveaux messages dont l'UID est strictement supérieur à last_uid.
-        Peut lever une exception en cas d'erreur IMAP, gérée par la boucle principale.
+
+        Combine :
+        - le critère IMAP configurable (IMAP_SEARCH_CRITERIA)
+        - un filtre UID > last_uid côté client (sécurité supplémentaire)
         """
         self.ensure_connection()
 
         try:
-            self.server.select_folder("INBOX")
+            self.server.select_folder(self.imap_folder)
         except Exception as e:
-            logger.error(f"Erreur IMAP lors du select INBOX : {e}", exc_info=True)
-            # On invalide la connexion pour forcer une reconnexion au prochain tour
+            logger.error(
+                "Erreur IMAP lors du select '%s' : %s",
+                self.imap_folder,
+                e,
+                exc_info=True,
+            )
             self.server = None
             raise
 
-        logger.debug(f"Recherche messages avec UID > {last_uid}")
+        criteria = self._build_search_criteria(last_uid)
+
+        logger.debug("Recherche messages avec last_uid=%s", last_uid)
         try:
-            # Certains serveurs retournent le dernier UID même si on demande UID+1:*
-            messages = self.server.search(["UID", f"{last_uid + 1}:*"])
+            messages = self.server.search(criteria)
         except Exception as e:
-            logger.error(f"Erreur IMAP lors du search : {e}", exc_info=True)
+            logger.error("Erreur IMAP lors du search : %s", e, exc_info=True)
             self.server = None
             raise
 
-        # Filtrage strict côté client pour éviter de re-télécharger le dernier message
+        # Filtrage strict côté client pour éviter toute ré-ingestion
         new_uids = [uid for uid in messages if uid > last_uid]
 
         if new_uids:
             logger.info(
-                f"Trouvé {len(new_uids)} nouveau(x) message(s) "
-                f"(UIDs: {new_uids})."
+                "Trouvé %d nouveau(x) message(s) (UIDs: %s).",
+                len(new_uids),
+                new_uids,
             )
             try:
                 return self.server.fetch(new_uids, ["RFC822"])
             except Exception as e:
-                logger.error(f"Erreur IMAP lors du fetch : {e}", exc_info=True)
+                logger.error("Erreur IMAP lors du fetch : %s", e, exc_info=True)
                 self.server = None
                 raise
-        else:
-            if messages:
-                logger.debug(f"Ignoré {len(messages)} message(s) (UID <= {last_uid}).")
-            else:
-                logger.debug("Aucun nouveau message.")
-            return {}
 
-    # ===========================
-    #  SMTP (Envoi des réponses)
-    # ===========================
-    def _send_message_smtp(self, msg, log_context: str) -> bool:
+        if messages:
+            logger.debug(
+                "Aucun nouveau message > last_uid (UIDs retournés: %s).", messages
+            )
+        else:
+            logger.debug("Aucun message correspondant aux critères IMAP.")
+        return {}
+
+    # ------------------------------------------------------------------ #
+    # SMTP (Envoi des réponses)
+    # ------------------------------------------------------------------ #
+    def _send_message_smtp(self, msg: MIMEMultipart, log_context: str) -> bool:
         """
         Envoi générique d'un message SMTP avec gestion d'erreurs détaillée.
         Retourne True si succès, False sinon.
         """
         try:
             logger.debug(
-                f"Connexion SMTP à {self.config.smtp_server}:"
-                f"{self.config.smtp_port} (timeout={self.smtp_timeout}s) "
-                f"pour {log_context}..."
+                "Connexion SMTP à %s:%s (timeout=%ss) pour %s...",
+                self.config.smtp_server,
+                self.config.smtp_port,
+                self.smtp_timeout,
+                log_context,
             )
-            # Utilisation d'un context manager pour garantir la fermeture
             with smtplib.SMTP(
                 self.config.smtp_server,
                 self.config.smtp_port,
@@ -135,40 +194,38 @@ class MailService:
                 server.login(self.config.smtp_user, self.config.smtp_password)
                 server.send_message(msg)
 
-            logger.info(f"✅ Email envoyé ({log_context})")
+            logger.info("✅ Email SMTP envoyé (%s)", log_context)
             return True
 
         except smtplib.SMTPAuthenticationError as e:
-            logger.error(
-                f"❌ Échec authentification SMTP ({log_context}) : {e}"
-            )
+            logger.error("❌ Échec authentification SMTP (%s) : %s", log_context, e)
         except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected) as e:
-            logger.error(
-                f"❌ Échec connexion SMTP ({log_context}) : {e}"
-            )
+            logger.error("❌ Échec connexion SMTP (%s) : %s", log_context, e)
         except (socket.timeout, OSError) as e:
-            logger.error(
-                f"❌ Timeout / erreur réseau SMTP ({log_context}) : {e}"
-            )
+            logger.error("❌ Timeout / erreur réseau SMTP (%s) : %s", log_context, e)
         except smtplib.SMTPException as e:
-            logger.error(
-                f"❌ Erreur SMTP ({log_context}) : {e}",
-                exc_info=True,
-            )
+            logger.error("❌ Erreur SMTP (%s) : %s", log_context, e, exc_info=True)
         except Exception as e:
             logger.error(
-                f"❌ Erreur SMTP inattendue ({log_context}) : {e}",
-                exc_info=True,
+                "❌ Erreur SMTP inattendue (%s) : %s", log_context, e, exc_info=True
             )
 
         return False
 
-    def send_reply(self, to_email, subject, body, is_html=False):
+    def send_reply(
+        self,
+        to_email: str,
+        subject: str,
+        body: str,
+        is_html: bool = False,
+    ) -> None:
         """
         Envoie une réponse à l'expéditeur original.
         """
         msg = MIMEMultipart()
-        msg["From"] = self.config.smtp_user
+        # Utiliser SMTP_FROM si renseigné, sinon smtp_user
+        from_addr = getattr(self.config, "smtp_from", None) or self.config.smtp_user
+        msg["From"] = from_addr
         msg["To"] = to_email
         msg["Subject"] = subject
 
@@ -179,7 +236,12 @@ class MailService:
 
         self._send_message_smtp(msg, log_context=f"réponse à {to_email}")
 
-    def send_synthetic_email(self, subject, body, attachment_paths=None):
+    def send_synthetic_email(
+        self,
+        subject: str,
+        body: str,
+        attachment_paths: Optional[list] = None,
+    ) -> bool:
         """
         Génère et envoie un email synthétique à la boîte RAG.
         Utilisé pour créer des emails à partir de documents uploadés manuellement.
@@ -189,7 +251,8 @@ class MailService:
         import os
 
         msg = MIMEMultipart()
-        msg["From"] = f"Mail2RAG System <{self.config.smtp_user}>"
+        from_addr = getattr(self.config, "smtp_from", None) or self.config.smtp_user
+        msg["From"] = f"Mail2RAG System <{from_addr}>"
         msg["To"] = self.config.imap_user  # Envoi à soi-même (boîte RAG)
         msg["Subject"] = subject
         msg["X-Mail2RAG-Synthetic"] = "true"  # Header spécial pour identification
@@ -201,7 +264,7 @@ class MailService:
         if attachment_paths:
             for file_path in attachment_paths:
                 if not os.path.exists(file_path):
-                    logger.warning(f"⚠️ Fichier introuvable pour PJ : {file_path}")
+                    logger.warning("⚠️ Fichier introuvable pour PJ : %s", file_path)
                     continue
 
                 try:
@@ -216,14 +279,16 @@ class MailService:
                         f"attachment; filename={filename}",
                     )
                     msg.attach(part)
-                    logger.debug(f"   📎 PJ attachée : {filename}")
+                    logger.debug("📎 PJ attachée : %s", filename)
                 except Exception as e:
                     logger.error(
-                        f"❌ Erreur attachement {file_path}: {e}",
+                        "❌ Erreur attachement %s : %s",
+                        file_path,
+                        e,
                         exc_info=True,
                     )
 
-        logger.debug(f"📧 Envoi email synthétique : {subject}")
+        logger.debug("📧 Envoi email synthétique : %s", subject)
         success = self._send_message_smtp(
             msg, log_context=f"email synthétique '{subject}'"
         )
