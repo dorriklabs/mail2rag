@@ -100,17 +100,24 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         """Retourne un ID opaque et stable pour le dossier d'archive de cet UID."""
         return state_manager.get_or_create_secure_id(state, uid)
 
-    def trigger_bm25_rebuild() -> None:
+    def trigger_bm25_rebuild(workspace: str = None) -> None:
         """
         Déclenche la reconstruction de l'index BM25 via le RAG Proxy, si activé.
-        Tente quelques endpoints possibles et logge en détail sans interrompre l'ingestion.
+        Si workspace est fourni, reconstruit uniquement pour ce workspace.
+        Sinon, tente une reconstruction globale ou intelligente.
         """
         if not config.auto_rebuild_bm25:
             logger.debug("AUTO_REBUILD_BM25 désactivé, aucun rebuild BM25 lancé.")
             return
 
         base = config.rag_proxy_url.rstrip("/")
-        candidates = ["/admin/auto-rebuild-bm25"]
+        
+        if workspace:
+            # Endpoint spécifique au workspace
+            candidates = [f"/admin/build-bm25/{workspace}"]
+        else:
+            # Endpoints globaux
+            candidates = ["/admin/auto-rebuild-bm25", "/admin/rebuild-all-bm25"]
 
         for path in candidates:
             url = f"{base}{path}"

@@ -1,7 +1,7 @@
 # main.py
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
@@ -30,6 +30,7 @@ class RequestModel(BaseModel):
     top_k: int = 20
     final_k: int = 5
     use_bm25: Optional[bool] = None  # None -> USE_BM25_DEFAULT
+    workspace: Optional[str] = None  # Pour le mode multi-collection
 
 
 class Chunk(BaseModel):
@@ -49,7 +50,8 @@ class HealthResponse(BaseModel):
 
 class ReadyResponse(BaseModel):
     ready: bool
-    deps: Dict[str, bool]
+    deps: Dict[str, Any]
+    bm25_collections: Optional[List[str]] = None
 
 
 app = FastAPI()
@@ -88,6 +90,7 @@ def rag_endpoint(req: RequestModel):
         top_k=req.top_k,
         final_k=req.final_k,
         use_bm25=use_bm25,
+        workspace=req.workspace,
     )
 
     return ResponseModel(
@@ -101,11 +104,23 @@ def healthz():
     return HealthResponse(status="ok")
 
 
-@app.get("/readyz", response_model=ReadyResponse)
+@app.get("/readyz")
 def readyz():
-    deps = pipeline.ready_status()
+    status = pipeline.ready_status()
+    deps = status.get("deps", {})
     ready = all(deps.values())
-    return ReadyResponse(ready=ready, deps=deps)
+    
+    # Construire la réponse avec les métadonnées supplémentaires si disponibles
+    response = {
+        "ready": ready,
+        "deps": deps
+    }
+    
+    # Ajouter les collections BM25 si en mode multi-collection
+    if "bm25_collections" in status:
+        response["bm25_collections"] = status["bm25_collections"]
+    
+    return response
 
 
 @app.get("/test")
@@ -399,6 +414,220 @@ def auto_rebuild_bm25():
             "status": "error",
             "reason": str(e),
             "rebuilt": False,
+        }
+
+
+# -------------------------------------------------------------------------------------
+# ENDPOINTS MULTI-COLLECTIONS
+# -------------------------------------------------------------------------------------
+
+@app.get("/admin/collections")
+def list_collections():
+    """Liste toutes les collections Qdrant disponibles."""
+    try:
+        collections = pipeline.vdb.list_collections()
+        
+        # Pour chaque collection, récupérer les stats
+        collections_info = []
+        for col_name in collections:
+            # Compter les documents
+            try:
+                # Créer un provider temporaire pour cette collection
+                from app.vectordb import QdrantProvider
+                from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
+                
+                temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, col_name)
+                doc_count = temp_provider.count_documents()
+                
+                # Vérifier si un index BM25 existe
+                bm25_ready = False
+                bm25_count = 0
+                if pipeline.multi_collection_mode and pipeline.bm25_multi:
+                    bm25_ready = pipeline.bm25_multi.is_ready(col_name)
+                    if bm25_ready:
+                        stats = pipeline.bm25_multi.get_collection_stats(col_name)
+                        bm25_count = stats.get("docs_count", 0)
+                
+                collections_info.append({
+                    "name": col_name,
+                    "qdrant_count": doc_count,
+                    "bm25_ready": bm25_ready,
+                    "bm25_count": bm25_count,
+                })
+            except Exception as e:
+                logger.error(f"Error getting stats for collection {col_name}: {e}")
+                collections_info.append({
+                    "name": col_name,
+                    "qdrant_count": 0,
+                    "bm25_ready": False,
+                    "bm25_count": 0,
+                    "error": str(e)
+                })
+        
+        return {
+            "status": "ok",
+            "multi_collection_mode": pipeline.multi_collection_mode,
+            "collections": collections_info
+        }
+    except Exception as e:
+        logger.error(f"Failed to list collections: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@app.post("/admin/build-bm25/{collection}")
+def build_bm25_for_collection(collection: str):
+    """Construit l'index BM25 pour une collection spécifique."""
+    if not pipeline.multi_collection_mode or not pipeline.bm25_multi:
+        return {
+            "status": "error",
+            "message": "Multi-collection mode is not enabled"
+        }
+    
+    try:
+        logger.info(f"Building BM25 index for collection '{collection}'...")
+        
+        # Créer un provider temporaire pour cette collection
+        from app.vectordb import QdrantProvider
+        from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
+        
+        temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, collection)
+        
+        # Vérifier que la collection existe
+        if not temp_provider.is_ready():
+            return {
+                "status": "error",
+                "message": f"Collection '{collection}' not found in Qdrant"
+            }
+        
+        # Récupérer tous les documents
+        try:
+            all_docs = temp_provider.get_all_documents()
+        except Exception as e:
+            error_msg = str(e)
+            if "Not found: Collection" in error_msg or "doesn't exist" in error_msg:
+                return {
+                    "status": "error",
+                    "message": f"Collection '{collection}' not found in Qdrant"
+                }
+            raise
+        
+        if not all_docs:
+            return {
+                "status": "error",
+                "message": f"Collection '{collection}' exists but contains no documents"
+            }
+        
+        # Extraire textes et métadonnées
+        docs = []
+        meta = []
+        for doc_item in all_docs:
+            text = doc_item.get("text", "")
+            if text:
+                docs.append(text)
+                meta.append(doc_item.get("metadata", {}))
+        
+        if not docs:
+            return {
+                "status": "error",
+                "message": f"No valid documents found in collection '{collection}'"
+            }
+        
+        # Construire l'index
+        success = pipeline.bm25_multi.build_index(collection, docs, meta)
+        
+        if success:
+            return {
+                "status": "ok",
+                "collection": collection,
+                "docs_count": len(docs),
+                "message": f"✅ Index BM25 created for '{collection}' with {len(docs)} documents"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to build BM25 index"
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to build BM25 index for '{collection}': {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@app.delete("/admin/delete-bm25/{collection}")
+def delete_bm25_for_collection(collection: str):
+    """Supprime l'index BM25 pour une collection spécifique."""
+    if not pipeline.multi_collection_mode or not pipeline.bm25_multi:
+        return {
+            "status": "error",
+            "message": "Multi-collection mode is not enabled"
+        }
+    
+    try:
+        success = pipeline.bm25_multi.delete_index(collection)
+        
+        if success:
+            return {
+                "status": "ok",
+                "collection": collection,
+                "message": f"Index BM25 deleted for '{collection}'"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to delete BM25 index"
+            }
+    except Exception as e:
+        logger.error(f"Failed to delete BM25 index for '{collection}': {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@app.post("/admin/rebuild-all-bm25")
+def rebuild_all_bm25():
+    """Reconstruit les index BM25 pour toutes les collections Qdrant."""
+    if not pipeline.multi_collection_mode or not pipeline.bm25_multi:
+        return {
+            "status": "error",
+            "message": "Multi-collection mode is not enabled"
+        }
+    
+    try:
+        collections = pipeline.vdb.list_collections()
+        results = []
+        
+        for collection in collections:
+            logger.info(f"Rebuilding BM25 for collection '{collection}'...")
+            result = build_bm25_for_collection(collection)
+            results.append({
+                "collection": collection,
+                "status": result.get("status"),
+                "docs_count": result.get("docs_count", 0),
+                "message": result.get("message", "")
+            })
+        
+        success_count = sum(1 for r in results if r["status"] == "ok")
+        
+        return {
+            "status": "ok",
+            "total_collections": len(collections),
+            "success_count": success_count,
+            "failed_count": len(collections) - success_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to rebuild all BM25 indexes: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
         }
 
 

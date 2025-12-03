@@ -14,7 +14,13 @@ RERANK_MODEL = os.getenv("RERANK_MODEL", "bge-reranker-v2-m3")
 
 VECTOR_DB_HOST = os.getenv("VECTOR_DB_HOST", "qdrant")
 VECTOR_DB_PORT = int(os.getenv("VECTOR_DB_PORT", "6333"))
-VECTOR_DB_COLLECTION = os.getenv("VECTOR_DB_COLLECTION", "documents")
+
+# Mode multi-collections : si activé, le système détecte automatiquement
+# toutes les collections Qdrant et crée un index BM25 par collection
+MULTI_COLLECTION_MODE = str_to_bool(os.getenv("MULTI_COLLECTION_MODE", "true"), default=True)
+
+# Collection par défaut (utilisée en mode mono-collection ou comme fallback)
+VECTOR_DB_COLLECTION = os.getenv("VECTOR_DB_COLLECTION", "default-workspace")
 
 BM25_INDEX_PATH = os.getenv("BM25_INDEX", "/bm25/bm25.pkl")
 USE_BM25_DEFAULT = str_to_bool(os.getenv("USE_BM25", "true"), default=True)

@@ -31,7 +31,7 @@ class IngestionService:
         support_qa_service: SupportQAService,
         email_renderer: EmailRenderer,
         get_secure_id: Callable[[int], str],
-        trigger_bm25_rebuild: Callable[[], None],
+        trigger_bm25_rebuild: Callable[[Optional[str]], None],
     ) -> None:
         self.config = config
         self.logger = logger
@@ -401,6 +401,7 @@ class IngestionService:
             )
             threading.Thread(
                 target=self.trigger_bm25_rebuild,
+                args=(workspace,),
                 name="bm25-auto-rebuild",
                 daemon=True,
             ).start()

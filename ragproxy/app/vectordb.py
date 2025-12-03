@@ -38,6 +38,11 @@ class VectorDBProvider(ABC):
     def count_documents(self) -> int:
         """Retourne le nombre total de documents dans la collection."""
         pass
+    
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections disponibles."""
+        pass
 
 
 # -----------------------------------------------------------------------------
@@ -117,6 +122,15 @@ class QdrantProvider(VectorDBProvider):
             return count_result.count
         except Exception:
             return 0
+    
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections Qdrant."""
+        try:
+            collections = self.client.get_collections()
+            return [col.name for col in collections.collections]
+        except Exception as e:
+            logger.error(f"Failed to list collections: {e}")
+            return []
 
 
 # -----------------------------------------------------------------------------
@@ -139,3 +153,6 @@ class VectorDBService:
     
     def count_documents(self) -> int:
         return self.provider.count_documents()
+    
+    def list_collections(self) -> List[str]:
+        return self.provider.list_collections()
