@@ -56,11 +56,11 @@ class QdrantProvider(VectorDBProvider):
 
     def search(self, embedding: List[float], top_k: int) -> List[Dict]:
         try:
-            hits = self.client.search(
+            hits = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=embedding,
+                query=embedding,
                 limit=top_k,
-            )
+            ).points
         except Exception as e:
             logger.error(f"Qdrant search failed: {e}")
             return []
