@@ -49,8 +49,18 @@ class DocumentProcessor:
         ext = path.suffix.lower()
         logger.debug("Analyse document : %s (ext=%s)", path.name, ext)
 
-        # 1. Tentative Vision IA (si activée + extension supportée)
-        if self.config.vision_enable and ext in {".jpg", ".jpeg", ".png", ".pdf"}:
+        # Déterminer si Vision doit être utilisé selon le type de fichier
+        is_image = ext in {".jpg", ".jpeg", ".png"}
+        is_pdf = ext == ".pdf"
+        
+        vision_enabled = False
+        if is_image and self.config.vision_enable_images:
+            vision_enabled = True
+        elif is_pdf and self.config.vision_enable_pdf:
+            vision_enabled = True
+
+        # 1. Tentative Vision IA (si activée pour ce type de fichier)
+        if vision_enabled:
             try:
                 return self._analyze_with_vision_llm(path)
             except Exception as e:  # on log mais on laisse le fallback OCR prendre le relais

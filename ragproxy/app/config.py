@@ -2,11 +2,14 @@ import os
 from typing import Optional
 
 
+
 def str_to_bool(x: Optional[str], default: bool = False) -> bool:
     if x is None:
         return default
     return x.strip().lower() in {"1", "true", "yes", "y", "on"}
 
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://lmstudio:1234")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gte-large")

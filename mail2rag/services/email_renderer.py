@@ -173,6 +173,7 @@ class EmailRenderer:
             bm25_score = scores_dict.get("bm25", meta.get("bm25_score"))
             rerank_score = scores_dict.get("rerank", meta.get("rerank_score"))
 
+
             # Construction du lien (si possible)
             display_name = raw_title
             link: str | None = None
@@ -198,6 +199,22 @@ class EmailRenderer:
                         or meta.get("title")
                         or (raw_title if isinstance(raw_title, str) else None)
                     )
+
+                    # Si pas de secure_id dans les métadonnées, essayer de l'extraire du nom de fichier
+                    # Format attendu : "{UID}_{sujet}.txt" ou "custom-documents/{UID}_{sujet}.txt-uuid.json"
+                    if not secure_id and filename:
+                        # Extraire le nom de base du fichier
+                        base_filename = Path(filename).name
+                        # Essayer d'extraire l'UID (premier nombre avant le premier underscore)
+                        import re
+                        uid_match = re.match(r'^(\d+)_', base_filename)
+                        if uid_match:
+                            uid = int(uid_match.group(1))
+                            # Utiliser state_manager pour obtenir le secure_id
+                            # Note: on ne peut pas accéder directement à state_manager ici
+                            # donc on va stocker l'UID dans les métadonnées pour l'instant
+                            # et laisser le code appelant fournir le mapping
+                            pass
 
                     if secure_id and filename:
                         link = f"{base_url}/{secure_id}/{filename}"

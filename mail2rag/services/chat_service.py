@@ -225,10 +225,30 @@ class ChatService:
             resp.raise_for_status()
             data = resp.json()
             chunks = data.get("chunks", []) or []
-            self.logger.info(
-                "RAG Proxy a retourné %d chunks pertinents.",
-                len(chunks),
-            )
+            
+            # Logging détaillé des stats RAG Proxy
+            debug_info = data.get("debug_info")
+            if debug_info:
+                timings = debug_info.get("timings", {})
+                counts = debug_info.get("counts", {})
+                total_time = debug_info.get("total_time", 0)
+                
+                self.logger.info(
+                    "🔍 [RAG Proxy] Succès (%.3fs) | Qdrant: %d docs (%.3fs) | BM25: %d docs (%.3fs) | Reranked: %d docs (%.3fs)",
+                    total_time,
+                    counts.get("vector_found", 0),
+                    timings.get("vector_search", 0),
+                    counts.get("bm25_found", 0),
+                    timings.get("bm25_search", 0),
+                    counts.get("final_results", len(chunks)),
+                    timings.get("reranking", 0)
+                )
+            else:
+                self.logger.info(
+                    "RAG Proxy a retourné %d chunks pertinents.",
+                    len(chunks),
+                )
+            
             return chunks
         except Exception as e:
             self.logger.error(
@@ -237,8 +257,8 @@ class ChatService:
             # On laisse remonter pour permettre un fallback contrôlé dans handle_chat
             raise
 
-    @staticmethod
     def _build_context_from_chunks(
+        self,
         chunks: List[Dict[str, Any]],
     ) -> Tuple[List[Dict[str, Any]], str]:
         """Construit la liste des sources et le contexte texte à partir des chunks."""
@@ -251,6 +271,39 @@ class ChatService:
             score = float(chunk.get("score", 0.0))
 
             source_title = meta.get("title", "Document inconnu")
+            
+            # --- Enrichissement des métadonnées pour les liens ---
+            # On essaie d'extraire l'UID du nom de fichier pour retrouver le secure_id
+            # Format attendu : "custom-documents/{UID}_{Sujet}.txt-uuid.json" ou juste "{UID}_{Sujet}.txt"
+            filename = source_title
+            if "/" in filename:
+                filename = filename.split("/")[-1] # Garder la partie après le dernier /
+            
+            # Nettoyer les suffixes ajoutés par AnythingLLM (ex: -uuid.json)
+            # On cherche le pattern {UID}_ au début du nom
+            uid_match = re.match(r'^(\d+)_', filename)
+            
+            if uid_match:
+                try:
+                    uid = int(uid_match.group(1))
+                    secure_id = self.get_secure_id(uid)
+                    
+                    # On enrichit les métadonnées
+                    meta["secure_id"] = secure_id
+                    
+                    # On nettoie le nom de fichier pour l'affichage et le lien
+                    # Si le fichier finit par .json (métadonnées AnythingLLM), on suppose que le fichier original
+                    # avait le même nom mais sans le suffixe UUID+JSON.
+                    # Mais le plus simple est de reconstruire le nom à partir du titre s'il semble correct.
+                    # Pour l'instant, on passe le filename "nettoyé" de base.
+                    
+                    # AnythingLLM ajoute souvent un UUID à la fin : nom.ext-UUID.json
+                    # On essaie de retirer ce suffixe pour retrouver le nom original
+                    clean_filename = re.sub(r'-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json$', '', filename)
+                    meta["filename"] = clean_filename
+                    
+                except Exception as e:
+                    self.logger.warning("Erreur enrichissement metadata pour %s: %s", filename, e)
 
             sources.append(
                 {

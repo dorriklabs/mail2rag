@@ -77,12 +77,22 @@ class Config:
         )
         self.ai_api_key = os.getenv("AI_API_KEY", "lm-studio")
         self.ai_model_name = os.getenv("AI_MODEL_NAME", "qwen2-vl-7b-instruct")
-        self.vision_enable = self._get_bool("VISION_ENABLE", True)
+        
+        # Activation Vision séparée pour images et PDFs
+        self.vision_enable_images = self._get_bool("VISION_ENABLE_IMAGES", True)
+        self.vision_enable_pdf = self._get_bool("VISION_ENABLE_PDF", True)
 
         self.vision_temperature = float(os.getenv("VISION_TEMPERATURE", "0.0"))
         self.vision_max_tokens = int(os.getenv("VISION_MAX_TOKENS", "1500"))
         self.vision_timeout = int(os.getenv("VISION_TIMEOUT", "90"))
         self.vision_prompt_file = os.getenv("VISION_AI_PROMPT_FILE", "vision_ai.txt")
+
+        # ------------------------------------------------------------------
+        # LLM CHAT (génération de réponses RAG via LM Studio)
+        # ------------------------------------------------------------------
+        # Utilise AI_MODEL_NAME par défaut si LLM_CHAT_MODEL n'est pas défini (rétrocompatibilité)
+        self.llm_chat_model = os.getenv("LLM_CHAT_MODEL", self.ai_model_name)
+        self.llm_chat_timeout = int(os.getenv("LLM_CHAT_TIMEOUT", "120"))
 
         # ------------------------------------------------------------------
         # SYSTÈME / CHEMINS

@@ -13,12 +13,13 @@ from app.config import (
     MAX_QUERY_CHARS,
     MAX_TOP_K,
     BM25_INDEX_PATH,
+    LOG_LEVEL,
 )
 from app.pipeline import RAGPipeline
 
 # Configuration du logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
@@ -42,6 +43,7 @@ class Chunk(BaseModel):
 class ResponseModel(BaseModel):
     query: str
     chunks: List[Chunk]
+    debug_info: Optional[Dict] = None
 
 
 class HealthResponse(BaseModel):
@@ -85,7 +87,7 @@ def rag_endpoint(req: RequestModel):
     if use_bm25 is None:
         use_bm25 = USE_BM25_DEFAULT
 
-    results = pipeline.run(
+    results, debug_info = pipeline.run(
         query=req.query,
         top_k=req.top_k,
         final_k=req.final_k,
@@ -96,6 +98,7 @@ def rag_endpoint(req: RequestModel):
     return ResponseModel(
         query=req.query,
         chunks=[Chunk(**x) for x in results],
+        debug_info=debug_info,
     )
 
 

@@ -17,7 +17,7 @@ class VectorDBProvider(ABC):
     """Interface générique pour toutes les bases de données vectorielles."""
     
     @abstractmethod
-    def search(self, embedding: List[float], top_k: int) -> List[Dict]:
+    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
         """Recherche les vecteurs les plus proches."""
         pass
 
@@ -54,15 +54,16 @@ class QdrantProvider(VectorDBProvider):
         self.collection_name = collection_name
         logger.info(f"Initialized QdrantProvider on {host}:{port} (collection: {collection_name})")
 
-    def search(self, embedding: List[float], top_k: int) -> List[Dict]:
+    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
+        target_collection = collection_name or self.collection_name
         try:
             hits = self.client.query_points(
-                collection_name=self.collection_name,
-                query=embedding,
-                limit=top_k,
+                collection_name=target_collection,
+                query=query_vector,
+                limit=limit,
             ).points
         except Exception as e:
-            logger.error(f"Qdrant search failed: {e}")
+            logger.error(f"Qdrant search failed on '{target_collection}': {e}")
             return []
 
         results = []
@@ -141,9 +142,10 @@ class VectorDBService:
         # Ici on pourrait lire os.getenv('VECTOR_DB_PROVIDER') pour choisir dynamiquement
         # Pour l'instant on hardcode Qdrant, mais l'architecture est prête.
         self.provider: VectorDBProvider = QdrantProvider(host, port, collection_name)
+        self.collection_name = collection_name
 
-    def search(self, embedding: List[float], top_k: int) -> List[Dict]:
-        return self.provider.search(embedding, top_k)
+    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
+        return self.provider.search(query_vector, limit, collection_name)
 
     def is_ready(self) -> bool:
         return self.provider.is_ready()

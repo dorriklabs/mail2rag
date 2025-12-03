@@ -53,98 +53,90 @@ class RAGPipeline:
         top_k: int = 20,
         final_k: int = 5,
         use_bm25: bool = True,
-        workspace: str = None,
-    ) -> List[Dict]:
+        workspace: str | None = None,
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Exécute le pipeline RAG complet.
+        Retourne (chunks, debug_info).
+        """
+        start_time = time.time()
+        debug_info = {
+            "steps": {},
+            "counts": {},
+            "timings": {}
+        }
+
+        # 1. Embeddings
         t0 = time.time()
+        query_vector = self.embedder.embed(query)
+        debug_info["timings"]["embedding"] = round(time.time() - t0, 3)
 
-        # 1) Embedding
-        emb = self.embedder.embed(query)
+        # 2. Recherche Vectorielle (Qdrant)
+        t0 = time.time()
+        vector_results = self.vdb.search(
+            query_vector=query_vector,
+            limit=top_k,
+            collection_name=workspace,  # None = default collection
+        )
+        debug_info["timings"]["vector_search"] = round(time.time() - t0, 3)
+        debug_info["counts"]["vector_found"] = len(vector_results)
 
-        # 2) Vector search
-        vec_hits = self.vdb.search(emb, top_k)
-        for p in vec_hits:
-            meta = p.get("metadata") or {}
-            # Conserver le score de similarité vectorielle dans les métadonnées
-            meta["vector_score"] = float(p.get("score", 0.0))
-            p["metadata"] = meta
-
-        # 3) BM25 (optionnel)
-        bm_hits = []
+        # 3. Recherche Lexicale (BM25) - Optionnel
+        bm25_results = []
         if use_bm25:
-            if self.multi_collection_mode and self.bm25_multi:
-                # Mode multi-collection : utiliser le workspace spécifié
-                if workspace and self.bm25_multi.is_ready(workspace):
-                    bm_hits = self.bm25_multi.search(query, workspace, top_k)
+            t0 = time.time()
+            if self.multi_collection_mode:
+                # Mode multi-collection
+                target_collection = workspace or self.vdb.collection_name
+                if self.bm25_multi and self.bm25_multi.is_ready(target_collection):
+                    bm25_results = self.bm25_multi.search(
+                        query=query,
+                        collection=target_collection,
+                        top_k=top_k
+                    )
                 else:
-                    logger.debug(f"BM25 not ready for workspace '{workspace}'")
-            elif self.bm25 and self.bm25.is_ready():
-                # Mode mono-collection (legacy)
-                bm_hits = self.bm25.search(query, top_k)
+                    logger.warning(f"BM25 not ready for collection '{target_collection}'")
+            else:
+                # Mode mono-collection
+                if self.bm25.is_ready():
+                    bm25_results = self.bm25.search(query, top_k=top_k)
+            
+            debug_info["timings"]["bm25_search"] = round(time.time() - t0, 3)
+            debug_info["counts"]["bm25_found"] = len(bm25_results)
+
+        # 4. Fusion (Reciprocal Rank Fusion)
+        merged_candidates = self._fusion(vector_results, bm25_results)
+        debug_info["counts"]["merged_candidates"] = len(merged_candidates)
+
+        # 5. Reranking
+        t0 = time.time()
+        final_results = self.reranker.rerank(
+            query=query,
+            passages=merged_candidates,
+        )
+        debug_info["timings"]["reranking"] = round(time.time() - t0, 3)
+        debug_info["counts"]["final_results"] = len(final_results)
+
+        total_time = round(time.time() - start_time, 3)
+        logger.info(f"RAG finished in {total_time}s (n={len(merged_candidates)}, returned={len(final_results)})")
         
-        for p in bm_hits:
-            meta = p.get("metadata") or {}
-            # Conserver le score BM25 dans les métadonnées
-            meta["bm25_score"] = float(p.get("score", 0.0))
-            p["metadata"] = meta
+        debug_info["total_time"] = total_time
 
-        passages = vec_hits + bm_hits
+        return final_results, debug_info
 
-        # 4) Unicité par texte :
-        #    pour chaque texte, on garde le passage avec le meilleur score actuel
+    def _fusion(self, vector_results: List[Dict], bm25_results: List[Dict]) -> List[Dict]:
+        """Fusionne les résultats vectoriels et BM25 (déduplication simple)."""
+        passages = vector_results + bm25_results
         unique: Dict[str, Dict] = {}
         for p in passages:
             text = p.get("text", "")
             if not text:
                 continue
             prev = unique.get(text)
+            # On garde le meilleur score (simplification)
             if prev is None or float(p.get("score", 0.0)) > float(prev.get("score", 0.0)):
                 unique[text] = p
-        passages = list(unique.values())
-
-        if not passages:
-            logger.info("No passages found for query='%s...'", query[:50])
-            return []
-
-        # 5) Limiter le nombre de passages envoyés au reranker
-        #    pour maîtriser la taille du payload vers LM Studio
-        if len(passages) > MAX_RERANK_PASSAGES:
-            logger.warning(
-                "Too many passages (%d), limiting to top %d for reranking",
-                len(passages),
-                MAX_RERANK_PASSAGES,
-            )
-            passages_for_rerank = sorted(
-                passages,
-                key=lambda x: float(x.get("score", 0.0)),
-                reverse=True,
-            )[:MAX_RERANK_PASSAGES]
-        else:
-            passages_for_rerank = passages
-
-        # 6) Reranking avec fallback
-        try:
-            ranked = self.reranker.rerank(query, passages_for_rerank)
-        except HTTPException as e:
-            if 500 <= e.status_code < 600:
-                logger.warning(
-                    "Reranker failed, falling back to original passages (status=%s)",
-                    e.status_code,
-                )
-                ranked = passages_for_rerank
-            else:
-                raise
-
-        # 7) Top final_k
-        final = ranked[:final_k]
-
-        logger.info(
-            "RAG finished in %ss (n=%d, returned=%d)",
-            round(time.time() - t0, 3),
-            len(passages),
-            len(final),
-        )
-
-        return final
+        return list(unique.values())
 
     def ready_status(self) -> Dict[str, Any]:
         """
