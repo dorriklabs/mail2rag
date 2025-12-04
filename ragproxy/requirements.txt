@@ -3,3 +3,4 @@ uvicorn[standard]
 requests
 qdrant-client
 rank-bm25
+sentence-transformers

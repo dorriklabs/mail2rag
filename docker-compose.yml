@@ -54,6 +54,7 @@ services:
     build:
       context: ./ragproxy
       dockerfile: Dockerfile
+    image: mail2rag-rag_proxy:latest
     container_name: rag_proxy
     env_file:
       - ./.env

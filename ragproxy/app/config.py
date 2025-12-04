@@ -30,6 +30,10 @@ USE_BM25_DEFAULT = str_to_bool(os.getenv("USE_BM25", "true"), default=True)
 
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "20"))  # secondes
 
+# Reranking : mode local ou via LM Studio
+USE_LOCAL_RERANKER = str_to_bool(os.getenv("USE_LOCAL_RERANKER", "true"), default=True)
+LOCAL_RERANKER_MODEL = os.getenv("LOCAL_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+
 # Limites RAG (configurables via env)
 MAX_QUERY_CHARS = int(os.getenv("RAG_MAX_QUERY_CHARS", "10240"))
 MAX_TOP_K = int(os.getenv("RAG_MAX_TOP_K", "200"))

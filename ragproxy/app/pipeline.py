@@ -17,12 +17,15 @@ from .config import (
     REQUEST_TIMEOUT,
     MAX_RERANK_PASSAGES,
     MULTI_COLLECTION_MODE,
+    USE_LOCAL_RERANKER,
+    LOCAL_RERANKER_MODEL,
 )
 from .http_client import HTTPClient
 from .embeddings import EmbeddingService
 from .vectordb import VectorDBService
 from .bm25 import BM25Service, MultiBM25Service
 from .reranker import RerankerService
+from .local_reranker import LocalReranker
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,14 @@ class RAGPipeline:
 
         self.embedder = EmbeddingService(http_lm, EMBED_MODEL)
         self.vdb = VectorDBService(VECTOR_DB_HOST, VECTOR_DB_PORT, VECTOR_DB_COLLECTION)
-        self.reranker = RerankerService(http_lm, RERANK_MODEL)
+        
+        # Reranker : local (cross-encoder) ou LM Studio
+        if USE_LOCAL_RERANKER:
+            logger.info(f"Using LOCAL reranker: {LOCAL_RERANKER_MODEL}")
+            self.reranker = LocalReranker(LOCAL_RERANKER_MODEL)
+        else:
+            logger.info(f"Using LM Studio reranker: {RERANK_MODEL}")
+            self.reranker = RerankerService(http_lm, RERANK_MODEL)
         
         # Mode multi-collections ou mono-collection
         self.multi_collection_mode = MULTI_COLLECTION_MODE
