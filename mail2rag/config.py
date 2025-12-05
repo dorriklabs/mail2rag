@@ -88,6 +88,14 @@ class Config:
         self.vision_prompt_file = os.getenv("VISION_AI_PROMPT_FILE", "vision_ai.txt")
 
         # ------------------------------------------------------------------
+        # TIKA (Document Text Extraction)
+        # ------------------------------------------------------------------
+        self.tika_server_url = os.getenv("TIKA_SERVER_URL", "http://tika:9998")
+        self.tika_timeout = int(os.getenv("TIKA_TIMEOUT", "60"))
+        self.tika_enable = self._get_bool("TIKA_ENABLE", True)
+        self.tika_fallback_to_vision = self._get_bool("TIKA_FALLBACK_TO_VISION", True)
+
+        # ------------------------------------------------------------------
         # LLM CHAT (génération de réponses RAG via LM Studio)
         # ------------------------------------------------------------------
         # Utilise AI_MODEL_NAME par défaut si LLM_CHAT_MODEL n'est pas défini (rétrocompatibilité)

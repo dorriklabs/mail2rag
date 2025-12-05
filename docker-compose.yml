@@ -49,7 +49,24 @@ services:
     networks:
       - rag_net
 
-  # 3. RAG PROXY (FastAPI + Qdrant + BM25 + LM Studio)
+  # 3. TIKA (Document Text Extraction)
+  tika:
+    image: apache/tika:latest
+    container_name: mail2rag-tika
+    ports:
+      - "9998:9998"
+    command: [ "-h", "0.0.0.0" ]
+    restart: unless-stopped
+    networks:
+      - rag_net
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9998/tika || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # 4. RAG PROXY (FastAPI + Qdrant + BM25 + LM Studio)
   rag_proxy:
     build:
       context: ./ragproxy
@@ -87,7 +104,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # 4. MAIL2RAG (Application Python)
+  # 5. MAIL2RAG (Application Python)
   mail2rag:
     build:
       context: ./mail2rag
@@ -115,6 +132,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      tika:
+        condition: service_started
       rag_proxy:
         condition: service_started
     security_opt:
@@ -123,7 +142,7 @@ services:
     networks:
       - rag_net
 
-  # 5. ARCHIVE SERVER (NGINX)
+  # 6. ARCHIVE SERVER (NGINX)
   archive_server:
     image: nginx:alpine
     container_name: mail2rag_archive_server

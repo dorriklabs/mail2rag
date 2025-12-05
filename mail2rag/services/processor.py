@@ -11,6 +11,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 
 from config import Config
+from services.tika_client import TikaClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,17 @@ class DocumentProcessor:
         )
         if not config.load_prompt(config.vision_prompt_file):
             logger.warning("Using hardcoded Vision AI prompt as fallback")
+        
+        # Initialisation du client Tika (si activé)
+        self.tika_client: Optional[TikaClient] = None
+        if config.tika_enable:
+            self.tika_client = TikaClient(
+                server_url=config.tika_server_url,
+                timeout=config.tika_timeout,
+            )
+            logger.info("TikaClient initialisé (TIKA_ENABLE=true)")
+        else:
+            logger.info("TikaClient désactivé (TIKA_ENABLE=false)")
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -42,6 +54,18 @@ class DocumentProcessor:
         """
         Analyse un document et renvoie un texte descriptif/ocrisé.
 
+        Pipeline d'extraction adaptatif :
+        
+        IMAGES (JPG/PNG) :
+        1. Vision AI (si activé) - description visuelle riche
+        2. Tika OCR (fallback)
+        3. Tesseract OCR (fallback final)
+        
+        DOCUMENTS (PDF, DOCX, etc.) :
+        1. Tika (extraction native optimale)
+        2. Vision AI (si activé et Tika échoue)
+        3. Tesseract OCR (fallback final)
+
         - Retourne une chaîne non vide si analyse réussie.
         - Retourne None si tout a échoué ou si le résultat est vide.
         """
@@ -49,29 +73,95 @@ class DocumentProcessor:
         ext = path.suffix.lower()
         logger.debug("Analyse document : %s (ext=%s)", path.name, ext)
 
-        # Déterminer si Vision doit être utilisé selon le type de fichier
+        # Déterminer le type de fichier
         is_image = ext in {".jpg", ".jpeg", ".png"}
         is_pdf = ext == ".pdf"
         
+        # Vérifier si Vision AI est activé pour ce type
         vision_enabled = False
         if is_image and self.config.vision_enable_images:
             vision_enabled = True
         elif is_pdf and self.config.vision_enable_pdf:
             vision_enabled = True
 
-        # 1. Tentative Vision IA (si activée pour ce type de fichier)
-        if vision_enabled:
-            try:
-                return self._analyze_with_vision_llm(path)
-            except Exception as e:  # on log mais on laisse le fallback OCR prendre le relais
-                logger.warning(
-                    "⚠️ Échec Vision IA sur %s (%s). Bascule vers OCR classique.",
-                    path.name,
-                    e,
-                )
+        # ========== PIPELINE POUR LES IMAGES ==========
+        if is_image:
+            vision_result = None
+            tika_metadata = None
+            
+            # 1. Vision AI pour description visuelle riche
+            if vision_enabled:
+                try:
+                    vision_result = self._analyze_with_vision_llm(path)
+                    if not vision_result:
+                        logger.debug("Vision AI n'a pas retourné de résultat pour %s", path.name)
+                except Exception as e:
+                    logger.warning(
+                        "⚠️ Échec Vision IA sur %s (%s).",
+                        path.name,
+                        e,
+                    )
+            
+            # 2. Tika pour métadonnées EXIF (toujours essayer pour les images)
+            if self.tika_client:
+                try:
+                    tika_metadata = self.tika_client.extract_metadata(path)
+                    if not tika_metadata:
+                        logger.debug("Tika n'a pas retourné de métadonnées pour %s", path.name)
+                except Exception as e:
+                    logger.debug("Échec extraction métadonnées Tika pour %s: %s", path.name, e)
+            
+            # 3. Combiner les résultats Vision AI + EXIF
+            if vision_result or tika_metadata:
+                return self._combine_vision_and_exif(vision_result, tika_metadata, path)
+            
+            # 4. Fallback Tika OCR si aucun résultat
+            if self.tika_client:
+                try:
+                    result = self._analyze_with_tika(path)
+                    if result:
+                        return result
+                except Exception as e:
+                    logger.warning(
+                        "⚠️ Échec Tika OCR sur %s (%s). Passage à Tesseract.",
+                        path.name,
+                        e,
+                    )
+            
+            # 5. Fallback final Tesseract OCR
+            return self._analyze_with_tesseract(path)
 
-        # 2. Fallback OCR Tesseract
-        return self._analyze_with_tesseract(path)
+        # ========== PIPELINE POUR LES DOCUMENTS (PDF, DOCX, etc.) ==========
+        else:
+            # 1. Priorité Tika pour extraction optimale
+            if self.tika_client:
+                try:
+                    result = self._analyze_with_tika(path)
+                    if result:
+                        return result
+                    logger.debug("Tika n'a pas retourné de résultat pour %s", path.name)
+                except Exception as e:
+                    logger.warning(
+                        "⚠️ Échec Tika sur %s (%s). Passage au fallback.",
+                        path.name,
+                        e,
+                    )
+
+            # 2. Fallback Vision AI (si activé et autorisé)
+            if vision_enabled and self.config.tika_fallback_to_vision:
+                try:
+                    result = self._analyze_with_vision_llm(path)
+                    if result:
+                        return result
+                except Exception as e:
+                    logger.warning(
+                        "⚠️ Échec Vision IA sur %s (%s). Bascule vers OCR classique.",
+                        path.name,
+                        e,
+                    )
+
+            # 3. Fallback final OCR Tesseract
+            return self._analyze_with_tesseract(path)
 
     # ------------------------------------------------------------------ #
     # OCR Tesseract
@@ -141,6 +231,139 @@ class DocumentProcessor:
         except Exception as e:
             logger.error("❌ Erreur Tesseract sur %s : %s", path.name, e, exc_info=True)
             return None
+
+    # ------------------------------------------------------------------ #
+    # Apache Tika
+    # ------------------------------------------------------------------ #
+    def _analyze_with_tika(self, path: Path) -> Optional[str]:
+        """
+        Analyse via Apache Tika pour extraction de texte universelle.
+
+        - Extrait le texte du document
+        - Récupère les métadonnées pertinentes (auteur, date, titre)
+        - Retourne le texte formaté avec métadonnées ou None si échec
+        """
+        if not self.tika_client:
+            return None
+
+        logger.info("📄 Extraction Tika pour %s...", path.name)
+
+        # Extraction du texte
+        text = self.tika_client.extract_text(path)
+        if not text:
+            return None
+
+        # Extraction des métadonnées (optionnel, enrichit le contenu)
+        metadata = self.tika_client.extract_metadata(path)
+
+        # Construction du résultat avec métadonnées pertinentes
+        result_parts = ["--- EXTRACTION TIKA ---\n"]
+
+        # Ajout des métadonnées intéressantes si disponibles
+        if metadata:
+            if "dc:title" in metadata:
+                result_parts.append(f"Titre: {metadata['dc:title']}\n")
+            if "dc:creator" in metadata or "Author" in metadata:
+                author = metadata.get("dc:creator") or metadata.get("Author")
+                result_parts.append(f"Auteur: {author}\n")
+            if "dcterms:created" in metadata or "Creation-Date" in metadata:
+                created = metadata.get("dcterms:created") or metadata.get("Creation-Date")
+                result_parts.append(f"Date de création: {created}\n")
+            if "dcterms:modified" in metadata or "Last-Modified" in metadata:
+                modified = metadata.get("dcterms:modified") or metadata.get("Last-Modified")
+                result_parts.append(f"Dernière modification: {modified}\n")
+            if "Content-Type" in metadata:
+                result_parts.append(f"Type: {metadata['Content-Type']}\n")
+
+            if len(result_parts) > 1:  # Si on a des métadonnées
+                result_parts.append("\n")
+
+        result_parts.append(text)
+
+        return "".join(result_parts)
+
+    def _combine_vision_and_exif(
+        self,
+        vision_result: Optional[str],
+        metadata: Optional[Dict[str, Any]],
+        path: Path,
+    ) -> str:
+        """
+        Combine la description Vision AI avec les métadonnées EXIF pour les images.
+        
+        Args:
+            vision_result: Résultat de l'analyse Vision AI
+            metadata: Métadonnées extraites par Tika
+            path: Chemin du fichier image
+            
+        Returns:
+            Texte combiné avec description visuelle + EXIF
+        """
+        parts = []
+        
+        # Ajouter la description Vision AI
+        if vision_result:
+            parts.append(vision_result)
+        
+        # Ajouter les métadonnées EXIF pertinentes
+        if metadata:
+            exif_parts = []
+            
+            # Date de prise de vue
+            date_keys = ["EXIF:DateTimeOriginal", "Date/Time Original", "Creation-Date", "dcterms:created"]
+            for key in date_keys:
+                if key in metadata:
+                    exif_parts.append(f"📅 Date de prise de vue: {metadata[key]}")
+                    break
+            
+            # Localisation GPS
+            gps_lat = metadata.get("GPS Latitude")
+            gps_lon = metadata.get("GPS Longitude")
+            if gps_lat and gps_lon:
+                exif_parts.append(f"📍 Coordonnées GPS: {gps_lat}, {gps_lon}")
+            
+            # Appareil photo
+            make = metadata.get("EXIF:Make") or metadata.get("Make")
+            model = metadata.get("EXIF:Model") or metadata.get("Model")
+            if make or model:
+                camera = f"{make} {model}".strip() if make and model else (make or model)
+                exif_parts.append(f"📸 Appareil: {camera}")
+            
+            # Paramètres de prise de vue
+            iso = metadata.get("EXIF:ISOSpeedRatings") or metadata.get("ISO Speed Ratings")
+            aperture = metadata.get("EXIF:FNumber") or metadata.get("F-Number")
+            exposure = metadata.get("EXIF:ExposureTime") or metadata.get("Exposure Time")
+            focal = metadata.get("EXIF:FocalLength") or metadata.get("Focal Length")
+            
+            settings = []
+            if iso:
+                settings.append(f"ISO {iso}")
+            if aperture:
+                settings.append(f"f/{aperture}")
+            if exposure:
+                settings.append(f"{exposure}s")
+            if focal:
+                settings.append(f"{focal}mm")
+            
+            if settings:
+                exif_parts.append(f"⚙️ Paramètres: {', '.join(settings)}")
+            
+            # Résolution
+            width = metadata.get("Image Width") or metadata.get("tiff:ImageWidth")
+            height = metadata.get("Image Height") or metadata.get("tiff:ImageLength")
+            if width and height:
+                exif_parts.append(f"📏 Résolution: {width}×{height} pixels")
+            
+            # Ajouter les métadonnées EXIF au résultat
+            if exif_parts:
+                parts.append("\n\n--- MÉTADONNÉES EXIF ---")
+                parts.append("\n" + "\n".join(exif_parts))
+        
+        # Si aucun résultat, retourner une note
+        if not parts:
+            return f"Image analysée ({path.name}) - Aucune information extraite."
+        
+        return "".join(parts)
 
     # ------------------------------------------------------------------ #
     # Vision LLM (LM Studio)
