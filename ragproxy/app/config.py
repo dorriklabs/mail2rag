@@ -40,3 +40,13 @@ MAX_TOP_K = int(os.getenv("RAG_MAX_TOP_K", "200"))
 # final_k est validé dynamiquement comme <= top_k, donc pas besoin d'un max dédié
 
 MAX_RERANK_PASSAGES = int(os.getenv("MAX_RERANK_PASSAGES", "50"))
+
+# Configuration LLM pour génération de réponses (chat endpoint)
+LLM_CHAT_MODEL = os.getenv("LLM_CHAT_MODEL", "qwen2-vl-7b-instruct")
+LLM_CHAT_TEMPERATURE = float(os.getenv("LLM_CHAT_TEMPERATURE", "0.1"))
+LLM_CHAT_MAX_TOKENS = int(os.getenv("LLM_CHAT_MAX_TOKENS", "1000"))
+LLM_CHAT_SYSTEM_PROMPT = os.getenv(
+    "LLM_CHAT_SYSTEM_PROMPT",
+    "Tu es un assistant IA serviable. Réponds de manière concise et précise en te basant uniquement sur le contexte fourni."
+)
+

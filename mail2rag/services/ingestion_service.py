@@ -4,7 +4,6 @@ from typing import Callable, List, Optional
 
 from config import Config
 from models import ParsedEmail
-from services.anythingllm_client import AnythingLLMClient
 from services.ragproxy_client import RAGProxyClient
 from services.mail import MailService
 from services.router import RouterService
@@ -17,14 +16,15 @@ from services.utils import sanitize_filename, decode_email_header
 
 class IngestionService:
     """
-    Service responsable de l'ingestion des emails dans AnythingLLM.
+    Service responsable de l'ingestion des emails via RAG Proxy.
+    Support legacy AnythingLLM si USE_RAGPROXY_INGESTION=false.
     """
 
     def __init__(
         self,
         config: Config,
         logger,
-        client: AnythingLLMClient,
+        client,  # AnythingLLMClient (optionnel, pour compatibilité)
         mail_service: MailService,
         router: RouterService,
         processor: DocumentProcessor,
@@ -36,7 +36,7 @@ class IngestionService:
     ) -> None:
         self.config = config
         self.logger = logger
-        self.client = client
+        self.client = client  # Keep for backward compatibility
         self.mail_service = mail_service
         self.router = router
         self.processor = processor
@@ -46,16 +46,16 @@ class IngestionService:
         self.get_secure_id = get_secure_id
         self.trigger_bm25_rebuild = trigger_bm25_rebuild
         
-        # RAG Proxy client (pour ingestion alternative)
+        # RAG Proxy client (méthode d'ingestion principale)
         if config.use_ragproxy_ingestion:
             self.ragproxy_client = RAGProxyClient(
                 base_url=config.rag_proxy_url,
                 timeout=config.rag_proxy_timeout,
             )
-            self.logger.info("RAG Proxy ingestion enabled")
+            self.logger.info("✅ RAG Proxy ingestion enabled")
         else:
             self.ragproxy_client = None
-            self.logger.info("Using AnythingLLM for ingestion")
+            self.logger.warning("⚠️ Using legacy AnythingLLM for ingestion")
 
     # ------------------------------------------------------------------ #
     # API publique

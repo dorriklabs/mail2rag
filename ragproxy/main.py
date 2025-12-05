@@ -71,6 +71,23 @@ class IngestResponse(BaseModel):
     message: Optional[str] = None
 
 
+class ChatRequest(BaseModel):
+    query: str
+    collection: Optional[str] = None
+    top_k: int = 20
+    final_k: int = 5
+    use_bm25: bool = True
+    temperature: float = 0.1
+    max_tokens: int = 1000
+
+
+class ChatResponse(BaseModel):
+    query: str
+    answer: str
+    sources: List[Dict[str, Any]] = []
+    debug_info: Optional[Dict] = None
+
+
 app = FastAPI()
 pipeline = RAGPipeline()
 
@@ -832,6 +849,152 @@ def delete_document(doc_id: str, collection: Optional[str] = None):
             "status": "error",
             "message": str(e)
         }
+
+
+# -------------------------------------------------------------------------------------
+# ENDPOINT CHAT (Génération réponse via LLM)
+# -------------------------------------------------------------------------------------
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    """
+    Endpoint de chat RAG complet :
+    1. Recherche hybride (Vector + BM25)
+    2. Construction du contexte
+   3. Génération de réponse via LM Studio
+    
+    Body:
+        query: Question de l'utilisateur
+        collection: Collection à interroger (optionnel)
+        top_k: Nombre de documents à récupérer
+        final_k: Nombre de documents après reranking
+        use_bm25: Utiliser BM25
+        temperature: Température LLM  
+        max_tokens: Tokens max de réponse
+    
+    Returns:
+        answer: Réponse générée
+        sources: Documents sources utilisés
+    """
+    from app.config import (
+        LLM_STUDIO_URL,
+        LLM_CHAT_MODEL,
+        LLM_CHAT_TEMPERATURE,
+        LLM_CHAT_MAX_TOKENS,
+        LLM_CHAT_SYSTEM_PROMPT,
+    )
+    import requests
+    
+    try:
+        logger.info(f"Chat request: '{req.query[:100]}...'")
+        
+        # 1. Recherche RAG
+        workspace = req.collection if req.collection else pipeline.vdb.collection_name
+        
+        rag_result = pipeline.search(
+            query=req.query,
+            top_k=req.top_k,
+            final_k=req.final_k,
+            use_bm25=req.use_bm25,
+            workspace=workspace,
+        )
+        
+        chunks = rag_result.get("chunks", [])
+        
+        if not chunks:
+            return ChatResponse(
+                query=req.query,
+                answer="Je n'ai trouvé aucune information pertinente pour répondre à votre question.",
+                sources=[],
+                debug_info={"error": "No chunks found"}
+            )
+        
+        # 2. Construction du contexte
+        context_parts = []
+        sources = []
+        
+        for i, chunk in enumerate(chunks):
+            text = chunk.get("text", "")
+            metadata = chunk.get("metadata", {})
+            
+            # Ajouter au contexte
+            context_parts.append(f"[Document {i+1}]")
+            context_parts.append(text)
+            context_parts.append("")  # Ligne vide
+            
+            # Ajouter aux sources
+            sources.append({
+                "text": text[:200] + "..." if len(text) > 200 else text,
+                "score": chunk.get("score", 0.0),
+                "metadata": metadata,
+            })
+        
+        context = "\n".join(context_parts)
+        
+        # 3. Construction du prompt
+        system_prompt = LLM_CHAT_SYSTEM_PROMPT
+        user_prompt = f"""Contexte :
+{context}
+
+Question : {req.query}
+
+Réponds à la question en te basant uniquement sur le contexte fourni. Si le contexte ne contient pas assez d'informations, dis-le clairement."""
+        
+        # 4. Appel à LM Studio
+        llm_payload = {
+            "model": req.temperature if hasattr(req, 'model') else LLM_CHAT_MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": req.temperature if req.temperature is not None else LLM_CHAT_TEMPERATURE,
+            "max_tokens": req.max_tokens if req.max_tokens else LLM_CHAT_MAX_TOKENS,
+        }
+        
+        logger.debug(f"Calling LM Studio at {LLM_STUDIO_URL}/v1/chat/completions")
+        
+        response = requests.post(
+            f"{LLM_STUDIO_URL}/v1/chat/completions",
+            json=llm_payload,
+            timeout=60,
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"LM Studio error: {response.status_code} - {response.text}")
+            return ChatResponse(
+                query=req.query,
+                answer="Erreur lors de la génération de la réponse (LLM indisponible).",
+                sources=sources,
+                debug_info={"llm_error": response.text}
+            )
+        
+        llm_response = response.json()
+        answer = llm_response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        if not answer:
+            answer = "Je n'ai pas pu générer de réponse."
+        
+        logger.info(f"Chat response generated ({len(answer)} chars)")
+        
+        return ChatResponse(
+            query=req.query,
+            answer=answer,
+            sources=sources,
+            debug_info={
+                "chunks_retrieved": len(chunks),
+                "context_length": len(context),
+                "llm_model": LLM_CHAT_MODEL,
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Chat endpoint error: {e}", exc_info=True)
+        return ChatResponse(
+            query=req.query,
+            answer=f"Une erreur s'est produite : {str(e)}",
+            sources=[],
+            debug_info={"error": str(e)}
+        )
 
 
 def generate_test_html(results: dict) -> str:
