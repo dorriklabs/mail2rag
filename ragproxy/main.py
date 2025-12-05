@@ -56,6 +56,21 @@ class ReadyResponse(BaseModel):
     bm25_collections: Optional[List[str]] = None
 
 
+class IngestRequest(BaseModel):
+    collection: str
+    text: str
+    metadata: Dict[str, Any] = {}
+    chunk_size: int = 800
+    chunk_overlap: int = 100
+
+
+class IngestResponse(BaseModel):
+    status: str
+    collection: str
+    chunks_created: int = 0
+    message: Optional[str] = None
+
+
 app = FastAPI()
 pipeline = RAGPipeline()
 
@@ -628,6 +643,191 @@ def rebuild_all_bm25():
         
     except Exception as e:
         logger.error(f"Failed to rebuild all BM25 indexes: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+# -------------------------------------------------------------------------------------
+# ENDPOINTS INGESTION
+# -------------------------------------------------------------------------------------
+
+@app.post("/admin/ingest", response_model=IngestResponse)
+def ingest_document(req: IngestRequest):
+    """
+    Ingère un document avec chunking intelligent, génération embeddings, 
+    et indexation dans Qdrant + BM25.
+    
+    Body:
+        collection: Nom de la collection (workspace)
+        text: Contenu textuel du document
+        metadata: Métadonnées (subject, sender, date, filename, etc.)
+        chunk_size: Taille des chunks (défaut: 800)
+        chunk_overlap: Chevauchement (défaut: 100)
+    
+    Returns:
+        status, collection, chunks_created
+    """
+    from app.chunker import TextChunker
+    
+    try:
+        logger.info(f"Ingestion request for collection '{req.collection}'")
+        
+        # Validation
+        if not req.text or not req.text.strip():
+            return IngestResponse(
+                status="error",
+                collection=req.collection,
+                message="Text content is empty"
+            )
+        
+        # 1. Chunking
+        chunker = TextChunker(
+            chunk_size=req.chunk_size,
+            chunk_overlap=req.chunk_overlap,
+        )
+        
+        chunks = chunker.chunk_document(
+            text=req.text,
+            metadata=req.metadata,
+        )
+        
+        if not chunks:
+            return IngestResponse(
+                status="error",
+                collection=req.collection,
+                message="Chunking produced no results"
+            )
+        
+        logger.info(f"Created {len(chunks)} chunks for '{req.collection}'")
+        
+        # 2. Génération embeddings
+        for chunk in chunks:
+            embedding = pipeline.embedder.embed(chunk["text"])
+            chunk["embedding"] = embedding
+        
+        logger.info(f"Generated embeddings for {len(chunks)} chunks")
+        
+        # 3. Indexation Qdrant
+        success = pipeline.vdb.upsert_documents(
+            chunks=chunks,
+            collection_name=req.collection,
+        )
+        
+        if not success:
+            return IngestResponse(
+                status="error",
+                collection=req.collection,
+                message="Failed to index in Qdrant"
+            )
+        
+        logger.info(f"Successfully indexed {len(chunks)} chunks in Qdrant")
+        
+        # 4. Rebuild BM25 (auto)
+        if pipeline.multi_collection_mode and pipeline.bm25_multi:
+            # Mode multi-collection
+            try:
+                from app.vectordb import QdrantProvider
+                from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
+                
+                temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, req.collection)
+                all_docs = temp_provider.get_all_documents()
+                
+                docs = [d.get("text", "") for d in all_docs if d.get("text")]
+                meta = [d.get("metadata", {}) for d in all_docs]
+                
+                if docs:
+                    pipeline.bm25_multi.build_index(req.collection, docs, meta)
+                    logger.info(f"BM25 index rebuilt for '{req.collection}'")
+            except Exception as e:
+                logger.warning(f"Failed to rebuild BM25 for '{req.collection}': {e}")
+        
+        return IngestResponse(
+            status="ok",
+            collection=req.collection,
+            chunks_created=len(chunks),
+            message=f"Successfully ingested {len(chunks)} chunks"
+        )
+        
+    except Exception as e:
+        logger.error(f"Ingestion failed for '{req.collection}': {e}", exc_info=True)
+        return IngestResponse(
+            status="error",
+            collection=req.collection,
+            message=str(e)
+        )
+
+
+@app.delete("/admin/document/{doc_id}")
+def delete_document(doc_id: str, collection: Optional[str] = None):
+    """
+    Supprime un document (tous ses chunks) par identifiant.
+    
+    Args:
+        doc_id: Identifiant du document (uid, message_id, etc.)
+        collection: Collection cible (optionnel si mode single-collection)
+    
+    Returns:
+        status, deleted_count
+    """
+    try:
+        # Déterminer la collection
+        target_collection = collection or pipeline.vdb.collection_name
+        
+        logger.info(f"Delete request for doc_id='{doc_id}' in collection '{target_collection}'")
+        
+        # Supprimer par métadonnées (on assume que doc_id est dans metadata.uid ou metadata.doc_id)
+        # Essayer plusieurs clés possibles
+        deleted_count = 0
+        for key in ["uid", "doc_id", "message_id"]:
+            count = pipeline.vdb.delete_by_metadata(
+                collection_name=target_collection,
+                metadata_filter={key: doc_id}
+            )
+            deleted_count += count
+            if count > 0:
+                break
+        
+        if deleted_count == 0:
+            return {
+                "status": "error",
+                "message": f"Document '{doc_id}' not found in '{target_collection}'"
+            }
+        
+        logger.info(f"Deleted {deleted_count} chunks for doc_id='{doc_id}'")
+        
+        # Rebuild BM25 (auto)
+        if pipeline.multi_collection_mode and pipeline.bm25_multi:
+            try:
+                from app.vectordb import QdrantProvider
+                from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
+                
+                temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, target_collection)
+                all_docs = temp_provider.get_all_documents()
+                
+                docs = [d.get("text", "") for d in all_docs if d.get("text")]
+                meta = [d.get("metadata", {}) for d in all_docs]
+                
+                if docs:
+                    pipeline.bm25_multi.build_index(target_collection, docs, meta)
+                else:
+                    # Collection vide, supprimer l'index
+                    pipeline.bm25_multi.delete_index(target_collection)
+                
+                logger.info(f"BM25 index updated for '{target_collection}'")
+            except Exception as e:
+                logger.warning(f"Failed to update BM25 after deletion: {e}")
+        
+        return {
+            "status": "ok",
+            "collection": target_collection,
+            "deleted_count": deleted_count,
+            "message": f"Deleted {deleted_count} chunks"
+        }
+        
+    except Exception as e:
+        logger.error(f"Deletion failed for doc_id='{doc_id}': {e}", exc_info=True)
         return {
             "status": "error",
             "message": str(e)

@@ -5,6 +5,7 @@ from typing import Callable, List, Optional
 from config import Config
 from models import ParsedEmail
 from services.anythingllm_client import AnythingLLMClient
+from services.ragproxy_client import RAGProxyClient
 from services.mail import MailService
 from services.router import RouterService
 from services.processor import DocumentProcessor
@@ -44,6 +45,17 @@ class IngestionService:
         self.email_renderer = email_renderer
         self.get_secure_id = get_secure_id
         self.trigger_bm25_rebuild = trigger_bm25_rebuild
+        
+        # RAG Proxy client (pour ingestion alternative)
+        if config.use_ragproxy_ingestion:
+            self.ragproxy_client = RAGProxyClient(
+                base_url=config.rag_proxy_url,
+                timeout=config.rag_proxy_timeout,
+            )
+            self.logger.info("RAG Proxy ingestion enabled")
+        else:
+            self.ragproxy_client = None
+            self.logger.info("Using AnythingLLM for ingestion")
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -337,26 +349,19 @@ class IngestionService:
                 )
             return
 
-        uploaded_locs: List[str] = []
-        for f_path in files_to_upload:
-            loc = self.client.upload_file(f_path)
-            if loc:
-                uploaded_locs.append(loc)
-
-        if not uploaded_locs:
-            self.logger.error("Échec upload : aucun document n'a été accepté.")
-            if not email.is_synthetic:
-                error_html = self.email_renderer.render_ingestion_error()
-                notif_subject = f"Erreur d'indexation - {email.subject}"
-                self.mail_service.send_reply(
-                    email.sender, notif_subject, error_html, is_html=True
-                )
-            return
-
-        # S'assurer que le workspace existe avant d'indexer
-        self.client.ensure_workspace_exists(workspace)
-
-        success = self.client.update_embeddings(workspace, adds=uploaded_locs)
+        # Router vers RAG Proxy ou AnythingLLM selon configuration
+        if self.config.use_ragproxy_ingestion and self.ragproxy_client:
+            success, indexed_count = self._upload_via_ragproxy(
+                email=email,
+                workspace=workspace,
+                files_to_upload=files_to_upload,
+            )
+        else:
+            success, indexed_count = self._upload_via_anythingllm(
+                workspace=workspace,
+                files_to_upload=files_to_upload,
+            )
+        
         if not success:
             self.logger.error("❌ Échec indexation '%s'.", workspace)
             if not email.is_synthetic:
@@ -368,8 +373,8 @@ class IngestionService:
             return
 
         self.logger.info(
-            "✅ Succès : %d document(s) indexé(s) dans '%s'",
-            len(uploaded_locs),
+            "✅ Succès : %d document(s)/chunk(s) indexé(s) dans '%s'",
+            indexed_count,
             workspace,
         )
 
@@ -409,3 +414,153 @@ class IngestionService:
             self.logger.debug(
                 "Auto-rebuild BM25 désactivé (AUTO_REBUILD_BM25=false)."
             )
+    
+    # ------------------------------------------------------------------ #
+    # Upload helpers (RAG Proxy vs AnythingLLM)
+    # ------------------------------------------------------------------ #
+    def _upload_via_anythingllm(
+        self,
+        workspace: str,
+        files_to_upload: List[str],
+    ) -> tuple[bool, int]:
+        """
+        Upload et indexation via AnythingLLM (mode legacy).
+        
+        Returns:
+            (success, count) - count = nombre de documents uploadés
+        """
+        uploaded_locs: List[str] = []
+        for f_path in files_to_upload:
+            loc = self.client.upload_file(f_path)
+            if loc:
+                uploaded_locs.append(loc)
+
+        if not uploaded_locs:
+            self.logger.error("Échec upload : aucun document n'a été accepté.")
+            return False, 0
+
+        # S'assurer que le workspace existe avant d'indexer
+        self.client.ensure_workspace_exists(workspace)
+
+        success = self.client.update_embeddings(workspace, adds=uploaded_locs)
+        if not success:
+            return False, 0
+        
+        return True, len(uploaded_locs)
+    
+    def _upload_via_ragproxy(
+        self,
+        email: ParsedEmail,
+        workspace: str,
+        files_to_upload: List[str],
+    ) -> tuple[bool, int]:
+        """
+        Upload et indexation via RAG Proxy avec chunking intelligent.
+        
+        Returns:
+            (success, total_chunks) - total_chunks = nombre de chunks créés
+        """
+        total_chunks = 0
+        errors = 0
+        
+        for file_path in files_to_upload:
+            try:
+                # Extraction du texte depuis le fichier
+                text_content = self._extract_text_from_file(file_path)
+                
+                if not text_content or not text_content.strip():
+                    self.logger.warning(f"Fichier vide ou non-textuel ignoré : {file_path}")
+                    continue
+                
+                # Métadonnées enrichies
+                metadata = {
+                    "uid": str(email.uid),
+                    "subject": email.subject,
+                    "sender": email.sender,
+                    "date": email.date or time.strftime("%Y-%m-%d %H:%M"),
+                    "filename": Path(file_path).name,
+                }
+                
+                # Ajout métadonnées email optionnelles
+                if email.to:
+                    metadata["to"] = email.to
+                if email.cc:
+                    metadata["cc"] = email.cc
+                if email.message_id:
+                    metadata["message_id"] = email.message_id
+                
+                # Ingestion via RAG Proxy
+                result = self.ragproxy_client.ingest_document(
+                    collection=workspace,
+                    text=text_content,
+                    metadata=metadata,
+                    chunk_size=self.config.chunk_size,
+                    chunk_overlap=self.config.chunk_overlap,
+                )
+                
+                if result.get("status") == "ok":
+                    chunks_count = result.get("chunks_created", 0)
+                    total_chunks += chunks_count
+                    self.logger.info(
+                        f"Document ingéré : {Path(file_path).name} → {chunks_count} chunks"
+                    )
+                else:
+                    self.logger.error(
+                        f"Échec ingestion de {Path(file_path).name} : {result.get('message')}"
+                    )
+                    errors += 1
+                    
+            except Exception as e:
+                self.logger.error(
+                    f"Exception lors de l'ingestion de {file_path} : {e}",
+                    exc_info=True,
+                )
+                errors += 1
+        
+        # Succès si au moins un document a été ingéré
+        success = total_chunks > 0
+        
+        if errors > 0:
+            self.logger.warning(
+                f"Ingestion terminée avec {errors} erreur(s), {total_chunks} chunks créés"
+            )
+        
+        return success, total_chunks
+    
+    def _extract_text_from_file(self, file_path: str) -> str:
+        """
+        Extrait le contenu texte d'un fichier.
+        
+        Pour les fichiers .txt, lit directement.
+        Pour les autres, retourne le contenu si déjà du texte.
+        
+        Args:
+            file_path: Chemin du fichier
+            
+        Returns:
+            Contenu textuel ou chaîne vide
+        """
+        try:
+            path = Path(file_path)
+            
+            # Lire directement les fichiers texte
+            if path.suffix.lower() in {".txt", ".md", ".html", ".xml", ".json", ".csv"}:
+                return path.read_text(encoding="utf-8", errors="ignore")
+            
+            # Pour les autres, essayer de lire quand même (peut-être déjà du texte analysé)
+            try:
+                content = path.read_text(encoding="utf-8", errors="ignore")
+                # Vérifier que c'est du texte lisible (pas du binaire)
+                if len(content) > 0 and content.isprintable() or '\n' in content:
+                    return content
+            except:
+                pass
+            
+            # Si ce n'est pas du texte, retourner vide
+            # (les fichiers analysés comme _analysis.txt seront traités séparément)
+            self.logger.debug(f"Fichier non-textuel : {path.name}")
+            return ""
+            
+        except Exception as e:
+            self.logger.error(f"Erreur extraction texte de {file_path} : {e}")
+            return ""

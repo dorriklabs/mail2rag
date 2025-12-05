@@ -1,0 +1,7 @@
+{
+    "query": "chunking intelligent RAG Proxy",
+    "workspace": "test-collection",
+    "top_k": 10,
+    "final_k": 3,
+    "use_bm25": true
+}

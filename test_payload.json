@@ -1,0 +1,13 @@
+{
+    "collection": "test-collection",
+    "text": "Ceci est un test de chunking intelligent avec RAG Proxy. Le système Mail2RAG devrait maintenant utiliser le chunking intelligent au lieu du chunking automatique d'AnythingLLM. Cela permet un contrôle total sur la taille des chunks et l'overlap. Les métadonnées sont maintenant enrichies avec des informations comme l'UID de l'email, le sujet, l'expéditeur et la date. Cette approche améliore significativement la précision de la recherche RAG.",
+    "metadata": {
+        "subject": "Test RAG Proxy Integration",
+        "sender": "test@example.com",
+        "date": "2025-12-05",
+        "filename": "test_email.txt",
+        "uid": "TEST001"
+    },
+    "chunk_size": 200,
+    "chunk_overlap": 50
+}

@@ -189,6 +189,20 @@ class Config:
         # Timeouts RAG Proxy / LLM (utilisés par les appels HTTP dans les services)
         self.rag_proxy_timeout = int(os.getenv("RAG_PROXY_TIMEOUT", "30"))
         self.llm_timeout = int(os.getenv("LLM_TIMEOUT", "60"))
+        
+        # ------------------------------------------------------------------
+        # CHUNKING (pour RAG Proxy ingestion)
+        # ------------------------------------------------------------------
+        self.chunk_size = int(os.getenv("CHUNK_SIZE", "800"))
+        self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
+        self.chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive")
+        
+        # ------------------------------------------------------------------
+        # INGESTION
+        # ------------------------------------------------------------------
+        # Si True, utilise RAG Proxy pour l'ingestion (chunking intelligent)
+        # Si False, utilise AnythingLLM (chunking automatique)
+        self.use_ragproxy_ingestion = self._get_bool("USE_RAGPROXY_INGESTION", True)
 
         # ------------------------------------------------------------------
         # LLM DIRECT (pour RAG Proxy : génération finale)
