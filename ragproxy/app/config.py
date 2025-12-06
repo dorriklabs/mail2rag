@@ -11,6 +11,10 @@ def str_to_bool(x: Optional[str], default: bool = False) -> bool:
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
+# API Authentication (disabled by default)
+API_KEY = os.getenv("RAG_PROXY_API_KEY", "")
+API_KEY_ENABLED = str_to_bool(os.getenv("API_KEY_ENABLED", "false"), default=False)
+
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://lmstudio:1234")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gte-large")
 RERANK_MODEL = os.getenv("RERANK_MODEL", "bge-reranker-v2-m3")
@@ -49,4 +53,3 @@ LLM_CHAT_SYSTEM_PROMPT = os.getenv(
     "LLM_CHAT_SYSTEM_PROMPT",
     "Tu es un assistant IA serviable. Réponds de manière concise et précise en te basant uniquement sur le contexte fourni."
 )
-

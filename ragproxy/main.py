@@ -9,7 +9,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.config import LOG_LEVEL
+from app.config import LOG_LEVEL, API_KEY_ENABLED
 from app.pipeline import RAGPipeline
 from app.routers import health, rag, chat, admin, bm25
 
@@ -27,6 +27,12 @@ app = FastAPI(
     description="Hybrid RAG search with Vector + BM25 + Reranking",
     version="1.0.0",
 )
+
+# Add authentication middleware if enabled
+if API_KEY_ENABLED:
+    from app.middleware import APIKeyMiddleware
+    app.add_middleware(APIKeyMiddleware)
+    logger.info("API key authentication enabled")
 
 # Create pipeline instance
 pipeline = RAGPipeline()
