@@ -2,7 +2,6 @@ volumes:
   mail2rag_archive:
   qdrant_data:
   bm25_data:
-  anythingllm_storage:
 
 
 networks:
@@ -146,29 +145,3 @@ services:
     restart: unless-stopped
     networks:
       - rag_net
-
-  # 6. ANYTHINGLLM
-  anythingllm:
-    image: mintplexlabs/anythingllm:latest
-    container_name: anythingllm
-    ports:
-      - "3001:3001"
-    env_file:
-      - ./.env
-    environment:
-      STORAGE_DIR: /app/server/storage
-      TZ: Europe/Paris
-    volumes:
-      - anythingllm_storage:/app/server/storage
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -fsS http://localhost:3001/api/v1/health || exit 1" ]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      - rag_net
-    depends_on:
-      qdrant:
-        condition: service_started

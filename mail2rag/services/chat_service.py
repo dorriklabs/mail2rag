@@ -6,7 +6,6 @@ import requests
 
 from config import Config
 from models import ParsedEmail
-from services.anythingllm_client import AnythingLLMClient
 from services.mail import MailService
 from services.router import RouterService
 from services.cleaner import CleanerService
@@ -23,7 +22,6 @@ class ChatService:
         self,
         config: Config,
         logger,
-        client: AnythingLLMClient,
         mail_service: MailService,
         router: RouterService,
         cleaner: CleanerService,
@@ -32,7 +30,6 @@ class ChatService:
     ) -> None:
         self.config = config
         self.logger = logger
-        self.client = client
         self.mail_service = mail_service
         self.router = router
         self.cleaner = cleaner
@@ -54,45 +51,19 @@ class ChatService:
 
         try:
             workspace = self.router.determine_workspace(email.email_data)
-            self.client.ensure_workspace_exists(workspace)
 
             cleaned_body = self.cleaner.clean_body(email.body)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")
 
             query_message = f"Sujet : {clean_subject}\n\nQuestion :\n{query_content}"
 
-            # --- Stratégie de recherche : RAG Proxy (hybride) avec fallback AnythingLLM ---
-            if self.config.use_rag_proxy_for_search:
-                try:
-                    self.logger.info(
-                        "🔍 [RAG Proxy] Recherche hybride pour '%s'...", clean_subject
-                    )
-                    response_text, sources = self._search_via_rag_proxy(
-                        query_message, workspace
-                    )
-                except Exception as e:
-                    # Fallback propre sur AnythingLLM
-                    self.logger.error(
-                        "Erreur lors de l'utilisation du RAG Proxy, "
-                        "fallback vers AnythingLLM. Détail: %s",
-                        e,
-                        exc_info=True,
-                    )
-                    self.logger.info(
-                        "🔍 [AnythingLLM] Recherche vectorielle (fallback) pour '%s'...",
-                        clean_subject,
-                    )
-                    response_text, sources = self.client.send_chat_query(
-                        workspace, query_message
-                    )
-            else:
-                self.logger.info(
-                    "🔍 [AnythingLLM] Recherche vectorielle pour '%s'...",
-                    clean_subject,
-                )
-                response_text, sources = self.client.send_chat_query(
-                    workspace, query_message
-                )
+            # Recherche via RAG Proxy (hybride)
+            self.logger.info(
+                "🔍 [RAG Proxy] Recherche hybride pour '%s'...", clean_subject
+            )
+            response_text, sources = self._search_via_rag_proxy(
+                query_message, workspace
+            )
 
             # Sauvegarde optionnelle du chat (log-only, non indexé)
             if self.config.save_chat_history:

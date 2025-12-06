@@ -17,14 +17,12 @@ from services.utils import sanitize_filename, decode_email_header
 class IngestionService:
     """
     Service responsable de l'ingestion des emails via RAG Proxy.
-    Support legacy AnythingLLM si USE_RAGPROXY_INGESTION=false.
     """
 
     def __init__(
         self,
         config: Config,
         logger,
-        client,  # AnythingLLMClient (optionnel, pour compatibilité)
         mail_service: MailService,
         router: RouterService,
         processor: DocumentProcessor,
@@ -36,7 +34,6 @@ class IngestionService:
     ) -> None:
         self.config = config
         self.logger = logger
-        self.client = client  # Keep for backward compatibility
         self.mail_service = mail_service
         self.router = router
         self.processor = processor
@@ -46,16 +43,12 @@ class IngestionService:
         self.get_secure_id = get_secure_id
         self.trigger_bm25_rebuild = trigger_bm25_rebuild
         
-        # RAG Proxy client (méthode d'ingestion principale)
-        if config.use_ragproxy_ingestion:
-            self.ragproxy_client = RAGProxyClient(
-                base_url=config.rag_proxy_url,
-                timeout=config.rag_proxy_timeout,
-            )
-            self.logger.info("✅ RAG Proxy ingestion enabled")
-        else:
-            self.ragproxy_client = None
-            self.logger.warning("⚠️ Using legacy AnythingLLM for ingestion")
+        # RAG Proxy client
+        self.ragproxy_client = RAGProxyClient(
+            base_url=config.rag_proxy_url,
+            timeout=config.rag_proxy_timeout,
+        )
+        self.logger.info("✅ RAG Proxy ingestion enabled")
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -235,7 +228,7 @@ class IngestionService:
                 f.write(f"Résumé : {email_summary}\n")
             if email.is_synthetic:
                 f.write(
-                    "Source : Email synthétique (Upload manuel AnythingLLM)\n"
+                    "Source : Email synthétique (Upload manuel)\n"
                 )
             f.write("-" * 30 + "\n\n")
             f.write(cleaned_body)
@@ -349,18 +342,12 @@ class IngestionService:
                 )
             return
 
-        # Router vers RAG Proxy ou AnythingLLM selon configuration
-        if self.config.use_ragproxy_ingestion and self.ragproxy_client:
-            success, indexed_count = self._upload_via_ragproxy(
-                email=email,
-                workspace=workspace,
-                files_to_upload=files_to_upload,
-            )
-        else:
-            success, indexed_count = self._upload_via_anythingllm(
-                workspace=workspace,
-                files_to_upload=files_to_upload,
-            )
+        # Ingestion via RAG Proxy
+        success, indexed_count = self._upload_via_ragproxy(
+            email=email,
+            workspace=workspace,
+            files_to_upload=files_to_upload,
+        )
         
         if not success:
             self.logger.error("❌ Échec indexation '%s'.", workspace)
@@ -416,38 +403,8 @@ class IngestionService:
             )
     
     # ------------------------------------------------------------------ #
-    # Upload helpers (RAG Proxy vs AnythingLLM)
+    # Upload helper (RAG Proxy)
     # ------------------------------------------------------------------ #
-    def _upload_via_anythingllm(
-        self,
-        workspace: str,
-        files_to_upload: List[str],
-    ) -> tuple[bool, int]:
-        """
-        Upload et indexation via AnythingLLM (mode legacy).
-        
-        Returns:
-            (success, count) - count = nombre de documents uploadés
-        """
-        uploaded_locs: List[str] = []
-        for f_path in files_to_upload:
-            loc = self.client.upload_file(f_path)
-            if loc:
-                uploaded_locs.append(loc)
-
-        if not uploaded_locs:
-            self.logger.error("Échec upload : aucun document n'a été accepté.")
-            return False, 0
-
-        # S'assurer que le workspace existe avant d'indexer
-        self.client.ensure_workspace_exists(workspace)
-
-        success = self.client.update_embeddings(workspace, adds=uploaded_locs)
-        if not success:
-            return False, 0
-        
-        return True, len(uploaded_locs)
-    
     def _upload_via_ragproxy(
         self,
         email: ParsedEmail,

@@ -18,7 +18,6 @@ from services.router import RouterService
 from services.processor import DocumentProcessor
 from services.email_renderer import EmailRenderer
 from services.support_qa import SupportQAService
-from services.anythingllm_client import AnythingLLMClient
 from services.chat_service import ChatService
 from services.ingestion_service import IngestionService
 from services.maintenance import MaintenanceService
@@ -48,12 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sync-archive",
         action="store_true",
-        help="Ré-ingère l'archive locale dans AnythingLLM puis s'arrête.",
-    )
-    parser.add_argument(
-        "--sync-from-anythingllm",
-        action="store_true",
-        help="Crée des emails synthétiques pour les documents orphelins d'AnythingLLM.",
+        help="Ré-ingère l'archive locale via RAG Proxy puis s'arrête.",
     )
     parser.add_argument(
         "--apply-workspace-config",
@@ -77,7 +71,6 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
 
     Retourne un dict 'context' passé ensuite à la boucle principale.
     """
-    client = AnythingLLMClient(config)
     mail_service = MailService(config)
     cleaner = CleanerService(config)
     router = RouterService(config)
@@ -94,7 +87,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     state.setdefault("last_uid", 0)
     state.setdefault("secure_ids", {})
 
-    maintenance = MaintenanceService(config, client, router, mail_service)
+    maintenance = MaintenanceService(config, router, mail_service)
 
     def get_secure_id(uid: int) -> str:
         """Retourne un ID opaque et stable pour le dossier d'archive de cet UID."""
@@ -143,7 +136,6 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     ingestion_service = IngestionService(
         config=config,
         logger=logger,
-        client=client,
         mail_service=mail_service,
         router=router,
         processor=processor,
@@ -157,7 +149,6 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     chat_service = ChatService(
         config=config,
         logger=logger,
-        client=client,
         mail_service=mail_service,
         router=router,
         cleaner=cleaner,
@@ -205,10 +196,6 @@ def handle_maintenance_actions(
     if args.sync_archive:
         did_something = True
         maintenance.sync_all()
-
-    if args.sync_from_anythingllm:
-        did_something = True
-        maintenance.sync_from_anythingllm()
 
     if args.apply_workspace_config:
         did_something = True

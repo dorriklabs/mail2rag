@@ -56,19 +56,6 @@ class Config:
         self.smtp_timeout = int(os.getenv("SMTP_TIMEOUT", "30"))
 
         # ------------------------------------------------------------------
-        # ANYTHINGLLM
-        # ------------------------------------------------------------------
-        base_url = os.getenv("ANYTHINGLLM_BASE_URL", "http://localhost:3001").rstrip(
-            "/"
-        )
-        # Normalisation vers /api/v1
-        if not base_url.endswith("/api/v1"):
-            base_url = f"{base_url}/api/v1"
-        self.anythingllm_base_url = base_url
-
-        self.anythingllm_api_key = os.getenv("ANYTHINGLLM_API_KEY")
-
-        # ------------------------------------------------------------------
         # VISION IA / LM STUDIO (analyse documents / images)
         # ------------------------------------------------------------------
         self.ai_api_url = os.getenv(
@@ -196,13 +183,6 @@ class Config:
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "800"))
         self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
         self.chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive")
-        
-        # ------------------------------------------------------------------
-        # INGESTION
-        # ------------------------------------------------------------------
-        # Si True, utilise RAG Proxy pour l'ingestion (chunking intelligent)
-        # Si False, utilise AnythingLLM (chunking automatique)
-        self.use_ragproxy_ingestion = self._get_bool("USE_RAGPROXY_INGESTION", True)
 
         # ------------------------------------------------------------------
         # LLM DIRECT (pour RAG Proxy : génération finale)
@@ -255,16 +235,6 @@ class Config:
         self.blocked_extensions: Set[str] = {
             ext.strip() for ext in blocked_str.split(",") if ext.strip()
         }
-
-        # ------------------------------------------------------------------
-        # API TIMEOUTS ANYTHINGLLM
-        # ------------------------------------------------------------------
-        self.anythingllm_upload_timeout = int(
-            os.getenv("ANYTHINGLLM_UPLOAD_TIMEOUT", "120")
-        )
-        self.anythingllm_chat_timeout = int(
-            os.getenv("ANYTHINGLLM_CHAT_TIMEOUT", "60")
-        )
 
         # ------------------------------------------------------------------
         # FILE SIZE / OCR
@@ -386,7 +356,6 @@ class Config:
         logging.getLogger("services.processor").setLevel(self.log_level)
         logging.getLogger("services.router").setLevel(self.log_level)
         logging.getLogger("services.cleaner").setLevel(self.log_level)
-        logging.getLogger("services.anythingllm_client").setLevel(self.log_level)
         logging.getLogger("services.ingestion_service").setLevel(self.log_level)
         logging.getLogger("services.chat_service").setLevel(self.log_level)
         logging.getLogger("services.support_qa").setLevel(self.log_level)

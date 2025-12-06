@@ -1,13 +1,12 @@
 import logging
 import shutil
-import time
 from pathlib import Path
 from typing import Any, Dict, List
 
 from config import Config
-from services.anythingllm_client import AnythingLLMClient
 from services.router import RouterService
 from services.mail import MailService
+from services.ragproxy_client import RAGProxyClient
 
 logger = logging.getLogger(__name__)
 
@@ -15,25 +14,26 @@ logger = logging.getLogger(__name__)
 class MaintenanceService:
     """
     Service de maintenance / synchronisation entre l'archive locale
-    et AnythingLLM.
+    et le système RAG.
 
     - Nettoyage complet de l'archive
-    - Resynchronisation archive -> AnythingLLM
-    - Synchronisation inverse AnythingLLM -> archive (emails synthétiques)
-    - Application des paramètres de workspaces (prompts, température, refus)
+    - Resynchronisation archive -> RAG Proxy
+    - Application des paramètres de workspaces (prompts, température)
     """
 
     def __init__(
         self,
         config: Config,
-        client: AnythingLLMClient,
         router: RouterService,
         mail_service: MailService,
     ) -> None:
         self.config = config
-        self.client = client
         self.router = router
         self.mail_service = mail_service
+        self.ragproxy_client = RAGProxyClient(
+            base_url=config.rag_proxy_url,
+            timeout=config.rag_proxy_timeout,
+        )
 
     # ------------------------------------------------------------------ #
     # Archive locale
@@ -69,7 +69,7 @@ class MaintenanceService:
 
     def sync_all(self) -> None:
         """
-        Parcourt l'archive locale et ré-ingère tous les documents dans AnythingLLM.
+        Parcourt l'archive locale et ré-ingère tous les documents via RAG Proxy.
         Utilise le RouterService pour redéterminer le workspace cible.
         """
         logger.info("🔄 Démarrage de la synchronisation complète (Smart Resync)...")
@@ -98,9 +98,6 @@ class MaintenanceService:
                 )
                 continue
 
-            self.client.ensure_workspace_exists(workspace)
-
-            uploaded_locs: List[str] = []
             files_in_folder = [f for f in folder.iterdir() if f.is_file()]
 
             for file_path in files_in_folder:
@@ -108,19 +105,30 @@ class MaintenanceService:
                 if file_path.name.startswith("."):
                     continue
 
-                logger.debug("   ⬆️ Upload : %s", file_path.name)
-                loc = self.client.upload_file(str(file_path))
-                if loc:
-                    uploaded_locs.append(loc)
-                    count_files += 1
-
-            if uploaded_locs:
-                self.client.update_embeddings(workspace, adds=uploaded_locs)
-                logger.info(
-                    "   ✅ %d fichiers indexés dans '%s'",
-                    len(uploaded_locs),
-                    workspace,
-                )
+                logger.debug("   ⬆️ Ré-ingestion : %s", file_path.name)
+                try:
+                    text_content = file_path.read_text(encoding="utf-8", errors="ignore")
+                    if text_content.strip():
+                        metadata = {
+                            "filename": file_path.name,
+                            "source": "archive_resync",
+                        }
+                        result = self.ragproxy_client.ingest_document(
+                            collection=workspace,
+                            text=text_content,
+                            metadata=metadata,
+                            chunk_size=self.config.chunk_size,
+                            chunk_overlap=self.config.chunk_overlap,
+                        )
+                        if result.get("status") == "ok":
+                            count_files += 1
+                            logger.debug(
+                                "   ✅ Indexé : %s (%d chunks)",
+                                file_path.name,
+                                result.get("chunks_created", 0),
+                            )
+                except Exception as e:
+                    logger.error("Erreur ré-ingestion %s : %s", file_path.name, e)
 
             count_folders += 1
 
@@ -190,227 +198,28 @@ class MaintenanceService:
         return self.router.determine_workspace(email_data)
 
     # ------------------------------------------------------------------ #
-    # Synchronisation inverse AnythingLLM -> archive
-    # ------------------------------------------------------------------ #
-    def sync_from_anythingllm(self) -> None:
-        """
-        Synchronisation inverse : détecte les documents dans AnythingLLM
-        mais absents de l'archive. Crée des emails synthétiques pour
-        les documents "orphelins", qui seront ensuite ingérés normalement.
-        """
-        logger.info(
-            "🔄 Démarrage de la synchronisation inverse (AnythingLLM -> Archive)..."
-        )
-
-        workspaces = self.client.list_workspaces()
-        if not workspaces:
-            logger.warning("⚠️ Aucun workspace trouvé dans AnythingLLM")
-            return
-
-        orphan_count = 0
-
-        for ws in workspaces:
-            ws_slug = ws.get("slug")
-            if not ws_slug:
-                continue
-
-            logger.info("📂 Vérification du workspace : %s", ws_slug)
-            documents = self.client.list_documents(ws_slug)
-
-            logger.debug("   DEBUG: type(documents) = %s", type(documents))
-            if documents:
-                logger.debug("   DEBUG: type(documents[0]) = %s", type(documents[0]))
-                logger.debug("   DEBUG: documents[0] = %s", documents[0])
-
-            if not documents:
-                logger.debug("   Pas de documents dans '%s'", ws_slug)
-                continue
-
-            for doc in documents:
-                doc_name = doc.get("name", "unknown")
-                doc_location = doc.get("location", "")
-
-                if self._document_exists_in_archive(doc_name, doc_location):
-                    continue
-
-                logger.warning("   ⚠️ Orphelin détecté : %s", doc_name)
-
-                if self._send_synthetic_email_for_orphan(ws_slug, doc):
-                    orphan_count += 1
-
-        logger.info(
-            "🎉 Synchronisation inverse terminée : %d emails synthétiques envoyés.",
-            orphan_count,
-        )
-
-    def _document_exists_in_archive(
-        self,
-        doc_name: str,
-        doc_location: str,  # actuellement non utilisé mais conservé pour extension future
-    ) -> bool:
-        """
-        Vérifie si un document existe déjà dans l'archive locale.
-
-        On recherche par nom de fichier (exact ou partiel) dans tous
-        les dossiers de l'archive.
-        """
-        for folder in self.config.archive_path.iterdir():
-            if not folder.is_dir():
-                continue
-
-            for file in folder.iterdir():
-                if not file.is_file():
-                    continue
-
-                if file.name == doc_name or doc_name in file.name:
-                    logger.debug(
-                        "      ✅ Trouvé dans archive : %s/%s",
-                        folder.name,
-                        file.name,
-                    )
-                    return True
-
-        return False
-
-    def _send_synthetic_email_for_orphan(
-        self,
-        workspace_slug: str,
-        doc: Dict[str, Any],
-    ) -> bool:
-        """
-        Génère et envoie un email synthétique pour un document orphelin.
-        L'email sera ensuite traité normalement par Mail2RAG.
-        """
-        try:
-            doc_name = doc.get("name", "unknown")
-            doc_location = doc.get("location", "N/A")
-            doc_id = doc.get("id", "N/A")
-
-            subject = f"📄 Upload manuel : {doc_name}"
-
-            body = (
-                "Ce document a été uploadé manuellement via l'interface AnythingLLM.\n\n"
-                f"Workspace : {workspace_slug}\n"
-                f"Nom du document : {doc_name}\n"
-                f"Location AnythingLLM : {doc_location}\n"
-                f"Document ID : {doc_id}\n"
-                f"Date de détection : {time.strftime('%Y-%m-%d %H:%M')}\n\n"
-                "---\n"
-                "Document généré automatiquement par le système de synchronisation Mail2RAG.\n"
-            )
-
-            success = self.mail_service.send_synthetic_email(
-                subject=subject,
-                body=body,
-                attachment_paths=None,
-            )
-
-            if success:
-                logger.info(
-                    "      ✅ Email synthétique envoyé pour : %s",
-                    doc_name,
-                )
-            else:
-                logger.error(
-                    "      ❌ Échec envoi email pour : %s",
-                    doc_name,
-                )
-
-            return success
-
-        except Exception as e:
-            logger.error(
-                "      ❌ Erreur génération email pour orphelin: %s",
-                e,
-                exc_info=True,
-            )
-            return False
-
-    # ------------------------------------------------------------------ #
-    # Configuration des workspaces AnythingLLM
+    # Configuration des workspaces (logging only)
     # ------------------------------------------------------------------ #
     def apply_workspace_configuration(self) -> None:
         """
-        Applique la configuration des prompts et paramètres LLM aux workspaces.
-
-        - Prompts spécifiques (workspace_prompts)
-        - Température / refus spécifiques (workspace_settings)
-        - Prompt par défaut sur les autres workspaces distants
+        Logs the workspace configuration.
+        Note: Configuration is now managed locally via prompts files.
         """
-        logger.info("⚙️ Application de la configuration des Workspaces...")
+        logger.info("⚙️ Configuration des Workspaces (log uniquement)...")
 
-        default_temp = self.config.default_llm_temperature
-        default_refusal = self.config.default_refusal_response
         ws_prompts = self.config.workspace_prompts
         ws_settings = self.config.workspace_settings
-
         local_slugs = set(ws_prompts.keys()) | set(ws_settings.keys())
 
-        # 1) Configs explicites locales
         for slug in sorted(local_slugs):
             prompt = ws_prompts.get(slug)
             settings = ws_settings.get(slug, {})
-
-            temp = settings.get("temperature", default_temp)
-            refusal = settings.get("refusal_response", default_refusal)
-
-            if not self.client.ensure_workspace_exists(slug):
-                logger.error(
-                    "Impossible de créer ou trouver le workspace '%s', configuration sautée.",
-                    slug,
-                )
-                continue
-
-            updated = self.client.update_workspace_settings(
-                slug,
-                system_prompt=prompt,
-                temperature=temp,
-                refusal_response=refusal,
-            )
-
-            if updated:
-                logger.info(
-                    "✅ Paramètres appliqués à '%s' (temp=%s, refusal=%s, prompt=%s)",
-                    slug,
-                    temp,
-                    "custom" if refusal else "None",
-                    "spécifique" if prompt else "inchangé/None",
-                )
-
-        # 2) Prompt par défaut sur les autres workspaces distants
-        if self.config.default_system_prompt:
+            temp = settings.get("temperature", self.config.default_llm_temperature)
             logger.info(
-                "   Application du prompt par défaut aux autres workspaces distants..."
+                "✅ Workspace '%s' : temp=%s, prompt=%s",
+                slug,
+                temp,
+                "custom" if prompt else "default",
             )
-            try:
-                all_workspaces = self.client.list_workspaces()
-                for ws in all_workspaces:
-                    slug = ws.get("slug")
-                    if not slug:
-                        continue
-
-                    if slug in local_slugs:
-                        continue
-
-                    updated = self.client.update_workspace_settings(
-                        slug,
-                        system_prompt=self.config.default_system_prompt,
-                        temperature=default_temp,
-                        refusal_response=default_refusal,
-                    )
-                    if updated:
-                        logger.info(
-                            "✅ Prompt par défaut appliqué à '%s' "
-                            "(temp=%s, refusal=%s)",
-                            slug,
-                            default_temp,
-                            "custom" if default_refusal else "None",
-                        )
-            except Exception as e:
-                logger.error(
-                    "Erreur lors de l'application du prompt par défaut: %s",
-                    e,
-                    exc_info=True,
-                )
 
         logger.info("✅ Configuration des Workspaces terminée.")

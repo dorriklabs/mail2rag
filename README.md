@@ -1,399 +1,371 @@
-# 📧 Mail2RAG - Intelligent Email Ingestion System
+<p align="center">
+  <img src="https://img.shields.io/badge/Mail2RAG-Email_to_Knowledge-blueviolet?style=for-the-badge&logo=gmail" alt="Mail2RAG"/>
+</p>
 
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
-[![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<h1 align="center">📧 Mail2RAG</h1>
 
-**Mail2RAG** is an intelligent email ingestion system that automatically converts emails and their attachments into searchable knowledge bases using RAG (Retrieval-Augmented Generation) technology.
+<p align="center">
+  <strong>Transform emails into searchable AI knowledge bases</strong>
+</p>
 
-## 🎯 Overview
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-features">Features</a> •
+  <a href="#️-architecture">Architecture</a> •
+  <a href="#-configuration">Configuration</a> •
+  <a href="#-version-française">Français</a>
+</p>
 
-Mail2RAG monitors an IMAP mailbox and automatically:
-- 📥 Ingests emails with attachments into [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) workspaces
-- 🤖 Provides AI-powered Q&A via email (chat mode)
-- 🔍 Uses hybrid search (Vector + BM25) for optimal retrieval
-- 📄 Performs OCR and document analysis on PDFs and images
-- 🗂️ Routes emails to specific workspaces based on configurable rules
-- ✉️ Sends beautiful HTML confirmation emails with processing summaries
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
+  <img src="https://img.shields.io/badge/Qdrant-Vector_DB-FF6B6B?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDIgN2wxMCA1IDEwLTV6Ii8+PC9zdmc+" alt="Qdrant"/>
+  <img src="https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit"/>
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License"/>
+</p>
 
-## ✨ Key Features
+---
 
-### 🚀 Email Ingestion
-- **Automatic Processing**: IMAP monitoring with configurable polling intervals
-- **Smart Routing**: Route emails to specific workspaces based on sender, subject, or custom rules
-- **Document Analysis**: OCR and AI-powered vision analysis for PDFs and images
-- **Attachment Support**: Process multiple file types with security filtering
-- **Email Summaries**: AI-generated summaries for ingested emails
+## ⚡ TL;DR
+
+Mail2RAG monitors your inbox and **automatically**:
+1. 📥 Ingests emails + attachments into a vector database
+2. 🔍 Indexes with hybrid search (Vector + BM25 + Reranking)
+3. 💬 Answers questions via email using RAG
+
+**Send an email → Get it indexed → Query via email or dashboard**
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# 1. Clone & configure
+git clone https://github.com/dorriklabs/mail2rag.git
+cd mail2rag && cp .env.example .env
+
+# 2. Edit .env with your IMAP/SMTP credentials
+
+# 3. Launch
+docker-compose up -d
+
+# 4. Access dashboard
+open http://localhost:8501
+```
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| 📊 **Streamlit Admin** | [localhost:8501](http://localhost:8501) | Main dashboard |
+| 🔍 **RAG Proxy API** | [localhost:8000/docs](http://localhost:8000/docs) | API documentation |
+| 💾 **Qdrant** | [localhost:6333/dashboard](http://localhost:6333/dashboard) | Vector DB |
+| 📁 **Archive** | [localhost:8080](http://localhost:8080) | Document archive |
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 📥 Email Ingestion
+- IMAP monitoring with configurable polling
+- Smart routing by sender/subject rules
+- Intelligent chunking with overlap
+- Multi-format support (PDF, DOCX, images...)
+
+### 📄 Document Analysis
+| Engine | Capability |
+|--------|------------|
+| **Tika** | Text extraction, OCR, metadata |
+| **Vision AI** | Image/document description |
+| **EXIF** | GPS, camera info, timestamps |
+| **Tesseract** | OCR fallback |
+
+</td>
+<td width="50%" valign="top">
+
+### 🔍 Hybrid Search
+- Vector similarity (Qdrant)
+- BM25 keyword matching
+- Cross-encoder reranking
+- Multi-collection support
 
 ### 💬 Chat Mode
-- **Email-based Q&A**: Send questions via email with `Chat:` or `Question:` prefix
-- **Context-Aware Responses**: Query your knowledge base through natural language
-- **Hybrid Search**: Combines vector similarity and BM25 keyword matching
-- **Custom Prompts**: Configure workspace-specific system prompts
-- **Source Citations**: Responses include source document references
+Send `Chat: your question` or `Question: your question` by email:
+```
+Subject: Chat: What are the Q4 highlights?
+```
+→ Get AI response with source citations
 
-### 🔧 Advanced Features
-- **Multi-threading**: Concurrent email processing with worker pools
-- **Secure Archive**: Web-accessible archive server with opaque IDs
-- **Workspace Management**: Auto-creation and configuration of workspaces
-- **Q&A Rewriting**: Transform support emails into structured Q&A pairs
-- **State Management**: Persistent state tracking to avoid reprocessing
-- **Synthetic Emails**: Support for programmatic email injection
+</td>
+</tr>
+</table>
+
+### 📊 Streamlit Dashboard
+
+| Page | Features |
+|------|----------|
+| **Overview** | Stats, document counts, collection metrics |
+| **Documents** | Browse, search, filter, delete indexed docs |
+| **Chat** | Test RAG queries directly |
+| **Admin** | Rebuild BM25, view logs, manage collections |
+
+---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐
-│  IMAP Server    │ Email Source
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   Mail2RAG      │ Email Processing & Orchestration
-│   (Python)      │ - Email parsing
-│                 │ - Document processing
-│                 │ - Routing logic
-│                 │ - Chat handling
-└─────┬───────────┘
-      │
-      ├─────────────────────┐
-      │                     │
-      ▼                     ▼
-┌─────────────┐       ┌─────────────┐
-│ AnythingLLM │       │  RAG Proxy  │
-│             │       │  (FastAPI)  │
-│ - Vector DB │       │ - BM25 Index│
-│ - Embeddings│       │ - Reranking │
-│ - Workspaces│       │ - Hybrid    │
-└─────┬───────┘       └──────┬──────┘
-      │                      │
-      ▼                      ▼
-┌─────────────┐       ┌─────────────┐
-│   Qdrant    │       │  LM Studio  │
-│ Vector DB   │       │  (Local LLM)│
-└─────────────┘       └─────────────┘
-
-      ▼
-┌─────────────────┐
-│ Archive Server  │ NGINX - Public document access
-│    (NGINX)      │
-└─────────────────┘
+                    ┌─────────────┐
+                    │ IMAP Server │
+                    └──────┬──────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────┐
+│                     MAIL2RAG                         │
+│  Email Parser → Router → Processor → Ingestion      │
+└───────┬──────────────────────────────────┬───────────┘
+        │                                  │
+        ▼                                  ▼
+┌───────────────┐                 ┌────────────────┐
+│     TIKA      │                 │   RAG PROXY    │
+│ • OCR         │                 │ • Chunking     │
+│ • EXIF        │                 │ • Embeddings   │
+│ • Text Extract│                 │ • BM25 Index   │
+└───────────────┘                 │ • Reranking    │
+                                  └───────┬────────┘
+                                          │
+        ┌─────────────────────────────────┼─────────────────────┐
+        │                                 │                     │
+        ▼                                 ▼                     ▼
+┌───────────────┐                 ┌───────────────┐     ┌───────────────┐
+│    QDRANT     │                 │   LM STUDIO   │     │   STREAMLIT   │
+│  Vector DB   │                 │   Local LLM   │     │   Dashboard   │
+└───────────────┘                 └───────────────┘     └───────────────┘
 ```
-
-### Components
-
-1. **Mail2RAG** - Main application (Python)
-   - IMAP email monitoring
-   - Document processing and OCR
-   - Routing and workspace management
-   - Chat query handling
-
-2. **AnythingLLM** - Knowledge base management
-   - Document storage and embedding
-   - Workspace organization
-   - Vector search
-
-3. **Qdrant** - Vector database
-   - Efficient similarity search
-   - Scalable storage
-
-4. **RAG Proxy** - Hybrid search engine
-   - BM25 full-text search
-   - LLM-based reranking
-   - Search result fusion
-
-5. **Archive Server** - Document hosting (NGINX)
-   - Secure public access to processed emails
-   - Web-based archive browsing
-
-## 📋 Prerequisites
-
-- **Docker** and **Docker Compose**
-- **IMAP Email Account** (Gmail, Outlook, custom server)
-- **LM Studio** (optional, for local LLM - required for RAG Proxy)
-- **SMTP Server** (for sending email responses)
-
-## 🚀 Quick Start
-
-### 1. Clone the Repository
+### Minimal `.env`
 
 ```bash
-git clone https://github.com/dorriklabs/mail2rag.git
-cd mail2rag
-```
-
-### 2. Configure Environment
-
-Create a `.env` file in the root directory:
-
-```bash
-# AnythingLLM Configuration
-ANYTHINGLLM_API_KEY=your_anythingllm_api_key
-DEFAULT_WORKSPACE=general
-
-# IMAP Configuration
+# Email
 IMAP_SERVER=imap.gmail.com
-IMAP_PORT=993
 IMAP_USER=your-email@gmail.com
-IMAP_PASSWORD=your-app-password
-IMAP_FOLDER=INBOX
-IMAP_SEARCH_CRITERIA=UNSEEN
-IMAP_POLL_INTERVAL=60
-
-# SMTP Configuration (for sending replies)
+IMAP_PASSWORD=app-password
 SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
-SMTP_FROM=your-email@gmail.com
+SMTP_PASSWORD=app-password
 
-# Archive Server
-ARCHIVE_BASE_URL=http://localhost:8080
-
-# RAG Proxy (Optional - for hybrid search)
-USE_RAG_PROXY_FOR_SEARCH=false
-RAG_PROXY_URL=http://rag_proxy:8000
-
-# LM Studio (Optional - for RAG Proxy)
-LM_STUDIO_URL=http://host.docker.internal:1234
-AI_MODEL_NAME=your-model-name
-
-# Feature Flags
-ENABLE_EMAIL_SUMMARY=true
-SAVE_CHAT_HISTORY=true
-SYNC_ON_START=true
+# LM Studio
+AI_API_URL=http://host.docker.internal:1234/v1/chat/completions
+AI_MODEL_NAME=qwen/qwen3-vl-8b
 ```
 
-### 3. Configure Routing (Optional)
+### Key Options
 
-Edit `routing.json` to define workspace routing rules:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `USE_RAGPROXY_INGESTION` | `true` | Use RAG Proxy for ingestion |
+| `USE_RAG_PROXY_FOR_SEARCH` | `true` | Enable hybrid search |
+| `AUTO_REBUILD_BM25` | `true` | Auto-update BM25 after ingestion |
+| `CHUNK_SIZE` | `800` | Text chunk size (chars) |
+| `CHUNK_OVERLAP` | `100` | Overlap between chunks |
+| `USE_LOCAL_RERANKER` | `true` | Enable cross-encoder reranking |
+| `TIKA_ENABLE` | `true` | Enable Apache Tika |
+| `VISION_ENABLE` | `true` | Enable Vision AI analysis |
 
-```json
-{
-    "rules": [
-        {
-            "type": "sender",
-            "value": "boss@example.com",
-            "workspace": "urgent_workspace"
-        },
-        {
-            "type": "subject",
-            "value": "Invoice",
-            "workspace": "finance_workspace"
-        }
-    ]
-}
-```
-
-### 4. Launch the Stack
-
-```bash
-docker-compose up -d
-```
-
-### 5. Verify Services
-
-Check that all services are running:
-
-```bash
-docker-compose ps
-```
-
-Access the web interfaces:
-- **AnythingLLM**: http://localhost:3001
-- **Qdrant Dashboard**: http://localhost:6333/dashboard
-- **Archive Server**: http://localhost:8080
-- **RAG Proxy** (if enabled): http://localhost:8000/docs
-
-## 📖 Usage
-
-### Email Ingestion Mode
-
-Simply send an email with attachments to your configured inbox. Mail2RAG will:
-1. Extract email content and attachments
-2. Route to the appropriate workspace
-3. Generate embeddings and index documents
-4. Send a confirmation email with processing summary
-
-**Example Email:**
-```
-To: your-inbox@example.com
-Subject: Q4 Financial Report
-Attachments: report.pdf, charts.xlsx
-
-Please index this quarterly financial report for our records.
-```
-
-### Chat/Q&A Mode
-
-Send an email with `Chat:` or `Question:` prefix in the subject:
-
-**Example Email:**
-```
-To: your-inbox@example.com
-Subject: Chat: What were the key findings in the Q4 report?
-
-I need a summary of the main financial highlights from last quarter.
-```
-
-Mail2RAG will:
-1. Search relevant documents in the workspace
-2. Generate an AI-powered response
-3. Reply with the answer and source citations
-
-## ⚙️ Configuration
-
-### Workspace Settings
-
-Configure workspace-specific behaviors in `.env`:
-
-```bash
-# Example: Enable Q&A rewriting for support workspace
-WORKSPACE_SETTINGS={"support_workspace": {"qa_rewrite": true}}
-```
-
-### Custom Prompts
-
-Create custom system prompts for workspaces in `mail2rag/prompts/`:
-
-**Example: `mail2rag/prompts/support_workspace.txt`**
-```
-You are a helpful customer support assistant. Answer questions based on the provided documentation.
-Be friendly, concise, and always cite your sources.
-```
-
-### Document Processing
-
-Configure OCR and document analysis:
-
-```bash
-# Enable/disable features
-ENABLE_OCR=true
-ENABLE_VISION_ANALYSIS=true
-
-# Processing limits
-MAX_ATTACHMENT_SIZE=10485760  # 10MB
-MAX_FILENAME_LENGTH=100
-```
-
-## 🗂️ Project Structure
-
-```
-mail2rag/
-├── docker-compose.yml          # Docker orchestration
-├── .env                        # Environment configuration
-├── routing.json                # Email routing rules
-├── nginx.conf                  # Archive server config
-│
-├── mail2rag/                   # Main application
-│   ├── app.py                  # Application entry point
-│   ├── config.py               # Configuration management
-│   ├── client.py               # AnythingLLM client
-│   ├── Dockerfile              # Container definition
-│   ├── requirements.txt        # Python dependencies
-│   │
-│   ├── services/               # Service modules
-│   │   ├── mail.py            # IMAP/SMTP handling
-│   │   ├── router.py          # Email routing
-│   │   ├── processor.py       # Document processing
-│   │   ├── cleaner.py         # Content cleaning
-│   │   ├── maintenance.py     # System maintenance
-│   │   ├── support_qa.py      # Q&A rewriting
-│   │   └── utils.py           # Utilities
-│   │
-│   ├── templates/              # Email templates
-│   │   ├── ingestion_success.html
-│   │   ├── ingestion_error.html
-│   │   ├── chat_response.html
-│   │   └── crash_report.html
-│   │
-│   └── prompts/                # Workspace prompts
-│       └── *.txt
-│
-├── ragproxy/                   # RAG Proxy service
-│   ├── main.py                 # FastAPI application
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── app/
-│       ├── embeddings.py       # Embedding utilities
-│       └── bm25_index.py       # BM25 indexing
-│
-├── state/                      # Persistent state
-├── logs/                       # Application logs
-└── README.md                   # This file
-```
-
-## 🛠️ Maintenance
-
-### Viewing Logs
-
-```bash
-# Mail2RAG logs
-docker-compose logs -f mail2rag
-
-# All services
-docker-compose logs -f
-```
-
-### Backup State
-
-```bash
-# Backup state and configuration
-tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
-```
-
-### Rebuild Services
-
-```bash
-# Rebuild after code changes
-docker-compose up -d --build
-
-# Restart specific service
-docker-compose restart mail2rag
-```
-
-## 🔒 Security Considerations
-
-- **Email Credentials**: Never commit `.env` file - use `.env.example` template
-- **Archive Access**: Archive server uses opaque IDs to prevent enumeration
-- **Attachment Filtering**: Configure allowed file types in `CleanerService`
-- **Network Isolation**: Services communicate via internal Docker network
-- **SMTP Security**: Use app-specific passwords, not account passwords
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) - Universal LLM wrapper
-- [Qdrant](https://qdrant.tech/) - Vector database
-- [LM Studio](https://lmstudio.ai/) - Local LLM runtime
-
-## 📞 Support
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/dorriklabs/mail2rag/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/dorriklabs/mail2rag/discussions)
-
-## 🗺️ Roadmap
-
-- [ ] Web UI for configuration and monitoring
-- [ ] Multi-language support
-- [ ] Advanced attachment preview in emails
-- [ ] Webhook integrations
-- [ ] Slack/Teams connectors
-- [ ] Mobile app
+> 📄 See [`.env.example`](.env.example) for all options.
 
 ---
 
-**Made with ❤️ by dorriklabs**
+## 📁 Project Structure
+
+```
+mail2rag/
+├── docker-compose.yml
+├── .env.example
+├── routing.json              # Email routing rules
+│
+├── mail2rag/                 # Main app
+│   ├── app.py
+│   ├── services/
+│   │   ├── ingestion_service.py
+│   │   ├── processor.py      # Tika + Vision
+│   │   ├── ragproxy_client.py
+│   │   └── ...
+│   ├── templates/            # Email templates
+│   └── prompts/              # AI prompts
+│
+├── ragproxy/                 # Search engine
+│   ├── main.py
+│   └── app/
+│       ├── bm25.py
+│       ├── chunker.py
+│       ├── local_reranker.py
+│       └── pipeline.py
+│
+└── streamlit_admin/          # Dashboard
+    ├── app.py
+    └── pages/
+```
+
+---
+
+## 🛠️ Commands
+
+```bash
+# Start
+docker-compose up -d
+
+# Logs
+docker-compose logs -f mail2rag
+docker-compose logs -f rag_proxy
+
+# Rebuild after changes
+docker-compose up -d --build
+
+# Rebuild BM25 index
+curl -X POST "http://localhost:8000/rebuild-bm25?collection=default-workspace"
+
+# Backup
+tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
+```
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Streamlit Admin Dashboard
+- [x] Hybrid search (Vector + BM25)
+- [x] Local cross-encoder reranker
+- [x] Apache Tika integration
+- [x] EXIF metadata extraction
+- [x] Complete AnythingLLM replacement
+- [ ] Webhook integrations
+- [ ] Slack/Teams connectors
+
+---
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+## 🤝 Contributing
+
+1. Fork → 2. Branch → 3. Commit → 4. PR
+
+---
+
+<p align="center">
+  <strong>Made with ❤️ by <a href="https://github.com/dorriklabs">dorriklabs</a></strong>
+</p>
+
+---
+
+# 🇫🇷 Version Française
+
+## ⚡ En Bref
+
+Mail2RAG surveille votre boîte mail et **automatiquement** :
+1. 📥 Ingère emails + pièces jointes dans une base vectorielle
+2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking)
+3. 💬 Répond aux questions par email via RAG
+
+---
+
+## 🚀 Démarrage Rapide
+
+```bash
+# 1. Cloner & configurer
+git clone https://github.com/dorriklabs/mail2rag.git
+cd mail2rag && cp .env.example .env
+
+# 2. Modifier .env avec vos identifiants IMAP/SMTP
+
+# 3. Lancer
+docker-compose up -d
+
+# 4. Accéder au dashboard
+open http://localhost:8501
+```
+
+---
+
+## ✨ Fonctionnalités
+
+### 📥 Ingestion d'Emails
+- Surveillance IMAP avec polling configurable
+- Routage intelligent par expéditeur/sujet
+- Chunking intelligent avec chevauchement
+- Support multi-formats (PDF, DOCX, images...)
+
+### 📄 Analyse Documentaire
+
+| Moteur | Capacité |
+|--------|----------|
+| **Tika** | Extraction texte, OCR, métadonnées |
+| **Vision AI** | Description images/documents |
+| **EXIF** | GPS, appareil, horodatage |
+| **Tesseract** | OCR de secours |
+
+### 🔍 Recherche Hybride
+- Similarité vectorielle (Qdrant)
+- Correspondance mots-clés BM25
+- Reranking cross-encoder
+- Support multi-collections
+
+### 💬 Mode Chat
+Envoyez `Chat: votre question` par email :
+```
+Sujet: Chat: Quels sont les points clés du T4 ?
+```
+→ Recevez une réponse IA avec citations des sources
+
+---
+
+## ⚙️ Configuration Minimale
+
+```bash
+# Email
+IMAP_SERVER=imap.gmail.com
+IMAP_USER=votre-email@gmail.com
+IMAP_PASSWORD=mot-de-passe-application
+SMTP_SERVER=smtp.gmail.com
+SMTP_USER=votre-email@gmail.com
+SMTP_PASSWORD=mot-de-passe-application
+
+# LM Studio
+AI_API_URL=http://host.docker.internal:1234/v1/chat/completions
+AI_MODEL_NAME=qwen/qwen3-vl-8b
+```
+
+### Options Clés
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `USE_RAGPROXY_INGESTION` | `true` | Ingestion via RAG Proxy |
+| `AUTO_REBUILD_BM25` | `true` | Rebuild auto après ingestion |
+| `CHUNK_SIZE` | `800` | Taille des chunks (caractères) |
+| `USE_LOCAL_RERANKER` | `true` | Activer le reranker local |
+| `TIKA_ENABLE` | `true` | Activer Apache Tika |
+| `VISION_ENABLE` | `true` | Activer Vision AI |
+
+---
+
+## 🗺️ Feuille de Route
+
+- [x] Dashboard Admin Streamlit
+- [x] Recherche hybride (Vecteur + BM25)
+- [x] Reranker cross-encoder local
+- [x] Intégration Apache Tika
+- [x] Extraction métadonnées EXIF
+- [x] Remplacement complet d'AnythingLLM
+- [ ] Intégrations webhook
+- [ ] Connecteurs Slack/Teams
+
+---
+
+<p align="center">
+  <strong>Fait avec ❤️ par <a href="https://github.com/dorriklabs">dorriklabs</a></strong>
+</p>
