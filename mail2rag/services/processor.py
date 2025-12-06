@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import requests
 import pytesseract
@@ -23,7 +23,7 @@ class DocumentProcessor:
     - Si VISION_ENABLE = true et format supporté : envoi à un modèle Vision (LM Studio).
     - Sinon (ou en cas d'échec) : fallback OCR Tesseract classique.
 
-    Le résultat est un texte brut prêt à être indexé dans AnythingLLM.
+    Le résultat est un texte brut prêt à être indexé via RAG Proxy.
     """
 
     def __init__(self, config: Config) -> None:
