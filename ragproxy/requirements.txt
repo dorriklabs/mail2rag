@@ -5,7 +5,3 @@ qdrant-client
 rank-bm25
 sentence-transformers
 pydantic
-
-# Testing
-pytest
-httpx

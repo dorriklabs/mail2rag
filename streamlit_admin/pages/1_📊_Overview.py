@@ -8,16 +8,19 @@ import requests
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="Vue d'ensemble", page_icon="📊", layout="wide")
 
-# URLs depuis session state
+# URLs depuis session state ou env
 RAG_PROXY_URL = st.session_state.get("rag_proxy_url", "http://rag_proxy:8000")
 QDRANT_URL = st.session_state.get("qdrant_url", "http://qdrant:6333")
+TIKA_URL = os.getenv("TIKA_URL", "http://tika:9998")
+LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://lmstudio:1234")
 
 st.title("📊 Vue d'ensemble")
 
-# Fonction helper pour appeler RAG Proxy
+# Fonctions helper pour les health checks
 def get_collections():
     try:
         response = requests.get(f"{RAG_PROXY_URL}/admin/collections", timeout=5)
@@ -37,14 +40,33 @@ def get_readyz():
     except Exception as e:
         return None
 
+def check_tika():
+    """Vérifie si Tika est accessible."""
+    try:
+        response = requests.get(f"{TIKA_URL}/tika", timeout=3)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+def check_lm_studio():
+    """Vérifie si LM Studio est accessible."""
+    try:
+        response = requests.get(f"{LM_STUDIO_URL}/v1/models", timeout=3)
+        return response.status_code == 200
+    except Exception:
+        return False
+
 # Récupérer les données
 with st.spinner("Chargement des statistiques..."):
     collections_data = get_collections()
     readyz_data = get_readyz()
+    tika_ok = check_tika()
+    lm_studio_ok = check_lm_studio()
 
-# Statut des services
+# Statut des services - Ligne 1 : Services Core
 st.subheader("🔗 Statut des Services")
-col1, col2, col3, col4 = st.columns(4)
+
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 
 if readyz_data:
     deps = readyz_data.get("deps", {})
@@ -58,11 +80,25 @@ if readyz_data:
         st.metric("Embeddings", embedder_status)
     
     with col3:
-        bm25_status = "✅ OK" if deps.get("bm25") else "⚠️ Non configuré"
+        bm25_status = "✅ OK" if deps.get("bm25") else "⚠️ Non config."
         st.metric("BM25", bm25_status)
     
     with col4:
-        overall_status = "✅ Opérationnel" if readyz_data.get("ready") else "❌ Problème"
+        tika_status = "✅ OK" if tika_ok else "❌ Erreur"
+        st.metric("Tika", tika_status)
+    
+    with col5:
+        lm_status = "✅ OK" if lm_studio_ok else "❌ Erreur"
+        st.metric("LM Studio", lm_status)
+    
+    with col6:
+        # Global = tous les services critiques OK
+        all_ok = (
+            deps.get("qdrant") and 
+            deps.get("embedder") and 
+            tika_ok
+        )
+        overall_status = "✅ Opérationnel" if all_ok else "⚠️ Partiel"
         st.metric("Global", overall_status)
 else:
     st.error("Impossible de récupérer le statut des services")
@@ -192,12 +228,13 @@ st.subheader("ℹ️ Informations Système")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.text(f"Mode Multi-Collection: {collections_data.get('multi_collection_mode', 'N/A')}")
+    st.text(f"Mode Multi-Collection: {collections_data.get('multi_collection_mode', 'N/A') if collections_data else 'N/A'}")
     st.text(f"Dernière mise à jour: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with col2:
-    st.text(f"RAG Proxy URL: {RAG_PROXY_URL}")
-    st.text(f"Qdrant URL: {QDRANT_URL}")
+    st.text(f"RAG Proxy: {RAG_PROXY_URL}")
+    st.text(f"Tika: {TIKA_URL}")
+    st.text(f"LM Studio: {LM_STUDIO_URL}")
 
 # Bouton refresh
 if st.button("🔄 Rafraîchir les données", use_container_width=True):
