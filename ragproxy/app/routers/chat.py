@@ -42,10 +42,11 @@ def chat(req: ChatRequest):
     try:
         logger.info(f"Chat request: '{req.query[:100]}...'")
         
-        # 1. RAG Search
+        # 1. RAG Search with full pipeline
         workspace = req.collection if req.collection else pipeline.vdb.collection_name
         
-        rag_result = pipeline.search(
+        # pipeline.run() returns (chunks, debug_info) tuple
+        chunks, rag_debug = pipeline.run(
             query=req.query,
             top_k=req.top_k,
             final_k=req.final_k,
@@ -53,7 +54,6 @@ def chat(req: ChatRequest):
             workspace=workspace,
         )
         
-        chunks = rag_result.get("chunks", [])
         
         if not chunks:
             return ChatResponse(
