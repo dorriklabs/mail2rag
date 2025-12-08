@@ -76,7 +76,7 @@ if readyz_data:
         st.metric("Qdrant", qdrant_status)
     
     with col2:
-        embedder_status = "✅ OK" if deps.get("embedder") else "❌ Erreur"
+        embedder_status = "✅ OK" if deps.get("lm_studio") else "❌ Erreur"
         st.metric("Embeddings", embedder_status)
     
     with col3:
