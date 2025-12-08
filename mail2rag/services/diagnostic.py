@@ -157,6 +157,13 @@ class DiagnosticService:
         trace.add_metadata("sender", email.sender)
         trace.add_metadata("subject", email.subject)
         
+        # Ajouter infos de configuration
+        trace.add_metadata("config", {
+            "tika_url": self.config.tika_server_url,
+            "rag_proxy_url": self.config.rag_proxy_url,
+            "embed_model": getattr(self.config, "embed_model", "N/A"),
+        })
+        
         question = self._extract_question(email.body)
         has_question = bool(question)
         trace.add_metadata("has_question", has_question)
@@ -167,11 +174,33 @@ class DiagnosticService:
         chunks_created = 0
         rag_answer = None
         rag_sources = []
+        rag_debug_info = {}
         
         # Extraire les pièces jointes du message brut
         attachments = self._extract_attachments(email)
         
         try:
+            # 0. Vérification des dépendances
+            with trace.step("health_check") as step:
+                # Tika
+                tika_ok = self.tika.health_check()
+                step.details["tika"] = "✅ OK" if tika_ok else "❌ Indisponible"
+                
+                # RAG Proxy (via /readyz)
+                try:
+                    import requests
+                    resp = requests.get(f"{self.config.rag_proxy_url}/readyz", timeout=5)
+                    if resp.status_code == 200:
+                        readyz = resp.json()
+                        deps = readyz.get("deps", {})
+                        step.details["qdrant"] = "✅ OK" if deps.get("qdrant") else "❌ Indisponible"
+                        step.details["bm25"] = "✅ OK" if deps.get("bm25") else "⚠️ Non initialisé"
+                        step.details["lm_studio"] = "✅ OK" if deps.get("lm_studio") else "❌ Indisponible"
+                    else:
+                        step.details["rag_proxy"] = f"❌ HTTP {resp.status_code}"
+                except Exception as e:
+                    step.details["rag_proxy"] = f"❌ {str(e)[:50]}"
+            
             # 1. Réception et parsing
             with trace.step("email_reception") as step:
                 step.details["attachments_count"] = len(attachments)
@@ -242,15 +271,40 @@ class DiagnosticService:
                         
                         chunks = search_result.get("chunks", [])
                         step.details["chunks_retrieved"] = len(chunks)
+                        
                         if chunks:
                             step.details["top_score"] = round(chunks[0].get("score", 0), 3)
                             step.details["bottom_score"] = round(chunks[-1].get("score", 0), 3)
+                        
+                        # Récupérer les debug_info du pipeline
+                        search_debug = search_result.get("debug_info", {})
+                        if search_debug:
+                            # Timings
+                            timings = search_debug.get("timings", {})
+                            if timings:
+                                step.details["⏱️ embedding_ms"] = int(timings.get("embedding", 0) * 1000)
+                                step.details["⏱️ vector_ms"] = int(timings.get("vector_search", 0) * 1000)
+                                step.details["⏱️ bm25_ms"] = int(timings.get("bm25_search", 0) * 1000)
+                                step.details["⏱️ reranking_ms"] = int(timings.get("reranking", 0) * 1000)
+                            
+                            # Counts
+                            counts = search_debug.get("counts", {})
+                            if counts:
+                                step.details["📊 vector_found"] = counts.get("vector_found", 0)
+                                step.details["📊 bm25_found"] = counts.get("bm25_found", 0)
+                                step.details["📊 merged"] = counts.get("merged_candidates", 0)
+                                step.details["📊 final"] = counts.get("final_results", 0)
+                        
                         rag_sources = chunks
+                        rag_debug_info = search_debug
                     
                     # 5b. Génération LLM (Chat avec contexte RAG)
                     with trace.step("llm_generation") as step:
                         step.details["query"] = question[:100]
                         step.details["context_chunks"] = len(chunks)
+                        step.details["final_k"] = 5
+                        step.details["temperature"] = 0.1
+                        step.details["max_tokens"] = 1000
                         
                         chat_result = self.ragproxy.chat(
                             query=question,
@@ -270,6 +324,8 @@ class DiagnosticService:
                         if debug_info:
                             step.details["llm_model"] = debug_info.get("llm_model", "N/A")
                             step.details["context_length"] = debug_info.get("context_length", 0)
+                            if debug_info.get("error"):
+                                step.details["⚠️ error"] = debug_info["error"]
                         
                         # Mettre à jour les sources avec celles du chat (après reranking)
                         if chat_result.get("sources"):
@@ -455,6 +511,21 @@ class DiagnosticService:
         </div>
         """
         
+        # Section configuration
+        config_html = ""
+        if meta.get("config"):
+            cfg = meta["config"]
+            config_html = f"""
+            <div style="margin-bottom: 20px; padding: 10px; background: #e9ecef; border-radius: 5px;">
+                <strong>⚙️ Configuration</strong>
+                <ul style="margin: 5px 0; padding-left: 20px;">
+                    <li><strong>Tika:</strong> {cfg.get('tika_url', 'N/A')}</li>
+                    <li><strong>RAG Proxy:</strong> {cfg.get('rag_proxy_url', 'N/A')}</li>
+                    <li><strong>Embed Model:</strong> {cfg.get('embed_model', 'N/A')}</li>
+                </ul>
+            </div>
+            """
+        
         # Erreurs globales
         error_global = ""
         if meta.get("error") or meta.get("fatal_error") or meta.get("warning"):
@@ -481,6 +552,7 @@ class DiagnosticService:
             <h1>📊 Rapport de Diagnostic Mail2RAG</h1>
             
             {meta_html}
+            {config_html}
             {error_global}
             
             <h2>⏱️ Durée totale: {data['total_duration_ms']}ms</h2>
