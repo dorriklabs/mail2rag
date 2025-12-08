@@ -385,19 +385,33 @@ class DiagnosticService:
         # Réponse RAG si présente
         rag_html = ""
         if data.get("rag_answer"):
+            # Afficher la question posée
+            question_html = ""
+            if data["metadata"].get("question"):
+                question_html = f"""
+                <div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 0 5px 5px 0;">
+                    <strong>❓ Question posée :</strong><br>
+                    <em>{data["metadata"]["question"]}</em>
+                </div>
+                """
+            
             sources_html = ""
             if data.get("rag_sources"):
                 sources_items = [
-                    f"<li><em>Score: {s.get('score', 0):.2f}</em> - {s.get('text', '')[:100]}...</li>"
+                    f"<li><em>Score: {s.get('score', 0):.2f}</em> - {s.get('text', '')[:150]}...</li>"
                     for s in data["rag_sources"]
                 ]
                 sources_html = f"<ul>{''.join(sources_items)}</ul>"
             
             rag_html = f"""
             <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 5px;">
-                <h3 style="margin-top: 0;">💬 Réponse RAG</h3>
-                <p>{data['rag_answer']}</p>
-                <h4>📚 Sources utilisées</h4>
+                <h3 style="margin-top: 0;">💬 Test RAG</h3>
+                {question_html}
+                <div style="padding: 10px; background: #d4edda; border-radius: 5px;">
+                    <strong>📝 Résultats de la recherche :</strong><br>
+                    {data['rag_answer']}
+                </div>
+                <h4 style="margin-top: 15px;">📚 Sources trouvées</h4>
                 {sources_html}
             </div>
             """
