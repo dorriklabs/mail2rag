@@ -455,21 +455,41 @@ class DiagnosticService:
         steps_html = ""
         for step in data["steps"]:
             icon = "✅" if step["status"] == "success" else "❌" if step["status"] == "error" else "⏳"
+            border_color = "#28a745" if step["status"] == "success" else "#dc3545" if step["status"] == "error" else "#6c757d"
             
-            details_html = ""
-            if step["details"]:
-                details_items = [f"<li><strong>{k}:</strong> {v}</li>" for k, v in step["details"].items()]
-                details_html = f"<ul style='margin: 5px 0; padding-left: 20px;'>{''.join(details_items)}</ul>"
+            # Séparer les détails principaux des détails techniques
+            main_details = []
+            tech_details = []
+            for k, v in step["details"].items():
+                if k.startswith("⏱️") or k.startswith("📊"):
+                    tech_details.append(f"<li><strong>{k}:</strong> {v}</li>")
+                else:
+                    main_details.append(f"<li><strong>{k}:</strong> {v}</li>")
+            
+            main_html = f"<ul style='margin: 5px 0; padding-left: 20px;'>{''.join(main_details)}</ul>" if main_details else ""
+            
+            # Détails techniques dans un accordéon
+            tech_html = ""
+            if tech_details:
+                tech_html = f"""
+                <details style="margin-top: 8px;">
+                    <summary style="cursor: pointer; color: #6c757d; font-size: 0.85em;">📊 Détails techniques ({len(tech_details)} métriques)</summary>
+                    <ul style="margin: 5px 0; padding-left: 20px; font-size: 0.9em; color: #495057;">
+                        {''.join(tech_details)}
+                    </ul>
+                </details>
+                """
             
             error_html = ""
             if step["error"]:
                 error_html = f"<div style='color: #dc3545; margin-top: 5px;'>❌ {step['error']}</div>"
             
             steps_html += f"""
-            <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid {'#28a745' if step['status'] == 'success' else '#dc3545' if step['status'] == 'error' else '#6c757d'};">
+            <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid {border_color};">
                 <div style="font-weight: bold;">{icon} {step['name'].replace('_', ' ').title()}</div>
                 <div style="color: #6c757d; font-size: 0.9em;">Durée: {step['duration_ms']}ms</div>
-                {details_html}
+                {main_html}
+                {tech_html}
                 {error_html}
             </div>
             """
@@ -493,17 +513,21 @@ class DiagnosticService:
                     f"<li><em>Score: {s.get('score', 0):.2f}</em> - {s.get('text', '')[:150]}...</li>"
                     for s in data["rag_sources"]
                 ]
-                sources_html = f"<ul>{''.join(sources_items)}</ul>"
+                sources_html = f"""
+                <details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; font-weight: bold;">📚 Sources trouvées ({len(data['rag_sources'])} documents)</summary>
+                    <ul style="margin-top: 10px;">{''.join(sources_items)}</ul>
+                </details>
+                """
             
             rag_html = f"""
             <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 5px;">
                 <h3 style="margin-top: 0;">💬 Test RAG</h3>
                 {question_html}
                 <div style="padding: 10px; background: #d4edda; border-radius: 5px;">
-                    <strong>📝 Résultats de la recherche :</strong><br>
+                    <strong>📝 Réponse IA :</strong><br>
                     {data['rag_answer']}
                 </div>
-                <h4 style="margin-top: 15px;">📚 Sources trouvées</h4>
                 {sources_html}
             </div>
             """
@@ -518,20 +542,24 @@ class DiagnosticService:
         </div>
         """
         
-        # Section configuration
+        # Section configuration (accordéon)
         config_html = ""
         if meta.get("config"):
             cfg = meta["config"]
             config_html = f"""
-            <div style="margin-bottom: 20px; padding: 10px; background: #e9ecef; border-radius: 5px;">
-                <strong>⚙️ Configuration</strong>
-                <ul style="margin: 5px 0; padding-left: 20px;">
-                    <li><strong>Tika:</strong> {cfg.get('tika_url', 'N/A')}</li>
-                    <li><strong>RAG Proxy:</strong> {cfg.get('rag_proxy_url', 'N/A')}</li>
-                    <li><strong>Embed Model:</strong> {cfg.get('embed_model', 'N/A')}</li>
-                    <li><strong>Rerank Model:</strong> {cfg.get('rerank_model', 'N/A')} {'(local)' if cfg.get('use_local_reranker') else ''}</li>
-                </ul>
-            </div>
+            <details style="margin-bottom: 20px;">
+                <summary style="cursor: pointer; padding: 10px; background: #e9ecef; border-radius: 5px; font-weight: bold;">
+                    ⚙️ Configuration (cliquer pour voir)
+                </summary>
+                <div style="padding: 10px; background: #f8f9fa; border-radius: 0 0 5px 5px;">
+                    <ul style="margin: 5px 0; padding-left: 20px;">
+                        <li><strong>Tika:</strong> {cfg.get('tika_url', 'N/A')}</li>
+                        <li><strong>RAG Proxy:</strong> {cfg.get('rag_proxy_url', 'N/A')}</li>
+                        <li><strong>Embed Model:</strong> {cfg.get('embed_model', 'N/A')}</li>
+                        <li><strong>Rerank Model:</strong> {cfg.get('rerank_model', 'N/A')} {'(local)' if cfg.get('use_local_reranker') else ''}</li>
+                    </ul>
+                </div>
+            </details>
             """
         
         # Erreurs globales
