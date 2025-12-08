@@ -122,11 +122,15 @@ services:
     container_name: streamlit_admin
     ports:
       - "8501:8501"
+    volumes:
+      # Accès à l'archive pour suppression de dossiers
+      - mail2rag_archive:/archive
     environment:
       - RAG_PROXY_URL=http://rag_proxy:8000
       - QDRANT_URL=http://qdrant:6333
       - TIKA_URL=http://tika:9998
       - LM_STUDIO_URL=http://host.docker.internal:1234
+      - ARCHIVE_PATH=/archive
     depends_on:
       - rag_proxy
       - qdrant

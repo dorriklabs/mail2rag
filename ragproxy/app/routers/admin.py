@@ -220,3 +220,60 @@ def list_collections():
             "status": "error",
             "message": str(e)
         }
+
+
+@router.delete("/collection/{name}")
+def delete_collection(name: str):
+    """
+    Delete an entire collection from Qdrant and BM25.
+    
+    Args:
+        name: Collection name to delete
+    
+    Returns:
+        Status with deletion details
+    """
+    try:
+        logger.info(f"Delete collection request for '{name}'")
+        
+        result = {
+            "status": "ok",
+            "collection": name,
+            "qdrant_deleted": False,
+            "bm25_deleted": False,
+        }
+        
+        # 1. Delete from Qdrant
+        try:
+            temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, name)
+            if temp_provider.collection_exists():
+                temp_provider.delete_collection()
+                result["qdrant_deleted"] = True
+                logger.info(f"Deleted Qdrant collection '{name}'")
+            else:
+                logger.warning(f"Qdrant collection '{name}' does not exist")
+        except Exception as e:
+            logger.error(f"Failed to delete Qdrant collection '{name}': {e}")
+            result["qdrant_error"] = str(e)
+        
+        # 2. Delete BM25 index if exists
+        if pipeline.multi_collection_mode and pipeline.bm25_multi:
+            try:
+                if pipeline.bm25_multi.is_ready(name):
+                    pipeline.bm25_multi.delete_index(name)
+                    result["bm25_deleted"] = True
+                    logger.info(f"Deleted BM25 index for '{name}'")
+            except Exception as e:
+                logger.warning(f"Failed to delete BM25 for '{name}': {e}")
+                result["bm25_error"] = str(e)
+        
+        result["message"] = f"Collection '{name}' deleted"
+        return result
+        
+    except Exception as e:
+        logger.error(f"Delete collection failed for '{name}': {e}", exc_info=True)
+        return {
+            "status": "error",
+            "collection": name,
+            "message": str(e)
+        }

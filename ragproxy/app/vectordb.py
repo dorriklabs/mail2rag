@@ -169,6 +169,25 @@ class QdrantProvider(VectorDBProvider):
             logger.error(f"Failed to list collections: {e}")
             return []
     
+    def collection_exists(self) -> bool:
+        """Vérifie si la collection actuelle existe dans Qdrant."""
+        try:
+            collections = self.client.get_collections().collections
+            return any(col.name == self.collection_name for col in collections)
+        except Exception as e:
+            logger.error(f"Failed to check if collection exists: {e}")
+            return False
+    
+    def delete_collection(self) -> bool:
+        """Supprime la collection actuelle de Qdrant."""
+        try:
+            self.client.delete_collection(collection_name=self.collection_name)
+            logger.info(f"Deleted Qdrant collection '{self.collection_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete collection '{self.collection_name}': {e}")
+            return False
+    
     def upsert_documents(
         self,
         chunks: List[Dict],

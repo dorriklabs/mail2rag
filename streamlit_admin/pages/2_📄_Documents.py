@@ -6,12 +6,16 @@ Liste, recherche, filtrage et suppression de documents
 import streamlit as st
 import requests
 import pandas as pd
+import shutil
+import os
+from pathlib import Path
 from datetime import datetime
 
 st.set_page_config(page_title="Gestion Documents", page_icon="📄", layout="wide")
 
 RAG_PROXY_URL = st.session_state.get("rag_proxy_url", "http://rag_proxy:8000")
 QDRANT_URL = st.session_state.get("qdrant_url", "http://qdrant:6333")
+ARCHIVE_PATH = os.environ.get("ARCHIVE_PATH", "/archive")
 
 st.title("📄 Gestion des Documents")
 
@@ -43,18 +47,37 @@ def get_documents(collection, limit=100):
         st.error(f"Erreur: {e}")
         return []
 
-# Supprimer un document
-def delete_document(doc_id, collection):
+# Supprimer un document (chunks + optionnellement le dossier archive)
+def delete_document(doc_id, collection, delete_archive=False, secure_id=None):
+    result = {"chunks_deleted": 0, "archive_deleted": False}
+    
+    # 1. Supprimer chunks dans Qdrant
     try:
         response = requests.delete(
             f"{RAG_PROXY_URL}/admin/document/{doc_id}",
             params={"collection": collection},
             timeout=10
         )
-        return response.json() if response.status_code == 200 else None
+        if response.status_code == 200:
+            data = response.json()
+            result["chunks_deleted"] = data.get("deleted_count", 0)
+            result["status"] = data.get("status", "error")
     except Exception as e:
-        st.error(f"Erreur suppression: {e}")
-        return None
+        st.error(f"Erreur suppression chunks: {e}")
+        result["status"] = "error"
+        return result
+    
+    # 2. Supprimer le dossier archive si demandé
+    if delete_archive and secure_id:
+        try:
+            archive_folder = Path(ARCHIVE_PATH) / secure_id
+            if archive_folder.exists() and archive_folder.is_dir():
+                shutil.rmtree(archive_folder)
+                result["archive_deleted"] = True
+        except Exception as e:
+            st.warning(f"Erreur suppression archive: {e}")
+    
+    return result
 
 # Sélection de collection
 collections = get_collections()
@@ -187,16 +210,33 @@ for idx, doc in enumerate(filtered_docs[:50]):  # Limiter à 50 pour performance
             
             st.divider()
             
-            # Bouton suppression
+            # Options de suppression
             uid = payload.get("uid")
-            if uid and st.button(f"🗑️ Supprimer doc", key=f"del_{idx}", help=f"Supprimer UID: {uid}"):
-                with st.spinner("Suppression..."):
-                    result = delete_document(uid, selected_collection)
-                    if result and result.get("status") == "ok":
-                        st.success(f"✅ {result.get('deleted_count', 0)} chunks supprimés")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Échec: {result.get('message') if result else 'Erreur inconnue'}")
+            secure_id = payload.get("secure_id")
+            
+            if uid:
+                delete_archive = st.checkbox(
+                    "🗂️ + Supprimer archive",
+                    key=f"del_arch_{idx}",
+                    help="Supprimer aussi le dossier d'archive associé"
+                )
+                
+                if st.button(f"🗑️ Supprimer doc", key=f"del_{idx}", help=f"Supprimer UID: {uid}"):
+                    with st.spinner("Suppression..."):
+                        result = delete_document(
+                            uid, 
+                            selected_collection,
+                            delete_archive=delete_archive,
+                            secure_id=secure_id
+                        )
+                        if result.get("status") == "ok":
+                            msg = f"✅ {result.get('chunks_deleted', 0)} chunks supprimés"
+                            if result.get("archive_deleted"):
+                                msg += " + archive supprimée"
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Échec")
 
 if len(filtered_docs) > 50:
     st.warning(f"⚠️ Affichage limité aux 50 premiers documents ({len(filtered_docs)} total)")

@@ -123,6 +123,74 @@ with tab1:
                             st.rerun()
                         else:
                             st.error(f"❌ Échec: {result.get('message') if result else 'Erreur inconnue'}")
+        
+        st.divider()
+        
+        # Danger Zone - Suppression de collection
+        st.markdown("### ⚠️ Zone de Danger")
+        
+        with st.expander("🗑️ Supprimer une Collection", expanded=False):
+            st.warning("""
+            **Attention !** La suppression d'une collection est irréversible.
+            Cette action supprime:
+            - Tous les documents de Qdrant
+            - L'index BM25 associé
+            """)
+            
+            # Sélecteur de collection à supprimer
+            collection_names = [c["name"] for c in collections]
+            collection_to_delete = st.selectbox(
+                "Collection à supprimer",
+                options=collection_names,
+                key="collection_to_delete",
+                help="Sélectionnez la collection à supprimer"
+            )
+            
+            # Confirmation par texte
+            confirm_text = st.text_input(
+                "Confirmez en tapant le nom de la collection",
+                key="confirm_delete",
+                help="Tapez exactement le nom de la collection pour confirmer"
+            )
+            
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                delete_archives = st.checkbox(
+                    "Supprimer aussi les dossiers d'archive",
+                    key="delete_archives_with_collection",
+                    help="Supprime tous les dossiers d'archive associés à cette collection"
+                )
+            
+            with col2:
+                if st.button("🗑️ Supprimer la Collection", type="primary", use_container_width=True):
+                    if confirm_text == collection_to_delete:
+                        with st.spinner(f"Suppression de '{collection_to_delete}'..."):
+                            try:
+                                # Appeler l'API de suppression
+                                response = requests.delete(
+                                    f"{RAG_PROXY_URL}/admin/collection/{collection_to_delete}",
+                                    timeout=30
+                                )
+                                
+                                if response.status_code == 200:
+                                    result = response.json()
+                                    if result.get("status") == "ok":
+                                        msg = f"✅ Collection '{collection_to_delete}' supprimée"
+                                        if result.get("qdrant_deleted"):
+                                            msg += " (Qdrant ✓)"
+                                        if result.get("bm25_deleted"):
+                                            msg += " (BM25 ✓)"
+                                        st.success(msg)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ Échec: {result.get('message', 'Erreur inconnue')}")
+                                else:
+                                    st.error(f"❌ Erreur HTTP: {response.status_code}")
+                            except Exception as e:
+                                st.error(f"❌ Erreur: {e}")
+                    else:
+                        st.error("❌ Le nom de confirmation ne correspond pas")
 
 # =====================================
 # TAB 2 : Logs Système
