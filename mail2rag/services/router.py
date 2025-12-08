@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class RouterService:
     """
-    Service de routage des emails vers les workspaces AnythingLLM.
+    Service de routage des emails vers les collections RAG.
 
     Sources possibles pour déterminer le workspace :
     1. Mention explicite dans le corps : "Workspace: xxx" ou "Dossier: yyy"

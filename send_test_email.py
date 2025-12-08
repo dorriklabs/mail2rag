@@ -30,7 +30,7 @@ Ce document est un test automatique pour valider la chaîne complète de traitem
 1. **Réception IMAP** : Récupération de l'email depuis le serveur
 2. **Parsing** : Extraction du sujet, corps et pièces jointes
 3. **Routage** : Détermination du workspace cible
-4. **Upload AnythingLLM** : Envoi du document vers AnythingLLM
+4. **Ingestion RAG** : Envoi du document vers RAG Proxy
 5. **Embeddings** : Création des vecteurs dans Qdrant
 6. **BM25** : Reconstruction automatique de l'index BM25
 7. **Archive** : Sauvegarde dans l'archive locale
@@ -52,7 +52,7 @@ in culpa qui officia deserunt mollit anim id est laborum.
 
 ## Vérifications attendues
 ✓ Email reçu et traité par Mail2RAG
-✓ Document extrait et uploadé dans AnythingLLM
+✓ Document extrait et ingéré dans RAG Proxy
 ✓ Embeddings créés dans Qdrant
 ✓ Index BM25 reconstruit
 ✓ Archive créée avec un ID sécurisé
@@ -109,7 +109,7 @@ Ceci est un email de test automatique pour valider la chaîne complète de trait
 🔍 Vérifications attendues :
 1. Réception et parsing de l'email
 2. Extraction de la pièce jointe
-3. Upload dans AnythingLLM
+3. Ingéré dans RAG Proxy
 4. Création des embeddings dans Qdrant
 5. Reconstruction de l'index BM25
 6. Archivage du document
@@ -158,7 +158,7 @@ Email généré automatiquement par send_test_email.py
         print(f"   1. Surveillez les logs de mail2rag : docker compose logs -f mail2rag")
         print(f"   2. Vérifiez votre boîte mail pour l'email de confirmation")
         print(f"   3. Consultez http://localhost:8000/test pour voir l'état du RAG Proxy")
-        print(f"   4. Vérifiez http://localhost:3001 pour voir le document dans AnythingLLM")
+        print(f"   4. Vérifiez http://localhost:8501 pour voir les documents dans Streamlit Admin")
         print(f"\n⏱️  Temps de traitement estimé : 10-30 secondes")
         
         # Nettoyer le fichier de test

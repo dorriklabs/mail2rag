@@ -285,7 +285,7 @@ RAG_PROXY_TIMEOUT=30
     
     with col2:
         st.markdown("""
-        - **USE_RAGPROXY_INGESTION**: Activer RAG Proxy (vs AnythingLLM)
+        - **USE_RAGPROXY_INGESTION**: Activer le RAG Proxy
         - **RAG_PROXY_URL**: URL du service RAG Proxy
         - **RAG_PROXY_TIMEOUT**: Timeout requêtes (secondes)
         """)

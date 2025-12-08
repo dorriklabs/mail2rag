@@ -96,7 +96,7 @@ class EmailRenderer:
 
         Args:
             response_text: Texte de la réponse de l'IA.
-            sources: Liste brute des sources (AnythingLLM ou RAG Proxy).
+            sources: Liste brute des sources RAG.
             archive_base_url: URL de base utilisée pour construire les liens d'archive.
             workspace: (optionnel) slug du workspace utilisé pour ce chat.
 
@@ -126,7 +126,7 @@ class EmailRenderer:
         Formate les sources de chat pour un affichage propre dans l'email.
 
         Compatibilité :
-        - AnythingLLM (sources venant directement de l'API /chat)
+        - Format legacy (sources simples avec titre/lien)
         - RAG Proxy (sources enrichies par ChatService avec scores détaillés)
 
         Args:
@@ -179,8 +179,7 @@ class EmailRenderer:
             link: str | None = None
 
             if base_url:
-                # Cas AnythingLLM classique :
-                # title = "secure_id/nom_fichier.ext"
+                # Cas legacy (title = "secure_id/nom_fichier.ext")
                 if isinstance(raw_title, str) and "/" in raw_title:
                     rel = raw_title.lstrip("/")
                     link = f"{base_url}/{rel}"

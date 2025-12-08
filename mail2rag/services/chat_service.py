@@ -250,7 +250,7 @@ class ChatService:
             if "/" in filename:
                 filename = filename.split("/")[-1] # Garder la partie après le dernier /
             
-            # Nettoyer les suffixes ajoutés par AnythingLLM (ex: -uuid.json)
+            # Nettoyer les suffixes de métadonnées (ex: -uuid.json)
             # On cherche le pattern {UID}_ au début du nom
             uid_match = re.match(r'^(\d+)_', filename)
             
@@ -263,13 +263,7 @@ class ChatService:
                     meta["secure_id"] = secure_id
                     
                     # On nettoie le nom de fichier pour l'affichage et le lien
-                    # Si le fichier finit par .json (métadonnées AnythingLLM), on suppose que le fichier original
-                    # avait le même nom mais sans le suffixe UUID+JSON.
-                    # Mais le plus simple est de reconstruire le nom à partir du titre s'il semble correct.
-                    # Pour l'instant, on passe le filename "nettoyé" de base.
-                    
-                    # AnythingLLM ajoute souvent un UUID à la fin : nom.ext-UUID.json
-                    # On essaie de retirer ce suffixe pour retrouver le nom original
+                    # Si le fichier finit par .json (métadonnées), on retire le suffixe UUID+JSON.
                     clean_filename = re.sub(r'-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json$', '', filename)
                     meta["filename"] = clean_filename
                     

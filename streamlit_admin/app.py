@@ -1,6 +1,6 @@
 """
 Mail2RAG - Admin Dashboard
-Interface d'administration Streamlit pour remplacer AnythingLLM UI
+Interface d'administration Streamlit pour le système RAG
 """
 
 import streamlit as st
@@ -51,7 +51,7 @@ st.header("🏠 Accueil")
 st.markdown("""
 ### Bienvenue sur le Dashboard Mail2RAG !
 
-Ce dashboard remplace l'interface AnythingLLM et offre des fonctionnalités avancées :
+Ce dashboard offre des fonctionnalités avancées :
 
 #### 📊 Vue d'ensemble
 - Statistiques globales (documents, collections, taille)
