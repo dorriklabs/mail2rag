@@ -53,6 +53,10 @@ def readyz():
     if "bm25_collections" in status:
         response["bm25_collections"] = status["bm25_collections"]
     
+    # Ajouter les infos des modèles pour le diagnostic
+    if "models" in status:
+        response["models"] = status["models"]
+    
     return response
 
 
