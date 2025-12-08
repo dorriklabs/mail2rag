@@ -8,7 +8,7 @@ import requests
 from fastapi import APIRouter
 
 from app.config import (
-    LLM_STUDIO_URL,
+    LM_STUDIO_URL,
     LLM_CHAT_MODEL,
     LLM_CHAT_TEMPERATURE,
     LLM_CHAT_MAX_TOKENS,
@@ -103,10 +103,10 @@ Réponds à la question en te basant uniquement sur le contexte fourni. Si le co
             "max_tokens": req.max_tokens if req.max_tokens else LLM_CHAT_MAX_TOKENS,
         }
         
-        logger.debug(f"Calling LM Studio at {LLM_STUDIO_URL}/v1/chat/completions")
+        logger.debug(f"Calling LM Studio at {LM_STUDIO_URL}/v1/chat/completions")
         
         response = requests.post(
-            f"{LLM_STUDIO_URL}/v1/chat/completions",
+            f"{LM_STUDIO_URL}/v1/chat/completions",
             json=llm_payload,
             timeout=60,
         )
