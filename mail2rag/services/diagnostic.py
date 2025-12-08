@@ -209,13 +209,13 @@ class DiagnosticService:
                     test_collection = f"diag-{email.uid}"
                     step.details["collection"] = test_collection
                     
-                    # Ingestion
-                    ingest_result = self.ragproxy.ingest(
+                    # Ingestion via RAG Proxy
+                    ingest_result = self.ragproxy.ingest_document(
                         collection=test_collection,
                         text=extracted_text,
                         metadata={
                             "source": "diagnostic",
-                            "filename": attachment.name,
+                            "filename": attachment["name"],
                             "uid": str(email.uid),
                         }
                     )
@@ -231,27 +231,20 @@ class DiagnosticService:
                         
                         search_result = self.ragproxy.search(
                             query=question,
-                            workspace=test_collection,
-                            top_k=10,
-                            final_k=3,
+                            collection=test_collection,
+                            top_k=5,
+                            use_bm25=True,
                         )
                         
                         chunks = search_result.get("chunks", [])
                         step.details["chunks_found"] = len(chunks)
                         if chunks:
                             step.details["top_score"] = round(chunks[0].get("score", 0), 3)
+                            # Utiliser les chunks comme réponse simplifiée
+                            rag_answer = f"Trouvé {len(chunks)} résultats pertinents."
+                            if chunks[0].get("text"):
+                                rag_answer += f"\n\nExtrait: {chunks[0]['text'][:500]}..."
                         rag_sources = chunks
-                    
-                    # 6. Génération réponse LLM
-                    with trace.step("llm_generation") as step:
-                        chat_result = self.ragproxy.chat(
-                            query=question,
-                            collection=test_collection,
-                        )
-                        
-                        rag_answer = chat_result.get("answer", "")
-                        step.details["answer_length"] = len(rag_answer)
-                        step.details["sources_count"] = len(chat_result.get("sources", []))
                 
                 # 7. Nettoyage : suppression de la collection de test
                 with trace.step("cleanup") as step:
