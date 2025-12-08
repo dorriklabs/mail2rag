@@ -306,14 +306,18 @@ class TextChunker:
             metadata: Métadonnées du document (filename, subject, date, etc.)
             
         Returns:
-            Liste de dicts avec format {text, metadata}
+            Liste de dicts avec format {text, metadata} où metadata inclut char_start et char_end
         """
         chunks = self.chunk_text(text, base_metadata=metadata)
         
         return [
             {
                 "text": chunk.text,
-                "metadata": chunk.metadata,
+                "metadata": {
+                    **chunk.metadata,
+                    "char_start": chunk.char_start,
+                    "char_end": chunk.char_end,
+                },
             }
             for chunk in chunks
         ]

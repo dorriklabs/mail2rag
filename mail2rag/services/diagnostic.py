@@ -509,10 +509,40 @@ class DiagnosticService:
             
             sources_html = ""
             if data.get("rag_sources"):
-                sources_items = [
-                    f"<li><em>Score: {s.get('score', 0):.2f}</em> - {s.get('text', '')[:150]}...</li>"
-                    for s in data["rag_sources"]
-                ]
+                sources_items = []
+                archive_base = getattr(self.config, "archive_base_url", "")
+                
+                for s in data["rag_sources"]:
+                    score = s.get('score', 0)
+                    text = s.get('text', '')[:120]
+                    meta = s.get('metadata', {}) or {}
+                    
+                    # Position dans le document
+                    char_start = meta.get('char_start', 0)
+                    char_end = meta.get('char_end', 0)
+                    position = f"[{char_start}-{char_end}]" if char_start or char_end else ""
+                    
+                    # Lien vers l'archive si disponible
+                    filename = meta.get('filename', meta.get('title', ''))
+                    link_html = ""
+                    if archive_base and filename:
+                        # Construire l'URL vers le fichier archivé
+                        archive_url = f"{archive_base}/{filename}"
+                        link_html = f'<a href="{archive_url}" style="color: #0066cc;">{filename}</a>'
+                    elif filename:
+                        link_html = f'<code>{filename}</code>'
+                    
+                    # Format final
+                    if link_html:
+                        sources_items.append(
+                            f"<li><em>Score: {score:.2f}</em> {position} - {link_html}<br>"
+                            f"<span style='color: #666; font-size: 0.9em;'>{text}...</span></li>"
+                        )
+                    else:
+                        sources_items.append(
+                            f"<li><em>Score: {score:.2f}</em> {position} - {text}...</li>"
+                        )
+                
                 sources_html = f"""
                 <details style="margin-top: 15px;">
                     <summary style="cursor: pointer; font-weight: bold;">📚 Sources trouvées ({len(data['rag_sources'])} documents)</summary>
