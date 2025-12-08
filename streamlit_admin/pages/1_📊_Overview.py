@@ -95,7 +95,7 @@ if readyz_data:
         # Global = tous les services critiques OK
         all_ok = (
             deps.get("qdrant") and 
-            deps.get("embedder") and 
+            deps.get("lm_studio") and 
             tika_ok
         )
         overall_status = "✅ Opérationnel" if all_ok else "⚠️ Partiel"
