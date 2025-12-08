@@ -125,7 +125,8 @@ class TikaClient:
         
         try:
             headers = {
-                "Accept": "text/plain",
+                "Accept": "text/plain; charset=UTF-8",
+                "Accept-Charset": "UTF-8",
             }
             
             response = requests.put(
@@ -143,7 +144,18 @@ class TikaClient:
                 )
                 return None
             
+            # Forcer l'encodage UTF-8 pour éviter les problèmes de mojibake
+            response.encoding = 'utf-8'
             text = response.text.strip()
+            
+            # Tentative de réparation si le texte semble mal encodé
+            if text and 'Ã' in text:
+                try:
+                    # Essayer de réparer l'encodage latin-1 -> utf-8
+                    text = text.encode('latin-1').decode('utf-8')
+                    logger.debug("Encodage réparé (latin-1 -> utf-8)")
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    pass  # Garder le texte original si la réparation échoue
             
             if not text:
                 logger.warning("Extraction Tika terminée mais résultat vide")
