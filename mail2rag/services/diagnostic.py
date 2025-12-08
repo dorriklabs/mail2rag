@@ -168,37 +168,39 @@ class DiagnosticService:
         rag_answer = None
         rag_sources = []
         
+        # Extraire les pièces jointes du message brut
+        attachments = self._extract_attachments(email)
+        
         try:
             # 1. Réception et parsing
             with trace.step("email_reception") as step:
-                step.details["attachments_count"] = len(email.attachments)
+                step.details["attachments_count"] = len(attachments)
                 step.details["body_length"] = len(email.body or "")
-                if email.attachments:
+                if attachments:
                     step.details["attachments"] = [
-                        {"name": a.name, "size_bytes": len(a.content)}
-                        for a in email.attachments
+                        {"name": a["name"], "size_bytes": len(a["content"])}
+                        for a in attachments
                     ]
             
             # 2. Vérification présence PJ
-            if not email.attachments:
+            if not attachments:
                 trace.metadata["error"] = "Aucune pièce jointe fournie"
                 self._send_report(email, trace, None, None)
                 return
             
             # 3. Extraction texte via Tika (première PJ)
-            attachment = email.attachments[0]
+            attachment = attachments[0]
             extracted_text = ""
             
             with trace.step("tika_extraction") as step:
-                step.details["filename"] = attachment.name
-                step.details["content_type"] = attachment.content_type
-                step.details["size_bytes"] = len(attachment.content)
+                step.details["filename"] = attachment["name"]
+                step.details["content_type"] = attachment.get("content_type", "unknown")
+                step.details["size_bytes"] = len(attachment["content"])
                 
-                result = self.tika.extract_text(attachment.content)
-                extracted_text = result.get("content", "") or ""
+                result = self.tika.extract_text_from_bytes(attachment["content"])
+                extracted_text = result or ""
                 
                 step.details["extracted_chars"] = len(extracted_text)
-                step.details["pages"] = result.get("metadata", {}).get("xmpTPg:NPages", "N/A")
             
             # 4. Chunking et ingestion via RAG Proxy
             if extracted_text:
@@ -269,6 +271,39 @@ class DiagnosticService:
         
         # Envoi du rapport
         self._send_report(email, trace, rag_answer, rag_sources)
+    
+    def _extract_attachments(self, email: ParsedEmail) -> List[Dict[str, Any]]:
+        """
+        Extrait les pièces jointes d'un email.
+        
+        Returns:
+            Liste de dicts avec name, content, content_type
+        """
+        attachments = []
+        msg = email.msg
+        
+        if not msg or not msg.is_multipart():
+            return []
+        
+        for part in msg.walk():
+            if part.get_content_maintype() == "multipart":
+                continue
+            if part.get("Content-Disposition") is None:
+                continue
+            
+            filename = part.get_filename()
+            if not filename:
+                continue
+            
+            content = part.get_payload(decode=True)
+            if content:
+                attachments.append({
+                    "name": filename,
+                    "content": content,
+                    "content_type": part.get_content_type(),
+                })
+        
+        return attachments
     
     def _extract_question(self, body: str) -> Optional[str]:
         """Extrait la question du corps de l'email."""

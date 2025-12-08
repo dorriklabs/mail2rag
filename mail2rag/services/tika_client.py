@@ -105,6 +105,60 @@ class TikaClient:
             )
             return None
 
+    def extract_text_from_bytes(self, content: bytes) -> Optional[str]:
+        """
+        Extrait le texte de bytes de document via Tika.
+        
+        Args:
+            content: Contenu binaire du fichier
+            
+        Returns:
+            Texte extrait ou None en cas d'échec
+        """
+        if not content:
+            logger.warning("Contenu vide fourni à extract_text_from_bytes")
+            return None
+
+        url = f"{self.server_url}/tika"
+        
+        logger.debug("Début extraction Tika depuis bytes (%d octets)...", len(content))
+        
+        try:
+            headers = {
+                "Accept": "text/plain",
+            }
+            
+            response = requests.put(
+                url,
+                data=content,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            
+            if response.status_code != 200:
+                logger.error(
+                    "Échec extraction Tika depuis bytes. Code: %s, Réponse: %s",
+                    response.status_code,
+                    response.text[:500],
+                )
+                return None
+            
+            text = response.text.strip()
+            
+            if not text:
+                logger.warning("Extraction Tika terminée mais résultat vide")
+                return None
+            
+            logger.info("✅ Extraction Tika depuis bytes réussie (%d caractères)", len(text))
+            return text
+                
+        except requests.RequestException as e:
+            logger.error("Erreur HTTP lors de l'extraction Tika depuis bytes: %s", e)
+            return None
+        except Exception as e:
+            logger.error("Erreur inattendue lors de l'extraction Tika depuis bytes: %s", e)
+            return None
+
     def detect_content_type(self, file_path: Path) -> Optional[str]:
         """
         Détecte le type MIME d'un fichier via Tika.
