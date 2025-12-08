@@ -11,27 +11,36 @@ import requests
 from version import __version__ as APP_VERSION
 from config import Config
 from services.email_parser import EmailParser
-from services.state_manager import StateManager
 from services.mail import MailService
 from services.cleaner import CleanerService
 from services.router import RouterService
 from services.processor import DocumentProcessor
 from services.email_renderer import EmailRenderer
 from services.support_qa import SupportQAService
-from services.chat_service import ChatService
 from services.ingestion_service import IngestionService
+from services.chat_service import ChatService
 from services.maintenance import MaintenanceService
+from services.state_manager import StateManager
+from services.diagnostic import DiagnosticService
+from services.tika_client import TikaClient
+from services.ragproxy_client import RAGProxyClient
 
 
 # ---------------------------------------------------------------------------
-# Détection des emails "CHAT" (mode Q/R)
+# Détection des modes (CHAT / DIAGNOSTIC)
 # ---------------------------------------------------------------------------
 CHAT_SUBJECT_RE = re.compile(r"(?i)^\s*(chat|question)\s*:")
+DIAG_SUBJECT_RE = re.compile(r"(?i)^\s*(test\s*:\s*all|test\s*:\s*diag)")
 
 
 def is_chat_email(subject: str | None) -> bool:
     """Retourne True si le sujet correspond au mode CHAT (Chat: / Question:)."""
     return bool(CHAT_SUBJECT_RE.match((subject or "").strip()))
+
+
+def is_diagnostic_email(subject: str | None) -> bool:
+    """Retourne True si le sujet correspond au mode DIAGNOSTIC (test : all / test:diag)."""
+    return bool(DIAG_SUBJECT_RE.match((subject or "").strip()))
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +167,21 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
 
     email_parser = EmailParser(logger)
 
+    # Service de diagnostic (test : all)
+    tika_client = TikaClient(config)
+    ragproxy_client = RAGProxyClient(config)
+    
+    diagnostic_service = DiagnosticService(
+        config=config,
+        logger=logger,
+        mail_service=mail_service,
+        ragproxy_client=ragproxy_client,
+        processor=processor,
+        email_renderer=email_renderer,
+        tika_client=tika_client,
+        get_secure_id=get_secure_id,
+    )
+
     return {
         "config": config,
         "logger": logger,
@@ -167,6 +191,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "email_parser": email_parser,
         "ingestion_service": ingestion_service,
         "chat_service": chat_service,
+        "diagnostic_service": diagnostic_service,
         "maintenance": maintenance,
     }
 
@@ -228,6 +253,7 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
     email_parser: EmailParser = context["email_parser"]
     ingestion_service: IngestionService = context["ingestion_service"]
     chat_service: ChatService = context["chat_service"]
+    diagnostic_service: DiagnosticService = context["diagnostic_service"]
 
     last_uid = int(state.get("last_uid", 0))
     logger.info("Dernier UID connu au démarrage : %s", last_uid)
@@ -268,7 +294,10 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                 continue
 
             try:
-                if is_chat_email(parsed_email.subject):
+                if is_diagnostic_email(parsed_email.subject):
+                    # Mode diagnostic : test : all
+                    diagnostic_service.run_diagnostic(parsed_email)
+                elif is_chat_email(parsed_email.subject):
                     chat_service.handle_chat(parsed_email)
                 else:
                     ingestion_service.ingest_email(parsed_email)
