@@ -232,6 +232,18 @@ class EmailRenderer:
                 snippet = text.strip()
                 if len(snippet) > 180:
                     snippet = snippet[:180].rstrip() + "..."
+            
+            # Informations de position et chunk
+            char_start = meta.get("char_start")
+            char_end = meta.get("char_end")
+            chunk_index = meta.get("chunk_index")
+            chunk_total = meta.get("chunk_total")
+            
+            # Métadonnées contextuelles
+            source_date = meta.get("date") or meta.get("email_date")
+            source_sender = meta.get("sender") or meta.get("from")
+            source_subject = meta.get("subject")
+            collection = meta.get("collection") or meta.get("workspace")
 
             formatted_sources.append(
                 {
@@ -245,6 +257,15 @@ class EmailRenderer:
                     },
                     "snippet": snippet,
                     "raw_title": raw_title,
+                    # Nouvelles infos
+                    "char_start": char_start,
+                    "char_end": char_end,
+                    "chunk_index": chunk_index,
+                    "chunk_total": chunk_total,
+                    "date": source_date,
+                    "sender": source_sender,
+                    "subject": source_subject,
+                    "collection": collection,
                 }
             )
 

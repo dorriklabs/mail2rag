@@ -14,15 +14,64 @@
 </div>
 
 {% if sources %}
-<h3 style="color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 20px;">
-    📚 Sources Documentaires
-</h3>
-<ul>
+<details style="margin-top: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+    <summary style="cursor: pointer; padding: 12px; background: #f8f9fa; font-weight: bold; border-radius: 5px;">
+        📚 Sources Documentaires ({{ sources|length }} documents)
+    </summary>
+    <div style="padding: 10px;">
     {% for source in sources %}
-    <li>
-        <a href="{{ source.link }}" style="color: #3498db; text-decoration: none;">📄 {{ source.name }}</a>
-    </li>
+        <div style="margin-bottom: 12px; padding: 10px; background: #fff; border-left: 3px solid #3498db; border-radius: 0 5px 5px 0;">
+            {# Ligne principale: nom, position, chunk #}
+            <div style="font-weight: bold;">
+                {% if source.link %}
+                <a href="{{ source.link }}" style="color: #3498db; text-decoration: none;">📄 {{ source.name }}</a>
+                {% else %}
+                📄 {{ source.name }}
+                {% endif %}
+                
+                {% if source.char_start is not none and source.char_end is not none %}
+                <span style="color: #7f8c8d; font-size: 0.85em;">[{{ source.char_start }}-{{ source.char_end }}]</span>
+                {% endif %}
+                
+                {% if source.chunk_index is not none and source.chunk_total is not none %}
+                <span style="color: #9b59b6; font-size: 0.85em;">(chunk {{ source.chunk_index + 1 }}/{{ source.chunk_total }})</span>
+                {% endif %}
+            </div>
+            
+            {# Ligne de métadonnées: score, date, sender #}
+            <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
+                {% if source.score is not none %}
+                <span>📊 Score: {{ "%.2f"|format(source.score) }}</span>
+                {% endif %}
+                {% if source.date %}
+                <span style="margin-left: 10px;">📅 {{ source.date }}</span>
+                {% endif %}
+                {% if source.sender %}
+                <span style="margin-left: 10px;">📧 {{ source.sender[:30] }}{% if source.sender|length > 30 %}...{% endif %}</span>
+                {% endif %}
+            </div>
+            
+            {# Aperçu du texte #}
+            {% if source.snippet %}
+            <div style="font-size: 0.9em; color: #555; margin-top: 6px; padding: 8px; background: #f5f5f5; border-radius: 3px;">
+                {{ source.snippet }}
+            </div>
+            {% endif %}
+            
+            {# Scores détaillés (accordéon optionnel) #}
+            {% if source.scores and (source.scores.vector or source.scores.bm25 or source.scores.rerank) %}
+            <details style="margin-top: 6px; font-size: 0.8em;">
+                <summary style="cursor: pointer; color: #7f8c8d;">📊 Scores détaillés</summary>
+                <div style="padding: 5px 10px; color: #666;">
+                    {% if source.scores.vector is not none %}Vector: {{ "%.3f"|format(source.scores.vector) }} | {% endif %}
+                    {% if source.scores.bm25 is not none %}BM25: {{ "%.3f"|format(source.scores.bm25) }} | {% endif %}
+                    {% if source.scores.rerank is not none %}Rerank: {{ "%.3f"|format(source.scores.rerank) }}{% endif %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
     {% endfor %}
-</ul>
+    </div>
+</details>
 {% endif %}
 {% endblock %}
