@@ -168,8 +168,8 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     email_parser = EmailParser(logger)
 
     # Service de diagnostic (test : all)
-    tika_client = TikaClient(config)
-    ragproxy_client = RAGProxyClient(config)
+    tika_client = TikaClient(config.tika_server_url, timeout=config.tika_timeout)
+    ragproxy_client = RAGProxyClient(config.rag_proxy_url, timeout=config.rag_proxy_timeout)
     
     diagnostic_service = DiagnosticService(
         config=config,
