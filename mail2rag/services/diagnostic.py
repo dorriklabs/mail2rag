@@ -224,29 +224,58 @@ class DiagnosticService:
                     step.details["chunks_created"] = chunks_created
                     step.details["status"] = ingest_result.get("status", "unknown")
                 
-                # 5. Test RAG si question posée
+                # 5. Test RAG complet si question posée (Search + Rerank + LLM)
                 if has_question and chunks_created > 0:
+                    # 5a. Recherche hybride (Vector + BM25)
                     with trace.step("rag_search") as step:
                         step.details["query"] = question[:100]
+                        step.details["collection"] = test_collection
+                        step.details["top_k"] = 20
+                        step.details["use_bm25"] = True
                         
                         search_result = self.ragproxy.search(
                             query=question,
                             collection=test_collection,
-                            top_k=5,
+                            top_k=20,
                             use_bm25=True,
                         )
                         
                         chunks = search_result.get("chunks", [])
-                        step.details["chunks_found"] = len(chunks)
+                        step.details["chunks_retrieved"] = len(chunks)
                         if chunks:
                             step.details["top_score"] = round(chunks[0].get("score", 0), 3)
-                            # Utiliser les chunks comme réponse simplifiée
-                            rag_answer = f"Trouvé {len(chunks)} résultats pertinents."
-                            if chunks[0].get("text"):
-                                rag_answer += f"\n\nExtrait: {chunks[0]['text'][:500]}..."
+                            step.details["bottom_score"] = round(chunks[-1].get("score", 0), 3)
                         rag_sources = chunks
+                    
+                    # 5b. Génération LLM (Chat avec contexte RAG)
+                    with trace.step("llm_generation") as step:
+                        step.details["query"] = question[:100]
+                        step.details["context_chunks"] = len(chunks)
+                        
+                        chat_result = self.ragproxy.chat(
+                            query=question,
+                            collection=test_collection,
+                            top_k=20,
+                            final_k=5,
+                            use_bm25=True,
+                            temperature=0.1,
+                            max_tokens=1000,
+                        )
+                        
+                        rag_answer = chat_result.get("answer", "Pas de réponse générée")
+                        step.details["answer_length"] = len(rag_answer)
+                        step.details["sources_count"] = len(chat_result.get("sources", []))
+                        
+                        debug_info = chat_result.get("debug_info", {})
+                        if debug_info:
+                            step.details["llm_model"] = debug_info.get("llm_model", "N/A")
+                            step.details["context_length"] = debug_info.get("context_length", 0)
+                        
+                        # Mettre à jour les sources avec celles du chat (après reranking)
+                        if chat_result.get("sources"):
+                            rag_sources = chat_result["sources"]
                 
-                # 7. Nettoyage : suppression de la collection de test
+                # 6. Nettoyage : suppression de la collection de test
                 with trace.step("cleanup") as step:
                     try:
                         # On ne supprime pas directement, on note juste

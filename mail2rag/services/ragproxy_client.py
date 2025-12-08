@@ -299,6 +299,80 @@ class RAGProxyClient:
             logger.error(f"BM25 rebuild exception: {e}", exc_info=True)
             return False
     
+    def chat(
+        self,
+        query: str,
+        collection: Optional[str] = None,
+        top_k: int = 20,
+        final_k: int = 5,
+        use_bm25: bool = True,
+        temperature: float = 0.1,
+        max_tokens: int = 1000,
+    ) -> Dict[str, Any]:
+        """
+        RAG Chat avec génération LLM.
+        
+        Effectue une recherche hybride puis génère une réponse via LLM.
+        
+        Args:
+            query: Question de l'utilisateur
+            collection: Collection cible (optionnel)
+            top_k: Nombre de chunks à récupérer initialement
+            final_k: Nombre de chunks à utiliser après reranking
+            use_bm25: Utiliser BM25 en plus de la recherche vectorielle
+            temperature: Température pour le LLM
+            max_tokens: Nombre max de tokens pour la réponse
+            
+        Returns:
+            Dict avec: query, answer, sources, debug_info
+        """
+        url = f"{self.base_url}/chat"
+        
+        payload = {
+            "query": query,
+            "collection": collection,
+            "top_k": top_k,
+            "final_k": final_k,
+            "use_bm25": use_bm25,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        
+        logger.info(f"RAG Chat: '{query[:50]}...' (collection={collection})")
+        
+        try:
+            response = self.session.post(url, json=payload, timeout=self.timeout)
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"Chat response: {len(result.get('answer', ''))} chars")
+                return result
+            
+            logger.error(f"Chat error: HTTP {response.status_code}")
+            return {
+                "query": query,
+                "answer": f"Erreur HTTP {response.status_code}",
+                "sources": [],
+                "debug_info": {"error": response.text[:500]},
+            }
+            
+        except requests.exceptions.Timeout:
+            logger.error(f"Chat timeout after {self.timeout}s")
+            return {
+                "query": query,
+                "answer": "Délai d'attente dépassé pour la génération de la réponse.",
+                "sources": [],
+                "debug_info": {"error": "Timeout"},
+            }
+        except Exception as e:
+            logger.error(f"Chat exception: {e}", exc_info=True)
+            return {
+                "query": query,
+                "answer": f"Erreur: {str(e)}",
+                "sources": [],
+                "debug_info": {"error": str(e)},
+            }
+    
     def get_collections(self) -> list:
         """
         Récupère la liste de toutes les collections disponibles.
