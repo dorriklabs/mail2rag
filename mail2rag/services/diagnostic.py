@@ -246,6 +246,9 @@ class DiagnosticService:
                     step.details["collection"] = test_collection
                     
                     # Ingestion via RAG Proxy
+                    # Créer un secure_id pour le diagnostic (simulation)
+                    diag_secure_id = f"diag-{email.uid}"
+                    
                     ingest_result = self.ragproxy.ingest_document(
                         collection=test_collection,
                         text=extracted_text,
@@ -253,6 +256,7 @@ class DiagnosticService:
                             "source": "diagnostic",
                             "filename": attachment["name"],
                             "uid": str(email.uid),
+                            "secure_id": diag_secure_id,
                         }
                     )
                     
@@ -524,11 +528,15 @@ class DiagnosticService:
                     
                     # Lien vers l'archive si disponible
                     filename = meta.get('filename', meta.get('title', ''))
+                    secure_id = meta.get('secure_id', '')
                     link_html = ""
-                    if archive_base and filename:
-                        # Construire l'URL vers le fichier archivé
-                        archive_url = f"{archive_base}/{filename}"
+                    if archive_base and filename and secure_id:
+                        # Construire l'URL complète vers le fichier archivé
+                        archive_url = f"{archive_base}/{secure_id}/{filename}"
                         link_html = f'<a href="{archive_url}" style="color: #0066cc;">{filename}</a>'
+                    elif archive_base and filename:
+                        # Fallback sans secure_id (lien partiel)
+                        link_html = f'<code>{filename}</code> <em style="color:#999;">(lien non disponible)</em>'
                     elif filename:
                         link_html = f'<code>{filename}</code>'
                     
