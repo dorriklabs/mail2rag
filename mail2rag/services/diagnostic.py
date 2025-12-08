@@ -301,9 +301,10 @@ class DiagnosticService:
             subject = f"📊 Rapport Diagnostic - {'✅ OK' if trace.all_success else '⚠️ Partiel'}"
             
             self.mail.send_reply(
-                original_email=email,
+                to_email=email.sender,
                 subject=subject,
-                html_body=html_content,
+                body=html_content,
+                is_html=True,
             )
             
             self.logger.info(f"📧 Rapport diagnostic envoyé à {email.sender}")
