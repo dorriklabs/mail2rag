@@ -184,4 +184,11 @@ class RAGPipeline:
         except HTTPException:
             result["deps"]["lm_studio"] = False
         
+        # Ajouter les infos des modèles pour le diagnostic
+        result["models"] = {
+            "embed_model": EMBED_MODEL,
+            "rerank_model": LOCAL_RERANKER_MODEL if USE_LOCAL_RERANKER else RERANK_MODEL,
+            "use_local_reranker": USE_LOCAL_RERANKER,
+        }
+        
         return result

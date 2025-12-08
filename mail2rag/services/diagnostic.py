@@ -196,6 +196,13 @@ class DiagnosticService:
                         step.details["qdrant"] = "✅ OK" if deps.get("qdrant") else "❌ Indisponible"
                         step.details["bm25"] = "✅ OK" if deps.get("bm25") else "⚠️ Non initialisé"
                         step.details["lm_studio"] = "✅ OK" if deps.get("lm_studio") else "❌ Indisponible"
+                        
+                        # Récupérer les infos des modèles
+                        models = readyz.get("models", {})
+                        if models:
+                            trace.metadata["config"]["embed_model"] = models.get("embed_model", "N/A")
+                            trace.metadata["config"]["rerank_model"] = models.get("rerank_model", "N/A")
+                            trace.metadata["config"]["use_local_reranker"] = models.get("use_local_reranker", False)
                     else:
                         step.details["rag_proxy"] = f"❌ HTTP {resp.status_code}"
                 except Exception as e:
@@ -522,6 +529,7 @@ class DiagnosticService:
                     <li><strong>Tika:</strong> {cfg.get('tika_url', 'N/A')}</li>
                     <li><strong>RAG Proxy:</strong> {cfg.get('rag_proxy_url', 'N/A')}</li>
                     <li><strong>Embed Model:</strong> {cfg.get('embed_model', 'N/A')}</li>
+                    <li><strong>Rerank Model:</strong> {cfg.get('rerank_model', 'N/A')} {'(local)' if cfg.get('use_local_reranker') else ''}</li>
                 </ul>
             </div>
             """
