@@ -16,7 +16,12 @@ WORKDIR /app
 # Requirements
 # -----------------------------
 COPY requirements.txt .
+COPY requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install dev dependencies if INSTALL_DEV=true
+ARG INSTALL_DEV=false
+RUN if [ "$INSTALL_DEV" = "true" ]; then pip install --no-cache-dir -r requirements-dev.txt; fi
 
 # -----------------------------
 # Code de l'application
