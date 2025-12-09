@@ -342,6 +342,7 @@ class Config:
         logging.basicConfig(
             level=self.log_level,
             handlers=[file_handler, stream_handler],
+            force=True,  # Écrase les handlers existants (sinon le fichier reste vide)
         )
 
         # Limiter le bruit de certaines libs

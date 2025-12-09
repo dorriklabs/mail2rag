@@ -4,4 +4,4 @@ Ne modifier __version__ que lors d'un bump de version.
 """
 
 __app_name__ = "Mail2RAG"
-__version__ = "3.0.0-beta.1"
+__version__ = "3.8.1"
