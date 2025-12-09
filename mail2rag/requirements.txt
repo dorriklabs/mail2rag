@@ -4,6 +4,5 @@ jinja2
 pdf2image
 pdfplumber
 Pillow
-pytesseract
 requests
 urllib3

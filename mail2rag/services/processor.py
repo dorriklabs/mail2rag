@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
-import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
 
@@ -20,8 +19,8 @@ class DocumentProcessor:
     """
     Service chargé d'analyser les documents (images/PDF) :
 
-    - Si VISION_ENABLE = true et format supporté : envoi à un modèle Vision (LM Studio).
-    - Sinon (ou en cas d'échec) : fallback OCR Tesseract classique.
+    - Tika pour l'extraction de texte et OCR (via tika:latest-full)
+    - Vision AI pour les images et PDF scannés (optionnel)
 
     Le résultat est un texte brut prêt à être indexé via RAG Proxy.
     """
@@ -58,13 +57,11 @@ class DocumentProcessor:
         
         IMAGES (JPG/PNG) :
         1. Vision AI (si activé) - description visuelle riche
-        2. Tika OCR (fallback)
-        3. Tesseract OCR (fallback final)
+        2. Tika pour métadonnées EXIF + OCR
         
         DOCUMENTS (PDF, DOCX, etc.) :
-        1. Tika (extraction native optimale)
-        2. Vision AI (si activé et Tika échoue)
-        3. Tesseract OCR (fallback final)
+        1. Tika (extraction native + OCR si nécessaire)
+        2. Vision AI (fallback si activé et Tika échoue)
 
         - Retourne une chaîne non vide si analyse réussie.
         - Retourne None si tout a échoué ou si le résultat est vide.
@@ -123,13 +120,14 @@ class DocumentProcessor:
                         return result
                 except Exception as e:
                     logger.warning(
-                        "⚠️ Échec Tika OCR sur %s (%s). Passage à Tesseract.",
+                        "⚠️ Échec Tika OCR sur %s (%s).",
                         path.name,
                         e,
                     )
             
-            # 5. Fallback final Tesseract OCR
-            return self._analyze_with_tesseract(path)
+            # Aucune extraction possible
+            logger.warning("Aucune extraction réussie pour l'image %s", path.name)
+            return None
 
         # ========== PIPELINE POUR LES DOCUMENTS (PDF, DOCX, etc.) ==========
         else:
@@ -155,82 +153,15 @@ class DocumentProcessor:
                         return result
                 except Exception as e:
                     logger.warning(
-                        "⚠️ Échec Vision IA sur %s (%s). Bascule vers OCR classique.",
+                        "⚠️ Échec Vision IA sur %s (%s).",
                         path.name,
                         e,
                     )
 
-            # 3. Fallback final OCR Tesseract
-            return self._analyze_with_tesseract(path)
-
-    # ------------------------------------------------------------------ #
-    # OCR Tesseract
-    # ------------------------------------------------------------------ #
-    def _analyze_with_tesseract(self, path: Path) -> Optional[str]:
-        """
-        Fallback d'analyse via Tesseract.
-
-        - Pour les PDF : OCR des premières pages seulement (MAX_OCR_PAGES).
-        - Pour les images : OCR direct.
-        """
-        logger.debug("Début OCR Tesseract sur %s...", path.name)
-        text_content = ""
-
-        try:
-            if path.suffix.lower() == ".pdf":
-                max_pages = self.config.max_ocr_pages
-                dpi = self.config.ocr_dpi
-
-                images = convert_from_path(
-                    str(path),
-                    dpi=dpi,
-                    first_page=1,
-                    last_page=max_pages,
-                )
-                logger.debug(
-                    "PDF converti en %d image(s) pour OCR "
-                    "(limite %d pages, dpi=%d).",
-                    len(images),
-                    max_pages,
-                    dpi,
-                )
-
-                for i, img in enumerate(images, start=1):
-                    page_text = pytesseract.image_to_string(
-                        img,
-                        lang="fra+eng",
-                    )
-                    text_content += f"\n--- Page {i} (OCR) ---\n{page_text}"
-
-                # Note si on est potentiellement tronqué
-                if len(images) == max_pages:
-                    note = (
-                        f"[NOTE] OCR réalisé sur les {max_pages} premières pages du PDF "
-                        f"(le document peut éventuellement en contenir davantage).\n\n"
-                    )
-                    text_content = note + text_content
-
-            else:
-                img = Image.open(path)
-                text_content = pytesseract.image_to_string(
-                    img,
-                    lang="fra+eng",
-                )
-
-            text_content = text_content.strip()
-            if text_content:
-                logger.debug("OCR Tesseract terminé avec succès sur %s.", path.name)
-                return text_content
-
-            logger.debug(
-                "OCR Tesseract terminé sur %s mais résultat vide.",
-                path.name,
-            )
+            # Aucune extraction possible
+            logger.warning("Aucune extraction réussie pour le document %s", path.name)
             return None
 
-        except Exception as e:
-            logger.error("❌ Erreur Tesseract sur %s : %s", path.name, e, exc_info=True)
-            return None
 
     # ------------------------------------------------------------------ #
     # Apache Tika

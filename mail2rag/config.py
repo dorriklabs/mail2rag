@@ -237,10 +237,10 @@ class Config:
         }
 
         # ------------------------------------------------------------------
-        # FILE SIZE / OCR
+        # FILE SIZE / VISION PDF
         # ------------------------------------------------------------------
         self.min_image_size_kb = float(os.getenv("MIN_IMAGE_SIZE_KB", "5"))
-        self.max_ocr_pages = int(os.getenv("MAX_OCR_PAGES", "10"))
+        # DPI pour conversion PDF -> image (utilisé par Vision AI)
         self.ocr_dpi = int(os.getenv("OCR_DPI", "300"))
 
         # ------------------------------------------------------------------

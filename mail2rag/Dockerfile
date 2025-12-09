@@ -3,9 +3,10 @@ FROM python:3.11-slim
 # -----------------------------
 # Dépendances système
 # -----------------------------
+# poppler-utils: requis pour pdf2image (Vision AI PDF)
+# tesseract-ocr: retiré, OCR géré par Tika (tika:latest-full)
 RUN apt-get update && apt-get install -y \
     poppler-utils \
-    tesseract-ocr \
     libjpeg-dev \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
