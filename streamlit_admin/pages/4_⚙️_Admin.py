@@ -271,23 +271,23 @@ CHUNKING_STRATEGY=recursive
     
     st.divider()
     
-    # Ingestion
+    # Ingestion (RAG Proxy uniquement)
     st.subheader("📥 Ingestion")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.code("""
-USE_RAGPROXY_INGESTION=true
 RAG_PROXY_URL=http://rag_proxy:8000
-RAG_PROXY_TIMEOUT=30
+EMBED_MODEL=text-embedding-bge-m3
+LLM_CHAT_MODEL=qwen2.5-7b-instruct
         """, language="bash")
     
     with col2:
         st.markdown("""
-        - **USE_RAGPROXY_INGESTION**: Activer le RAG Proxy
         - **RAG_PROXY_URL**: URL du service RAG Proxy
-        - **RAG_PROXY_TIMEOUT**: Timeout requêtes (secondes)
+        - **EMBED_MODEL**: Modèle d'embedding
+        - **LLM_CHAT_MODEL**: Modèle LLM pour les réponses
         """)
     
     st.divider()
@@ -300,13 +300,13 @@ RAG_PROXY_TIMEOUT=30
     with col1:
         st.code("""
 AUTO_REBUILD_BM25=true
-USE_BM25_DEFAULT=true
+USE_LOCAL_RERANKER=true
         """, language="bash")
     
     with col2:
         st.markdown("""
         - **AUTO_REBUILD_BM25**: Rebuild auto après ingestion
-        - **USE_BM25_DEFAULT**: Utiliser BM25 par défaut
+        - **USE_LOCAL_RERANKER**: Reranking local (cross-encoder)
         """)
     
     st.divider()
