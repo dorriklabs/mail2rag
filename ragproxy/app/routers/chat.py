@@ -13,6 +13,7 @@ from app.config import (
     LLM_CHAT_TEMPERATURE,
     LLM_CHAT_MAX_TOKENS,
     LLM_CHAT_SYSTEM_PROMPT,
+    LLM_MAX_CONTEXT_TOKENS,
 )
 from app.models import ChatRequest, ChatResponse
 from app.pipeline import RAGPipeline
@@ -23,6 +24,14 @@ router = APIRouter(tags=["Chat"])
 
 # Pipeline instance (will be set by main.py)
 pipeline: RAGPipeline = None
+
+# Estimation: ~4 caractères par token (approximation pour le français)
+CHARS_PER_TOKEN = 4
+
+
+def estimate_tokens(text: str) -> int:
+    """Estime le nombre de tokens pour un texte donné."""
+    return len(text) // CHARS_PER_TOKEN
 
 
 def set_pipeline(p: RAGPipeline):
@@ -36,7 +45,7 @@ def chat(req: ChatRequest):
     """
     RAG Chat endpoint:
     1. Hybrid search (Vector + BM25)
-    2. Context building
+    2. Context building with dynamic token limiting
     3. LLM response generation via LM Studio
     """
     try:
@@ -63,13 +72,29 @@ def chat(req: ChatRequest):
                 debug_info={"error": "No chunks found"}
             )
         
-        # 2. Build context
+        # 2. Build context with dynamic token limiting
         context_parts = []
         sources = []
+        total_tokens = 0
+        chunks_used = 0
+        
+        # Reserve tokens for system prompt, user query, and response buffer
+        reserved_tokens = estimate_tokens(LLM_CHAT_SYSTEM_PROMPT) + estimate_tokens(req.query) + 500
+        available_tokens = LLM_MAX_CONTEXT_TOKENS - reserved_tokens
+        
+        logger.debug(f"Context limit: {LLM_MAX_CONTEXT_TOKENS} tokens, available for chunks: {available_tokens}")
         
         for i, chunk in enumerate(chunks):
             text = chunk.get("text", "")
             metadata = chunk.get("metadata", {})
+            
+            # Estimate tokens for this chunk
+            chunk_tokens = estimate_tokens(text) + 10  # +10 for formatting
+            
+            # Check if adding this chunk would exceed the limit
+            if total_tokens + chunk_tokens > available_tokens:
+                logger.info(f"Context limit reached: {chunks_used} chunks used, {total_tokens} tokens")
+                break
             
             context_parts.append(f"[Document {i+1}]")
             context_parts.append(text)
@@ -80,8 +105,28 @@ def chat(req: ChatRequest):
                 "score": chunk.get("score", 0.0),
                 "metadata": metadata,
             })
+            
+            total_tokens += chunk_tokens
+            chunks_used += 1
+        
+        if chunks_used == 0:
+            # Fallback: include at least the first chunk, truncated
+            first_chunk = chunks[0]
+            max_chars = available_tokens * CHARS_PER_TOKEN
+            text = first_chunk.get("text", "")[:max_chars]
+            context_parts = [f"[Document 1]", text, ""]
+            sources = [{
+                "text": text[:200] + "..." if len(text) > 200 else text,
+                "score": first_chunk.get("score", 0.0),
+                "metadata": first_chunk.get("metadata", {}),
+            }]
+            chunks_used = 1
+            total_tokens = estimate_tokens(text)
+            logger.warning(f"Single chunk truncated to {len(text)} chars to fit context limit")
         
         context = "\n".join(context_parts)
+        
+        logger.info(f"Context built: {chunks_used}/{len(chunks)} chunks, ~{total_tokens} tokens")
         
         # 3. Build prompt
         system_prompt = LLM_CHAT_SYSTEM_PROMPT
@@ -134,6 +179,8 @@ Réponds à la question en te basant uniquement sur le contexte fourni. Si le co
             sources=sources,
             debug_info={
                 "chunks_retrieved": len(chunks),
+                "chunks_used": chunks_used,
+                "context_tokens": total_tokens,
                 "context_length": len(context),
                 "llm_model": LLM_CHAT_MODEL,
             }

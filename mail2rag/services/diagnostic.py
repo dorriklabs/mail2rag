@@ -335,6 +335,8 @@ class DiagnosticService:
                         if debug_info:
                             step.details["llm_model"] = debug_info.get("llm_model", "N/A")
                             step.details["context_length"] = debug_info.get("context_length", 0)
+                            if debug_info.get("llm_error"):
+                                step.details["⚠️ llm_error"] = debug_info["llm_error"][:200]
                             if debug_info.get("error"):
                                 step.details["⚠️ error"] = debug_info["error"]
                         

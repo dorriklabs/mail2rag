@@ -53,3 +53,7 @@ LLM_CHAT_SYSTEM_PROMPT = os.getenv(
     "LLM_CHAT_SYSTEM_PROMPT",
     "Tu es un assistant IA serviable. Réponds de manière concise et précise en te basant uniquement sur le contexte fourni."
 )
+
+# Limite de tokens pour le contexte (évite les dépassements de context window)
+# Par défaut 6000 tokens (~24000 caractères) pour laisser de la marge au prompt et à la réponse
+LLM_MAX_CONTEXT_TOKENS = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "6000"))
