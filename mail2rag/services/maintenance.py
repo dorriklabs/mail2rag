@@ -98,9 +98,17 @@ class MaintenanceService:
                 )
                 continue
 
-            files_in_folder = [f for f in folder.iterdir() if f.is_file()]
+            # Ne traiter que les fichiers .txt (texte extrait, pas les binaires)
+            txt_files = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() == ".txt"]
+            binary_files = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() != ".txt"]
+            
+            if binary_files:
+                logger.debug(
+                    "   ℹ️ Fichiers binaires ignorés : %s",
+                    ", ".join(f.name for f in binary_files[:3]) + ("..." if len(binary_files) > 3 else "")
+                )
 
-            for file_path in files_in_folder:
+            for file_path in txt_files:
                 # Ignorer fichiers cachés / temporaires
                 if file_path.name.startswith("."):
                     continue

@@ -136,8 +136,16 @@ class DocumentProcessor:
                 try:
                     result = self._analyze_with_tika(path)
                     if result:
-                        return result
-                    logger.debug("Tika n'a pas retourné de résultat pour %s", path.name)
+                        # Vérifier la qualité du texte extrait
+                        if self._is_valid_text(result):
+                            return result
+                        else:
+                            logger.warning(
+                                "⚠️ Texte Tika de mauvaise qualité pour %s (bruit OCR détecté). Passage à Vision AI.",
+                                path.name
+                            )
+                    else:
+                        logger.debug("Tika n'a pas retourné de résultat pour %s", path.name)
                 except Exception as e:
                     logger.warning(
                         "⚠️ Échec Tika sur %s (%s). Passage au fallback.",
@@ -161,6 +169,40 @@ class DocumentProcessor:
             # Aucune extraction possible
             logger.warning("Aucune extraction réussie pour le document %s", path.name)
             return None
+    
+    def _is_valid_text(self, text: str, min_printable_ratio: float = 0.85) -> bool:
+        """
+        Vérifie si le texte extrait est de qualité acceptable.
+        
+        Détecte les cas où Tika/OCR produit du bruit (caractères binaires,
+        symboles aléatoires, etc.) plutôt que du texte lisible.
+        
+        Args:
+            text: Texte à vérifier
+            min_printable_ratio: Ratio minimum de caractères imprimables (défaut: 85%)
+            
+        Returns:
+            True si le texte est de qualité acceptable, False sinon
+        """
+        if not text or len(text) < 100:
+            return bool(text)  # Texte court = probablement OK
+        
+        # Compter les caractères "normaux" (lettres, chiffres, ponctuation, espaces)
+        printable_chars = sum(
+            1 for c in text 
+            if c.isalnum() or c.isspace() or c in '.,;:!?\'"-()[]{}@#$%&*+=/<>€£¥°'
+        )
+        
+        ratio = printable_chars / len(text)
+        
+        if ratio < min_printable_ratio:
+            logger.debug(
+                "Qualité texte faible: %.1f%% de caractères valides (seuil: %.0f%%)",
+                ratio * 100, min_printable_ratio * 100
+            )
+            return False
+        
+        return True
 
 
     # ------------------------------------------------------------------ #

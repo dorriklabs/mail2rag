@@ -88,6 +88,9 @@ class Config:
         # Utilise AI_MODEL_NAME par défaut si LLM_CHAT_MODEL n'est pas défini (rétrocompatibilité)
         self.llm_chat_model = os.getenv("LLM_CHAT_MODEL", self.ai_model_name)
         self.llm_chat_timeout = int(os.getenv("LLM_CHAT_TIMEOUT", "120"))
+        
+        # Limite de tokens pour le contexte RAG (évite les dépassements de context window)
+        self.llm_max_context_tokens = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "6000"))
 
         # ------------------------------------------------------------------
         # SYSTÈME / CHEMINS

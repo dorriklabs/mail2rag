@@ -224,19 +224,32 @@ class DiagnosticService:
                 self._send_report(email, trace, None, None)
                 return
             
-            # 3. Extraction texte via Tika (première PJ)
+            # 3. Extraction texte via DocumentProcessor (Tika + fallback Vision AI)
             attachment = attachments[0]
             extracted_text = ""
             
-            with trace.step("tika_extraction") as step:
+            # D'abord sauvegarder le fichier pour que DocumentProcessor puisse l'analyser
+            diag_secure_id = f"diag-{email.uid}"
+            archive_folder = self.config.archive_path / diag_secure_id
+            archive_folder.mkdir(parents=True, exist_ok=True)
+            
+            saved_filename = attachment["name"]
+            saved_filepath = archive_folder / saved_filename
+            with saved_filepath.open("wb") as f:
+                f.write(attachment["content"])
+            
+            with trace.step("document_extraction") as step:
                 step.details["filename"] = attachment["name"]
                 step.details["content_type"] = attachment.get("content_type", "unknown")
                 step.details["size_bytes"] = len(attachment["content"])
+                step.details["archived_file"] = str(saved_filepath)
                 
-                result = self.tika.extract_text_from_bytes(attachment["content"])
+                # Utiliser DocumentProcessor qui gère Tika + fallback Vision AI
+                result = self.processor.analyze_document(saved_filepath)
                 extracted_text = result or ""
                 
                 step.details["extracted_chars"] = len(extracted_text)
+                step.details["extraction_method"] = "DocumentProcessor (Tika + Vision AI fallback)"
             
             # 4. Chunking et ingestion via RAG Proxy
             if extracted_text:
@@ -244,17 +257,26 @@ class DiagnosticService:
                     # Collection de test temporaire
                     test_collection = f"diag-{email.uid}"
                     step.details["collection"] = test_collection
+                    step.details["text_preview"] = extracted_text[:200] + "..."
                     
-                    # Ingestion via RAG Proxy
-                    # Créer un secure_id pour le diagnostic (simulation)
-                    diag_secure_id = f"diag-{email.uid}"
+                    # Sauvegarder le texte extrait dans un fichier .txt pour la synchronisation
+                    text_filename = f"{email.uid}_{saved_filename}_analysis.txt"
+                    text_filepath = archive_folder / text_filename
+                    with text_filepath.open("w", encoding="utf-8") as f:
+                        f.write(f"Source Document: {saved_filename}\n")
+                        f.write(f"Email UID: {email.uid}\n")
+                        f.write(f"Collection: {test_collection}\n")
+                        f.write("-" * 30 + "\n\n")
+                        f.write(extracted_text)
+                    step.details["text_file"] = str(text_filepath)
                     
+                    # Ingestion via RAG Proxy avec le secure_id correct
                     ingest_result = self.ragproxy.ingest_document(
                         collection=test_collection,
                         text=extracted_text,
                         metadata={
                             "source": "diagnostic",
-                            "filename": attachment["name"],
+                            "filename": saved_filename,
                             "uid": str(email.uid),
                             "secure_id": diag_secure_id,
                         }

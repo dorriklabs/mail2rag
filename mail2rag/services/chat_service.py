@@ -54,15 +54,22 @@ class ChatService:
 
             cleaned_body = self.cleaner.clean_body(email.body)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")
+            
+            # Extraction collection spécifique du corps (syntaxe: dossier : xxx ou collection : xxx)
+            collection_to_search = self._extract_collection_from_body(query_content, workspace)
+            
+            # Nettoyer la query en retirant la ligne de collection si présente
+            query_content_cleaned = self._remove_collection_line(query_content)
 
-            query_message = f"Sujet : {clean_subject}\n\nQuestion :\n{query_content}"
+            query_message = f"Sujet : {clean_subject}\n\nQuestion :\n{query_content_cleaned}"
 
             # Recherche via RAG Proxy (hybride)
             self.logger.info(
-                "🔍 [RAG Proxy] Recherche hybride pour '%s'...", clean_subject
+                "🔍 [RAG Proxy] Recherche hybride pour '%s' dans collection '%s'...", 
+                clean_subject, collection_to_search
             )
             response_text, sources = self._search_via_rag_proxy(
-                query_message, workspace
+                query_message, collection_to_search
             )
 
             # Sauvegarde optionnelle du chat (log-only, non indexé)
@@ -164,19 +171,19 @@ class ChatService:
     def _search_via_rag_proxy(
         self,
         query: str,
-        workspace: str,
+        collection: str,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         """Recherche via RAG Proxy puis génération de réponse via LLM."""
-        chunks = self._rag_proxy_search(query)
+        chunks = self._rag_proxy_search(query, collection)
         sources, context_text = self._build_context_from_chunks(chunks)
         response_text = self._generate_answer_from_context(
             query=query,
-            workspace=workspace,
+            workspace=collection,
             context_text=context_text,
         )
         return response_text, sources
 
-    def _rag_proxy_search(self, query: str) -> List[Dict[str, Any]]:
+    def _rag_proxy_search(self, query: str, collection: str = None) -> List[Dict[str, Any]]:
         """Appelle l'endpoint /rag du RAG Proxy."""
         rag_url = f"{self.config.rag_proxy_url}/rag"
         payload = {
@@ -185,6 +192,10 @@ class ChatService:
             "final_k": 5,
             "use_bm25": True,
         }
+        
+        # Ajouter la collection si spécifiée
+        if collection:
+            payload["collection"] = collection
 
         try:
             self.logger.debug("Appel RAG Proxy: %s", rag_url)
@@ -304,6 +315,20 @@ class ChatService:
                     "Si la réponse n'est pas dans le contexte, dis-le poliment."
                 )
             )
+            
+            # Limiter le contexte pour éviter les dépassements de tokens
+            # Estimation: ~2 caractères = 1 token (conservateur pour le français avec accents)
+            # Réserve aussi ~2000 tokens pour system prompt + question + réponse
+            max_context_tokens = getattr(self.config, "llm_max_context_tokens", 6000)
+            effective_context_tokens = max(max_context_tokens - 2000, 2000)  # Réserve 2000 tokens
+            max_context_chars = effective_context_tokens * 2  # 2 chars/token (très conservateur)
+            
+            if len(context_text) > max_context_chars:
+                self.logger.warning(
+                    "⚠️ Contexte tronqué: %d chars → %d chars (limite: %d tokens effectifs)",
+                    len(context_text), max_context_chars, effective_context_tokens
+                )
+                context_text = context_text[:max_context_chars] + "\n\n[... contexte tronqué ...]"
 
             user_prompt = (
                 f"CONTEXTE:\n{context_text}\n\n"
@@ -327,6 +352,15 @@ class ChatService:
                 json=llm_payload,
                 timeout=self.config.llm_timeout,
             )
+            
+            # Log détaillé en cas d'erreur
+            if llm_resp.status_code != 200:
+                self.logger.error(
+                    "Erreur LLM (HTTP %d): %s",
+                    llm_resp.status_code,
+                    llm_resp.text[:500]
+                )
+            
             llm_resp.raise_for_status()
             llm_data = llm_resp.json()
 
@@ -359,3 +393,48 @@ class ChatService:
         """Supprime le préfixe Chat: ou Question: du sujet."""
         subject = (subject or "").strip()
         return re.sub(r"(?i)^(chat|question)\s*:\s*", "", subject).strip()
+    
+    # Pattern pour détecter la ligne de collection dans le corps
+    # Syntaxe supportée: "dossier : xxx", "collection : xxx", "workspace : xxx"
+    COLLECTION_PATTERN = re.compile(
+        r"^\s*(?:dossier|collection|workspace)\s*:\s*(.+?)\s*$",
+        re.IGNORECASE | re.MULTILINE
+    )
+    
+    def _extract_collection_from_body(self, body: str, default_workspace: str) -> str:
+        """
+        Extrait le nom de collection du corps de l'email.
+        
+        Syntaxe supportée:
+            - dossier : nom-collection
+            - collection : nom-collection
+            - workspace : nom-collection
+        
+        Args:
+            body: Corps de l'email
+            default_workspace: Workspace par défaut si aucune collection spécifiée
+            
+        Returns:
+            Nom de la collection ou workspace par défaut
+        """
+        if not body:
+            return default_workspace
+            
+        match = self.COLLECTION_PATTERN.search(body)
+        if match:
+            collection = match.group(1).strip()
+            self.logger.info(f"📂 Collection spécifiée dans le corps: '{collection}'")
+            return collection
+            
+        return default_workspace
+    
+    def _remove_collection_line(self, body: str) -> str:
+        """
+        Retire la ligne de spécification de collection du corps.
+        
+        Cela évite que la ligne "dossier : xxx" soit incluse dans la question.
+        """
+        if not body:
+            return body
+            
+        return self.COLLECTION_PATTERN.sub("", body).strip()
