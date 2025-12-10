@@ -75,7 +75,7 @@ cd d:\SynologyDrive\Antigravity\Mail2Rag ; git diff --stat ; git diff
    - `fix:` correction de bug → incrémente PATCH
    - `feat!:` ou `BREAKING CHANGE:` → incrémente MAJOR
    - `docs:`, `chore:`, `refactor:`, `test:` → pas d'incrément de version
-3. Proposer le message au USER pour validation
+3. **Appliquer automatiquement le message généré** (mode semi-auto)
 
 ---
 
