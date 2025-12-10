@@ -347,6 +347,7 @@ class IngestionService:
             email=email,
             workspace=workspace,
             files_to_upload=files_to_upload,
+            secure_id=secure_id,
         )
         
         if not success:
@@ -410,6 +411,7 @@ class IngestionService:
         email: ParsedEmail,
         workspace: str,
         files_to_upload: List[str],
+        secure_id: str = None,
     ) -> tuple[bool, int]:
         """
         Upload et indexation via RAG Proxy avec chunking intelligent.
@@ -430,13 +432,18 @@ class IngestionService:
                     continue
                 
                 # Métadonnées enrichies
+                filename = Path(file_path).name
                 metadata = {
                     "uid": str(email.uid),
                     "subject": email.subject,
                     "sender": email.sender,
                     "date": email.date or time.strftime("%Y-%m-%d %H:%M"),
-                    "filename": Path(file_path).name,
+                    "filename": filename,
                 }
+                
+                # Ajouter le lien d'archive si disponible
+                if secure_id and self.config.archive_base_url:
+                    metadata["archive_url"] = f"{self.config.archive_base_url}/{secure_id}/{filename}"
                 
                 # Ajout métadonnées email optionnelles
                 if email.to:

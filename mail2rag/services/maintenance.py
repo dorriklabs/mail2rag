@@ -113,8 +113,30 @@ class MaintenanceService:
                 if file_path.name.startswith("."):
                     continue
 
-                logger.debug("   ⬆️ Ré-ingestion : %s", file_path.name)
                 try:
+                    # Vérifier si ce document existe déjà (par filename)
+                    # via une recherche dans la collection
+                    existing = self.ragproxy_client.search(
+                        query=file_path.name,
+                        collection=workspace,
+                        top_k=1,
+                        use_bm25=False,  # Recherche simple
+                    )
+                    
+                    # Si un chunk avec ce filename existe, ignorer
+                    chunks = existing.get("chunks", [])
+                    if chunks:
+                        for chunk in chunks:
+                            if chunk.get("metadata", {}).get("filename") == file_path.name:
+                                logger.debug("   ⏭️ Déjà indexé, ignoré : %s", file_path.name)
+                                break
+                        else:
+                            # Filename différent, on peut ingérer
+                            pass
+                        if any(c.get("metadata", {}).get("filename") == file_path.name for c in chunks):
+                            continue
+                    
+                    logger.debug("   ⬆️ Ré-ingestion : %s", file_path.name)
                     text_content = file_path.read_text(encoding="utf-8", errors="ignore")
                     if text_content.strip():
                         metadata = {

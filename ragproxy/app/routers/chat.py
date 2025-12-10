@@ -138,12 +138,19 @@ Question : {req.query}
 Réponds à la question en te basant uniquement sur le contexte fourni. Si le contexte ne contient pas assez d'informations, dis-le clairement."""
         
         # 4. Call LM Studio
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Ajouter l'historique de conversation si présent
+        if req.history:
+            messages.extend(req.history)
+            logger.info(f"Using conversation history: {len(req.history)} messages")
+        
+        # Ajouter la question actuelle
+        messages.append({"role": "user", "content": user_prompt})
+        
         llm_payload = {
             "model": LLM_CHAT_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
+            "messages": messages,
             "temperature": req.temperature if req.temperature is not None else LLM_CHAT_TEMPERATURE,
             "max_tokens": req.max_tokens if req.max_tokens else LLM_CHAT_MAX_TOKENS,
         }

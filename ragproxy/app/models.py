@@ -83,6 +83,7 @@ class ChatRequest(BaseModel):
     use_bm25: bool = True
     temperature: float = 0.1
     max_tokens: int = 1000
+    history: Optional[List[Dict[str, str]]] = None  # Historique de conversation
 
 
 class ChatResponse(BaseModel):

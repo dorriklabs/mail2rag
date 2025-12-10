@@ -120,15 +120,19 @@ class RAGPipeline:
 
         # 5. Reranking
         t0 = time.time()
-        final_results = self.reranker.rerank(
+        reranked_results = self.reranker.rerank(
             query=query,
             passages=merged_candidates,
         )
         debug_info["timings"]["reranking"] = round(time.time() - t0, 3)
+        
+        # 6. Limiter à final_k résultats
+        final_results = reranked_results[:final_k]
+        debug_info["counts"]["reranked_total"] = len(reranked_results)
         debug_info["counts"]["final_results"] = len(final_results)
 
         total_time = round(time.time() - start_time, 3)
-        logger.info(f"RAG finished in {total_time}s (n={len(merged_candidates)}, returned={len(final_results)})")
+        logger.info(f"RAG finished in {total_time}s (n={len(merged_candidates)}, reranked={len(reranked_results)}, returned={len(final_results)})")
         
         debug_info["total_time"] = total_time
 
