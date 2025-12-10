@@ -1,0 +1,50 @@
+﻿d5574e9 | chore: add Antigravity workflow files for Git release and unit tests
+6c84013 | feat: introduce Mail2Rag maintenance service for archive cleanup and smart RAG resynchronization.
+c2521db | fix: OCR quality validation, chat collection support, diagnostic text file saving
+f5dbb85 | fix: logging file handler + extend Tika supported extensions
+18ad0ed | feat: add dynamic context limiting for RAG chat
+338cbd4 | refactor: remove local Tesseract OCR - OCR now handled by Tika - Dockerfile: remove tesseract-ocr package - requirements.txt: remove pytesseract - processor.py: remove _analyze_with_tesseract method - config.py: remove MAX_OCR_PAGES variable - .env.example: remove MAX_OCR_PAGES
+94349ae | chore: update config for OCR support and cleanup obsolete variables - docker-compose.yml: switch to tika:latest-full for Tesseract OCR support - .env.example: add missing variables and fix VISION_ENABLE - streamlit_admin: update admin page documentation
+5ba2c3b | chore: remove obsolete test files
+258faae | refactor: remove all AnythingLLM references from codebase
+ace1753 | feat: add document+archive and collection deletion in Streamlit
+5b884c3 | fix: source links now include secure_id folder in URL
+ecef6ac | feat: enrich chat response sources with accordion layout
+b048985 | feat: add source file links with positions [start-end] in diagnostic
+f6897d3 | fix: add models section to /readyz endpoint response
+807e720 | fix: apply UTF-8 encoding fix to main extract_text for ingestion
+30b65a5 | fix: UTF-8 encoding issues in Tika extraction
+c2ac973 | feat: add accordion layout to diagnostic report
+6defc86 | feat: add embed_model and rerank_model to diagnostic config
+f8335e4 | feat: enrich diagnostic report with full debug info
+c6ba499 | fix: correct pipeline.search() to pipeline.run() in chat.py
+aed72a6 | feat: add full RAG pipeline to diagnostic (search + rerank + LLM)
+b497456 | improve: add question display in diagnostic report
+bc0bf48 | fix: use correct RAGProxyClient method names in diagnostic.py
+7821116 | fix: add _extract_attachments and extract_text_from_bytes for diagnostic mode
+41fe66a | fix: correct send_reply call signature in diagnostic.py
+33c8033 | fix: correct tika_url to tika_server_url in app.py
+a945022 | feat: add diagnostic mode 'test : all' for pipeline testing
+0487118 | test: add 9 RouterService tests for mail2rag
+67de942 | test: add 9 mock-based tests for chat and admin endpoints
+42b2c9b | fix: correct Global status check to use lm_studio
+8403014 | fix: correct embedder status check in Overview.py
+a74c7e2 | fix: add EMBED_MODEL to docker-compose.yml for rag_proxy
+3d2e325 | fix: correct LLM_STUDIO_URL to LM_STUDIO_URL in chat.py
+e6d40b4 | docs: add RAG Proxy config variables to .env.example
+744bf44 | feat: add Tika and LM Studio status to Streamlit Overview
+70f1d7a | test: add pytest infrastructure (Phase 5)
+a1b6959 | feat: add optional API key authentication (Phase 4)
+b19e205 | refactor: modularize ragproxy/main.py into routers (Phase 3)
+8dc6691 | feat: add retry utilities with exponential backoff (Phase 2)
+9cde2cf | feat!: replace AnythingLLM with RAG Proxy
+3a60130 | feat: Add AnythingLLM service to docker-compose and implement its Python client for API interactions.
+e986466 | feat: Introduce RAG Proxy for email ingestion and a Streamlit admin interface for monitoring and management.
+1c6e58e | feat: Add RAG proxy for intelligent chunking and vector database integration, updating ingestion flow and configuration.
+ad4fc9c | feat: Add Apache Tika integration for robust document text extraction.
+dafa262 | feat: configurable local reranking.
+489d1e4 | Fix RAG Proxy bugs, separate Vision/Chat models, and add granular Vision control for images vs PDFs
+21e5d53 | debug
+7bb34eb | feat: Implement RAG proxy with multi-collection support, including pipeline, BM25, vector DB, and FastAPI endpoints.
+927bdde | feat: Introduce mail2rag application for email processing, ingestion, and chat, and update vector DB collection name in docker-compose.
+ade7405 | Mail2RAG v3: Refactor architecture and integrate RAG Proxy
