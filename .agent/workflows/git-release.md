@@ -25,9 +25,9 @@ cd d:\SynologyDrive\Antigravity\Mail2Rag ; git branch --show-current
 ```
 
 **L'IA doit :**
-- Vérifier que la branche est `main`
+- Vérifier que la branche est `develop`
 - Si autre branche : demander confirmation avant de continuer
-- Proposer de basculer sur `main` si nécessaire
+- Proposer de basculer sur `develop` si nécessaire
 
 ---
 
@@ -54,7 +54,7 @@ cd d:\SynologyDrive\Antigravity\Mail2Rag ; git status --short
 
 // turbo
 ```powershell
-cd d:\SynologyDrive\Antigravity\Mail2Rag ; git fetch origin ; git pull origin main
+cd d:\SynologyDrive\Antigravity\Mail2Rag ; git fetch origin ; git pull origin develop
 ```
 
 > ⚠️ Si conflits détectés, l'IA doit arrêter et aider à les résoudre.
@@ -124,7 +124,7 @@ cd d:\SynologyDrive\Antigravity\Mail2Rag ; git tag -a vX.Y.Z -m "Release vX.Y.Z"
 >
 > - Commit(s) : `<liste des commits>`
 > - Tag : `vX.Y.Z` (si mode standard)
-> - Branche : `main`
+> - Branche : `develop`
 >
 > **Confirmer le push ? (oui/non)**
 
@@ -133,7 +133,7 @@ cd d:\SynologyDrive\Antigravity\Mail2Rag ; git tag -a vX.Y.Z -m "Release vX.Y.Z"
 ## 9. Pousser vers le dépôt distant
 
 ```powershell
-cd d:\SynologyDrive\Antigravity\Mail2Rag ; git push origin main ; git push origin --tags
+cd d:\SynologyDrive\Antigravity\Mail2Rag ; git push origin develop ; git push origin --tags
 ```
 
 ---
@@ -150,7 +150,7 @@ git reset --soft HEAD~1
 ### Annuler le dernier commit (déjà pushé)
 ```powershell
 git revert HEAD
-git push origin main
+git push origin develop
 ```
 
 ### Supprimer un tag local
@@ -167,7 +167,7 @@ git push origin --delete vX.Y.Z
 ```powershell
 git log --oneline -5  # Voir les derniers commits
 git reset --hard <commit_hash>
-git push origin main --force  # ⚠️ Dangereux, écrase l'historique
+git push origin develop --force  # ⚠️ Dangereux, écrase l'historique
 ```
 
 ---
