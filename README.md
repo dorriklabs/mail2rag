@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.8.2-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.9.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -37,6 +37,8 @@ Mail2RAG monitors your inbox and **automatically**:
 3. 💬 Answers questions via email or Streamlit dashboard using RAG
 
 **Send an email → Get it indexed → Query via email or dashboard**
+
+> 🆕 **v3.9.0**: New **Support Draft Mode** - Auto-generate response drafts for support teams!
 
 ---
 
@@ -113,6 +115,50 @@ Subject: Chat: What are the Q4 highlights?
 | **Documents** | Browse, search, filter, delete indexed docs |
 | **Chat** | Test RAG queries directly with sources display |
 | **Admin** | Rebuild BM25, delete collections, manage system |
+
+### 🎫 Support Draft Mode (NEW in v3.9.0)
+
+Automatically generate response drafts for support teams:
+
+```
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│   Client    │──────►│  Mail2RAG   │──────►│   Support   │
+│   Email     │       │  (RAG+AI)   │       │   Inbox     │
+└─────────────┘       └─────────────┘       └──────┬──────┘
+                                                   │
+                                            ▼ Draft in Drafts
+                                        ┌─────────────┐
+                                        │   Agent     │
+                                        │  Reviews &  │
+                                        │   Sends     │
+                                        └──────┬──────┘
+                                               │ BCC
+                                               ▼
+                                        ┌─────────────┐
+                                        │  KB Enriched│
+                                        └─────────────┘
+```
+
+| Confidence | Template | Action |
+|------------|----------|--------|
+| **High** (>70%) | 🟢 Green | Ready to send |
+| **Medium** (50-70%) | 🔵 Blue | Review suggested |
+| **Low** (30-50%) | 🟡 Yellow | Needs completion |
+| **None** (<30%) | 🟡 Yellow | Manual response |
+
+**Configuration:** Enable in `workspaces_config.json`:
+```json
+{
+    "support-client": {
+        "support_draft": true,
+        "response_style": {
+            "tone": "professional",
+            "greeting": "Bonjour,",
+            "signature": "Cordialement,\nL'équipe Support"
+        }
+    }
+}
+```
 
 ---
 
