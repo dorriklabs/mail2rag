@@ -56,6 +56,23 @@ class Config:
         self.smtp_timeout = int(os.getenv("SMTP_TIMEOUT", "30"))
 
         # ------------------------------------------------------------------
+        # SUPPORT DRAFT MODE
+        # ------------------------------------------------------------------
+        # Dossier Drafts IMAP (détection auto si vide)
+        self.imap_drafts_folder = os.getenv("IMAP_DRAFTS_FOLDER", "")
+        # Dossier pour emails en cours de traitement
+        self.imap_processed_folder = os.getenv("IMAP_PROCESSED_FOLDER", "En cours")
+        # Timeout avant notification (heures)
+        self.draft_timeout_hours = int(os.getenv("DRAFT_TIMEOUT_HOURS", "24"))
+
+        # ------------------------------------------------------------------
+        # SAAS-READY (Multi-tenant preparation)
+        # ------------------------------------------------------------------
+        # Identifiant unique du tenant (vide = mode standalone)
+        self.tenant_id = os.getenv("TENANT_ID", "")
+        self.tenant_name = os.getenv("TENANT_NAME", "")
+
+        # ------------------------------------------------------------------
         # VISION IA / LM STUDIO (analyse documents / images)
         # ------------------------------------------------------------------
         self.ai_api_url = os.getenv(

@@ -24,6 +24,10 @@ from services.state_manager import StateManager
 from services.diagnostic import DiagnosticService
 from services.tika_client import TikaClient
 from services.ragproxy_client import RAGProxyClient
+from services.draft_service import DraftService
+from services.support_draft_service import SupportDraftService
+from services.usage_tracker import UsageTracker
+from models import ParsedEmail
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +45,39 @@ def is_chat_email(subject: str | None) -> bool:
 def is_diagnostic_email(subject: str | None) -> bool:
     """Retourne True si le sujet correspond au mode DIAGNOSTIC (test : all / test:diag)."""
     return bool(DIAG_SUBJECT_RE.match((subject or "").strip()))
+
+
+def is_support_draft_mode(
+    email: "ParsedEmail",
+    router: "RouterService",
+    config: "Config",
+) -> bool:
+    """
+    Détermine si le mode Support Draft s'applique.
+    
+    Conditions:
+    1. Le workspace a support_draft: true dans workspaces_config.json
+    2. L'email N'est PAS envoyé par la boîte support elle-même (évite boucle BCC)
+    
+    Args:
+        email: Email parsé
+        router: Service de routage
+        config: Configuration
+        
+    Returns:
+        True si le mode Support Draft doit être activé
+    """
+    workspace = router.determine_workspace(email.email_data)
+    ws_cfg = config.workspace_settings.get(workspace, {})
+    
+    if not ws_cfg.get("support_draft", False):
+        return False
+    
+    # Éviter de traiter nos propres réponses comme des demandes
+    support_email = (config.imap_user or "").lower()
+    sender = (email.sender or "").lower()
+    
+    return sender != support_email
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +219,20 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         get_secure_id=get_secure_id,
     )
 
+    # Services Support Draft Mode (SaaS-ready)
+    usage_tracker = UsageTracker(config, logger)
+    draft_service = DraftService(config, logger, mail_service)
+    support_draft_service = SupportDraftService(
+        config=config,
+        logger_instance=logger,
+        mail_service=mail_service,
+        draft_service=draft_service,
+        router=router,
+        cleaner=cleaner,
+        email_renderer=email_renderer,
+        usage_tracker=usage_tracker,
+    )
+
     return {
         "config": config,
         "logger": logger,
@@ -193,6 +244,9 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "chat_service": chat_service,
         "diagnostic_service": diagnostic_service,
         "maintenance": maintenance,
+        "router": router,
+        "support_draft_service": support_draft_service,
+        "usage_tracker": usage_tracker,
     }
 
 
@@ -293,13 +347,22 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                 state_manager.save_state(state)
                 continue
 
+            # Services additionnels du context
+            router: RouterService = context["router"]
+            support_draft_service: SupportDraftService = context.get("support_draft_service")
+
             try:
                 if is_diagnostic_email(parsed_email.subject):
                     # Mode diagnostic : test : all
                     diagnostic_service.run_diagnostic(parsed_email)
                 elif is_chat_email(parsed_email.subject):
+                    # Mode Chat : Chat: / Question:
                     chat_service.handle_chat(parsed_email)
+                elif support_draft_service and is_support_draft_mode(parsed_email, router, config):
+                    # Mode Support Draft : génère un brouillon
+                    support_draft_service.handle_support_request(parsed_email)
                 else:
+                    # Mode Ingestion standard
                     ingestion_service.ingest_email(parsed_email)
             except Exception as e:
                 # Les services internes gèrent déjà la plupart des exceptions

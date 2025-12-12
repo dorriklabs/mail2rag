@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div
+    style="background: #d1ecf1; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
+    <h3 style="margin: 0 0 5px 0; color: #0c5460;">
+        ✏️ Réponse suggérée (confiance: {{ confidence_percent }}%) - À vérifier
+    </h3>
+</div>
+
+<div style="margin-bottom: 20px; padding: 15px; background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px;">
+    {{ ai_response | safe }}
+</div>
+
+<hr style="border: 1px dashed #dee2e6; margin: 20px 0;">
+
+<details style="background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+    <summary style="cursor: pointer; font-weight: bold; color: #495057;">📚 Sources utilisées (info interne)</summary>
+    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #6c757d;">
+        {% for source in sources %}
+        <li>{{ source.filename }}</li>
+        {% endfor %}
+    </ul>
+</details>
+
+<details style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <summary style="cursor: pointer; font-weight: bold; color: #495057;">📩 Question originale</summary>
+    <div style="margin-top: 10px;">
+        <p style="margin: 5px 0;"><strong>De :</strong> {{ client_email }}</p>
+        <blockquote style="border-left: 3px solid #007bff; padding-left: 15px; margin: 10px 0 0 0; color: #6c757d;">
+            {{ original_question | replace('\n', '<br>') | safe }}
+        </blockquote>
+    </div>
+</details>
+{% endblock %}

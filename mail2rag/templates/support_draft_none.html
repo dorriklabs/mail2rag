@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div
+    style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+    <h3 style="margin: 0 0 10px 0; color: #856404;">
+        ⚠️ Nouvelle question - Pas de correspondance dans la base de connaissances
+    </h3>
+    <p style="margin: 0; color: #856404;">
+        Veuillez rédiger votre réponse manuellement.<br>
+        <small>Cette réponse sera automatiquement ajoutée à la KB après envoi.</small>
+    </p>
+</div>
+
+<div style="margin-bottom: 20px; padding: 15px; background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px;">
+    <p style="margin: 0 0 15px 0;">{{ greeting }}</p>
+    <p style="margin: 0 0 15px 0; color: #6c757d; font-style: italic;">[Votre réponse ici]</p>
+    <p style="margin: 0; white-space: pre-line;">{{ signature }}</p>
+</div>
+
+<hr style="border: 1px dashed #dee2e6; margin: 20px 0;">
+
+<div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+    <h4 style="margin: 0 0 10px 0; color: #495057;">📩 Question du client :</h4>
+    <p style="margin: 5px 0;"><strong>De :</strong> {{ client_email }}</p>
+    <p style="margin: 5px 0;"><strong>Sujet :</strong> {{ original_subject }}</p>
+    <blockquote style="border-left: 3px solid #007bff; padding-left: 15px; margin: 15px 0 0 0; color: #495057;">
+        {{ original_question | replace('\n', '<br>') | safe }}
+    </blockquote>
+</div>
+{% endblock %}
