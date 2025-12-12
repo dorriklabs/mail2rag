@@ -314,11 +314,22 @@ class Config:
                 )
 
     def _load_workspace_settings(self) -> None:
-        workspaces_cfg_path = self.prompts_dir / "workspaces_config.json"
+        # Nouveau: chercher d'abord à côté de routing.json, puis dans prompts_dir
+        workspaces_cfg_path = Path(
+            os.getenv("WORKSPACES_CONFIG_PATH", "")
+        )
+        
+        # Si pas de variable d'environnement, chercher à côté de routing.json
+        if not workspaces_cfg_path or not workspaces_cfg_path.exists():
+            workspaces_cfg_path = self.routing_path.parent / "workspaces_config.json"
+        
+        # Fallback: ancien emplacement dans prompts_dir
+        if not workspaces_cfg_path.exists():
+            workspaces_cfg_path = self.prompts_dir / "workspaces_config.json"
+        
         if not workspaces_cfg_path.exists():
             logging.info(
-                "Aucune configuration avancée par workspace trouvée (%s absent).",
-                workspaces_cfg_path,
+                "Aucune configuration avancée par workspace trouvée.",
             )
             return
 

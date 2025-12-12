@@ -9,6 +9,22 @@
             "type": "subject",
             "value": "Invoice",
             "workspace": "finance_workspace"
+        },
+        {
+            "type": "subject",
+            "value": "Support",
+            "workspace": "support-client"
+        },
+        {
+            "type": "subject",
+            "value": "Question",
+            "workspace": "support-client"
+        },
+        {
+            "type": "subject",
+            "value": "Aide",
+            "workspace": "support-client"
         }
-    ]
+    ],
+    "default_workspace": "support-client"
 }

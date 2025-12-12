@@ -95,6 +95,8 @@ services:
       - ./mail2rag:/app
       # Routing configuration
       - ./routing.json:/etc/mail2rag/routing.json:ro
+      # Workspaces configuration
+      - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json:ro
       # Prompts directory
       - ./mail2rag/prompts:/etc/mail2rag/prompts:ro
       # Logs
