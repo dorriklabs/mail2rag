@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -13,6 +14,9 @@ from config import Config
 from services.tika_client import TikaClient
 
 logger = logging.getLogger(__name__)
+
+# Check if we should use LiteLLM Gateway
+_USE_LLM_GATEWAY = os.getenv("LLM_PROVIDER", "lmstudio").lower() not in ("lmstudio", "")
 
 
 class DocumentProcessor:
@@ -45,6 +49,13 @@ class DocumentProcessor:
             logger.info("TikaClient initialisé (TIKA_ENABLE=true)")
         else:
             logger.info("TikaClient désactivé (TIKA_ENABLE=false)")
+        
+        # Initialize LLM Client for gateway providers
+        self.llm_client = None
+        if _USE_LLM_GATEWAY:
+            from services.llm_client import get_llm_client
+            self.llm_client = get_llm_client(config)
+            logger.info(f"LLMClient initialisé pour vision (provider: {os.getenv('LLM_PROVIDER')})")
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -343,12 +354,12 @@ class DocumentProcessor:
     # ------------------------------------------------------------------ #
     def _analyze_with_vision_llm(self, path: Path) -> Optional[str]:
         """
-        Analyse via un modèle Vision (LM Studio compatible OpenAI).
+        Analyse via un modèle Vision (LM Studio ou LiteLLM Gateway).
 
         - Pour les PDF, on convertit la première page en image (PNG).
-        - On envoie une requête /chat/completions avec image en base64.
+        - On envoie une requête au LLM avec image en base64.
         """
-        logger.info("👁️ Envoi de %s à LM Studio (Vision)...", path.name)
+        logger.info("👁️ Envoi de %s au LLM Vision...", path.name)
 
         temp_img_path = path
         is_temp = False
@@ -376,6 +387,35 @@ class DocumentProcessor:
             if is_temp and temp_img_path.exists():
                 temp_img_path.unlink()
 
+        # Use LLMClient if gateway is enabled
+        if self.llm_client:
+            try:
+                content = self.llm_client.vision(
+                    prompt=self.vision_prompt,
+                    image_base64=base64_image,
+                    max_tokens=self.config.vision_max_tokens,
+                    timeout=self.config.vision_timeout,
+                )
+                
+                if not content:
+                    logger.error("Réponse Vision IA vide pour %s", path.name)
+                    return None
+                
+                logger.info("✅ Réponse Vision IA reçue pour %s.", path.name)
+                return (
+                    f"--- ANALYSE VISION IA (LiteLLM Gateway) ---\n\n"
+                    f"{content}"
+                )
+            except Exception as e:
+                logger.error(
+                    "❌ Erreur LLM Gateway Vision sur %s : %s",
+                    path.name,
+                    e,
+                    exc_info=True,
+                )
+                raise
+        
+        # Direct HTTP for LM Studio
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.config.ai_api_key}",

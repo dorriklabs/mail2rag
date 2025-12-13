@@ -57,3 +57,26 @@ LLM_CHAT_SYSTEM_PROMPT = os.getenv(
 # Limite de tokens pour le contexte (évite les dépassements de context window)
 # Par défaut 6000 tokens (~24000 caractères) pour laisser de la marge au prompt et à la réponse
 LLM_MAX_CONTEXT_TOKENS = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "6000"))
+
+# ---------------------------------------------------------------------------
+# LLM PROVIDER CONFIGURATION (LiteLLM Gateway)
+# ---------------------------------------------------------------------------
+# Provider: lmstudio (default), openai, anthropic
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "lmstudio")
+
+# API Keys for cloud providers (optional)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# Model names (LiteLLM format: provider/model-name)
+# For LM Studio: use "openai/model-name" with custom base_url
+# For OpenAI: use "openai/gpt-4o-mini", "openai/gpt-4o", etc.
+# For Anthropic: use "anthropic/claude-3-haiku-20240307", etc.
+LLM_CHAT_MODEL_LITELLM = os.getenv("LLM_CHAT_MODEL_LITELLM", "")
+LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL", "")
+LLM_EMBED_MODEL_LITELLM = os.getenv("LLM_EMBED_MODEL_LITELLM", "")
+
+# Fallback models (comma-separated, optional)
+LLM_FALLBACK_MODELS = [
+    m.strip() for m in os.getenv("LLM_FALLBACK_MODELS", "").split(",") if m.strip()
+]

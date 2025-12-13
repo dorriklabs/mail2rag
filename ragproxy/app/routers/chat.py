@@ -1,5 +1,9 @@
 """
 Chat endpoint with RAG + LLM response generation.
+
+Supports multiple LLM providers via LiteLLM Gateway:
+- LM Studio (default, local)
+- OpenAI, Anthropic, etc. (cloud)
 """
 
 import logging
@@ -14,6 +18,7 @@ from app.config import (
     LLM_CHAT_MAX_TOKENS,
     LLM_CHAT_SYSTEM_PROMPT,
     LLM_MAX_CONTEXT_TOKENS,
+    LLM_PROVIDER,
 )
 from app.models import ChatRequest, ChatResponse
 from app.pipeline import RAGPipeline
@@ -38,6 +43,24 @@ def set_pipeline(p: RAGPipeline):
     """Set the pipeline instance for this router."""
     global pipeline
     pipeline = p
+
+
+# LLM Gateway singleton (lazy loaded)
+_llm_gateway = None
+
+
+def _get_llm_gateway():
+    """Get or create LLM Gateway for cloud providers."""
+    global _llm_gateway
+    if _llm_gateway is None:
+        from app.llm_gateway import get_llm_gateway
+        _llm_gateway = get_llm_gateway()
+    return _llm_gateway
+
+
+def _use_gateway() -> bool:
+    """Check if we should use LLM Gateway instead of direct HTTP."""
+    return LLM_PROVIDER.lower() not in ("lmstudio", "")
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -137,7 +160,7 @@ Question : {req.query}
 
 Réponds à la question en te basant uniquement sur le contexte fourni. Si le contexte ne contient pas assez d'informations, dis-le clairement."""
         
-        # 4. Call LM Studio
+        # 4. Call LLM (via Gateway or direct HTTP)
         messages = [{"role": "system", "content": system_prompt}]
         
         # Ajouter l'historique de conversation si présent
@@ -148,32 +171,55 @@ Réponds à la question en te basant uniquement sur le contexte fourni. Si le co
         # Ajouter la question actuelle
         messages.append({"role": "user", "content": user_prompt})
         
-        llm_payload = {
-            "model": LLM_CHAT_MODEL,
-            "messages": messages,
-            "temperature": req.temperature if req.temperature is not None else LLM_CHAT_TEMPERATURE,
-            "max_tokens": req.max_tokens if req.max_tokens else LLM_CHAT_MAX_TOKENS,
-        }
+        temperature = req.temperature if req.temperature is not None else LLM_CHAT_TEMPERATURE
+        max_tokens = req.max_tokens if req.max_tokens else LLM_CHAT_MAX_TOKENS
         
-        logger.debug(f"Calling LM Studio at {LM_STUDIO_URL}/v1/chat/completions")
-        
-        response = requests.post(
-            f"{LM_STUDIO_URL}/v1/chat/completions",
-            json=llm_payload,
-            timeout=60,
-        )
-        
-        if response.status_code != 200:
-            logger.error(f"LM Studio error: {response.status_code} - {response.text}")
-            return ChatResponse(
-                query=req.query,
-                answer="Erreur lors de la génération de la réponse (LLM indisponible).",
-                sources=sources,
-                debug_info={"llm_error": response.text}
+        if _use_gateway():
+            # Use LiteLLM Gateway for cloud providers
+            logger.debug(f"Calling LLM via Gateway (provider: {LLM_PROVIDER})")
+            try:
+                gateway = _get_llm_gateway()
+                answer = gateway.chat(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except Exception as e:
+                logger.error(f"LLM Gateway error: {e}")
+                return ChatResponse(
+                    query=req.query,
+                    answer="Erreur lors de la génération de la réponse (LLM indisponible).",
+                    sources=sources,
+                    debug_info={"llm_error": str(e)}
+                )
+        else:
+            # Direct HTTP for LM Studio (more efficient)
+            llm_payload = {
+                "model": LLM_CHAT_MODEL,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            
+            logger.debug(f"Calling LM Studio at {LM_STUDIO_URL}/v1/chat/completions")
+            
+            response = requests.post(
+                f"{LM_STUDIO_URL}/v1/chat/completions",
+                json=llm_payload,
+                timeout=60,
             )
-        
-        llm_response = response.json()
-        answer = llm_response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            if response.status_code != 200:
+                logger.error(f"LM Studio error: {response.status_code} - {response.text}")
+                return ChatResponse(
+                    query=req.query,
+                    answer="Erreur lors de la génération de la réponse (LLM indisponible).",
+                    sources=sources,
+                    debug_info={"llm_error": response.text}
+                )
+            
+            llm_response = response.json()
+            answer = llm_response.get("choices", [{}])[0].get("message", {}).get("content", "")
         
         if not answer:
             answer = "Je n'ai pas pu générer de réponse."

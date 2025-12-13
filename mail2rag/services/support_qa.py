@@ -1,14 +1,18 @@
 import logging
+import os
 import textwrap
 import requests
 
 logger = logging.getLogger(__name__)
 
+# Check if we should use LiteLLM Gateway
+_USE_LLM_GATEWAY = os.getenv("LLM_PROVIDER", "lmstudio").lower() not in ("lmstudio", "")
+
 
 class SupportQAService:
     """
     Service de réécriture des emails de support en fiches Q/R structurées.
-    Utilise LM Studio (API chat/completions) via les paramètres de Config.
+    Utilise LM Studio ou LiteLLM Gateway selon la configuration.
     """
 
     def __init__(self, config):
@@ -19,6 +23,13 @@ class SupportQAService:
                 "Aucun prompt support QA trouvé, utilisation du prompt par défaut embarqué."
             )
             self.prompt = self._default_prompt()
+        
+        # Initialize LLM Client for gateway providers
+        self.llm_client = None
+        if _USE_LLM_GATEWAY:
+            from services.llm_client import get_llm_client
+            self.llm_client = get_llm_client(config)
+            logger.info(f"LLMClient initialisé pour SupportQA (provider: {os.getenv('LLM_PROVIDER')})")
 
     def rewrite_to_qa(self, subject: str, sender: str, raw_body: str) -> str:
         """
@@ -59,35 +70,44 @@ class SupportQAService:
         """
         ).strip()
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config.ai_api_key}",
-        }
-
-        payload = {
-            "model": self.config.ai_model_name,
-            "messages": [
-                {"role": "system", "content": self.prompt},
-                {"role": "user", "content": user_content},
-            ],
-            "temperature": self.config.support_qa_temperature,
-            "max_tokens": self.config.support_qa_max_tokens,
-        }
+        messages = [
+            {"role": "system", "content": self.prompt},
+            {"role": "user", "content": user_content},
+        ]
 
         try:
-            logger.info(
-                "🧠 Envoi de l'email de support à LM Studio pour réécriture Q/R..."
-            )
-            resp = requests.post(
-                self.config.ai_api_url,
-                headers=headers,
-                json=payload,
-                timeout=self.config.llm_timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            content = data["choices"][0]["message"]["content"]
+            logger.info("🧠 Envoi de l'email de support au LLM pour réécriture Q/R...")
+            
+            # Use LLMClient if gateway is enabled
+            if self.llm_client:
+                content = self.llm_client.chat(
+                    messages=messages,
+                    temperature=self.config.support_qa_temperature,
+                    max_tokens=self.config.support_qa_max_tokens,
+                    timeout=self.config.llm_timeout,
+                )
+            else:
+                # Direct HTTP for LM Studio
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.config.ai_api_key}",
+                }
+                payload = {
+                    "model": self.config.ai_model_name,
+                    "messages": messages,
+                    "temperature": self.config.support_qa_temperature,
+                    "max_tokens": self.config.support_qa_max_tokens,
+                }
+                resp = requests.post(
+                    self.config.ai_api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=self.config.llm_timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+            
             logger.info("✅ Réécriture Q/R support reçue.")
             return content
 
@@ -181,33 +201,44 @@ class SupportQAService:
         """
         ).strip()
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config.ai_api_key}",
-        }
-
-        payload = {
-            "model": self.config.ai_model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            "temperature": 0.1,  # Faible pour cohérence
-            "max_tokens": self.config.summary_max_tokens,
-        }
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
 
         try:
-            logger.info("📝 Génération résumé court de l'email via LM Studio...")
-            resp = requests.post(
-                self.config.ai_api_url,
-                headers=headers,
-                json=payload,
-                timeout=self.config.llm_timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            summary = data["choices"][0]["message"]["content"].strip()
+            logger.info("📝 Génération résumé court de l'email...")
+            
+            # Use LLMClient if gateway is enabled
+            if self.llm_client:
+                summary = self.llm_client.chat(
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=self.config.summary_max_tokens,
+                    timeout=self.config.llm_timeout,
+                )
+            else:
+                # Direct HTTP for LM Studio
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.config.ai_api_key}",
+                }
+                payload = {
+                    "model": self.config.ai_model_name,
+                    "messages": messages,
+                    "temperature": 0.1,
+                    "max_tokens": self.config.summary_max_tokens,
+                }
+                resp = requests.post(
+                    self.config.ai_api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=self.config.llm_timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                summary = data["choices"][0]["message"]["content"].strip()
+            
             logger.info(f"✅ Résumé généré : {summary[:50]}...")
             return summary
 

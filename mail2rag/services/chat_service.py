@@ -1,3 +1,4 @@
+import os
 import re
 import time
 from typing import Callable, List, Dict, Any, Tuple
@@ -11,6 +12,9 @@ from services.router import RouterService
 from services.cleaner import CleanerService
 from services.email_renderer import EmailRenderer
 from services.utils import sanitize_filename
+
+# Check if we should use LiteLLM Gateway
+_USE_LLM_GATEWAY = os.getenv("LLM_PROVIDER", "lmstudio").lower() not in ("lmstudio", "")
 
 
 class ChatService:
@@ -35,6 +39,13 @@ class ChatService:
         self.cleaner = cleaner
         self.email_renderer = email_renderer
         self.get_secure_id = get_secure_id
+        
+        # Initialize LLM Client for gateway providers
+        self.llm_client = None
+        if _USE_LLM_GATEWAY:
+            from services.llm_client import get_llm_client
+            self.llm_client = get_llm_client(config)
+            logger.info(f"LLMClient initialisé pour ChatService (provider: {os.getenv('LLM_PROVIDER')})")
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -304,7 +315,7 @@ class ChatService:
         workspace: str,
         context_text: str,
     ) -> str:
-        """Appelle le LLM (LM Studio) pour générer une réponse à partir du contexte."""
+        """Appelle le LLM pour générer une réponse à partir du contexte."""
         try:
             system_prompt = (
                 self.config.workspace_prompts.get(workspace)
@@ -317,11 +328,9 @@ class ChatService:
             )
             
             # Limiter le contexte pour éviter les dépassements de tokens
-            # Estimation: ~2 caractères = 1 token (conservateur pour le français avec accents)
-            # Réserve aussi ~2000 tokens pour system prompt + question + réponse
             max_context_tokens = getattr(self.config, "llm_max_context_tokens", 6000)
-            effective_context_tokens = max(max_context_tokens - 2000, 2000)  # Réserve 2000 tokens
-            max_context_chars = effective_context_tokens * 2  # 2 chars/token (très conservateur)
+            effective_context_tokens = max(max_context_tokens - 2000, 2000)
+            max_context_chars = effective_context_tokens * 2
             
             if len(context_text) > max_context_chars:
                 self.logger.warning(
@@ -336,12 +345,31 @@ class ChatService:
                 f"RÉPONSE:"
             )
 
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            # Use LLMClient if gateway is enabled
+            if self.llm_client:
+                self.logger.debug("Appel LLM via Gateway")
+                content = self.llm_client.chat(
+                    messages=messages,
+                    temperature=self.config.default_llm_temperature,
+                    max_tokens=1000,
+                    timeout=self.config.llm_timeout,
+                )
+                
+                if not content:
+                    return self.config.default_refusal_response or (
+                        "Je n'ai pas pu générer de réponse à partir du contexte."
+                    )
+                return content
+            
+            # Direct HTTP for LM Studio
             llm_payload: Dict[str, Any] = {
                 "model": self.config.ai_model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                "messages": messages,
                 "temperature": self.config.default_llm_temperature,
                 "max_tokens": 1000,
             }
@@ -353,7 +381,6 @@ class ChatService:
                 timeout=self.config.llm_timeout,
             )
             
-            # Log détaillé en cas d'erreur
             if llm_resp.status_code != 200:
                 self.logger.error(
                     "Erreur LLM (HTTP %d): %s",
