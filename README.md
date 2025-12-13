@@ -17,13 +17,13 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.9.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.10.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
   <img src="https://img.shields.io/badge/Qdrant-Vector_DB-FF6B6B" alt="Qdrant"/>
   <img src="https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit"/>
-  <img src="https://img.shields.io/badge/LM_Studio-Local_LLM-purple" alt="LM Studio"/>
+  <img src="https://img.shields.io/badge/LiteLLM-Multi_Provider-purple" alt="LiteLLM"/>
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"/>
 </p>
 
@@ -38,7 +38,7 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.9.0**: New **Support Draft Mode** - Auto-generate response drafts for support teams!
+> 🆕 **v3.10.0**: **LiteLLM Gateway** - Support for 7 LLM providers (LM Studio, OpenAI, Anthropic, Groq, Mistral, Gemini, Ollama)!
 
 ---
 
@@ -160,6 +160,26 @@ Automatically generate response drafts for support teams:
 }
 ```
 
+### 🔌 LLM Provider Gateway (NEW in v3.10.0)
+
+Use **any LLM provider** without code changes:
+
+| Provider | Type | Chat | Vision | Embeddings |
+|----------|------|------|--------|------------|
+| **LM Studio** | Local (default) | ✅ | ✅ | ✅ |
+| **Ollama** | Local | ✅ | ✅ | ✅ |
+| **OpenAI** | Cloud | ✅ | ✅ | ✅ |
+| **Anthropic** | Cloud | ✅ | ✅ | ❌ |
+| **Groq** | Cloud (free) | ✅ | ✅ | ❌ |
+| **Mistral** | Cloud (EU) | ✅ | ✅ | ✅ |
+| **Gemini** | Cloud (free) | ✅ | ✅ | ✅ |
+
+```bash
+# Switch provider in .env
+LLM_PROVIDER=groq  # or openai, anthropic, mistral, gemini, ollama
+GROQ_API_KEY=gsk_...
+```
+
 ---
 
 ## 🏗️ Architecture
@@ -264,7 +284,7 @@ mail2rag/
 │
 ├── mail2rag/                    # Main email processing app
 │   ├── app.py                   # Application entry point
-│   ├── version.py               # Version: 3.8.2
+│   ├── version.py               # Version: 3.10.0
 │   ├── config.py                # Configuration management
 │   ├── services/
 │   │   ├── ingestion_service.py # Document ingestion
@@ -284,6 +304,7 @@ mail2rag/
 │       ├── chunker.py           # Intelligent text chunking
 │       ├── local_reranker.py    # Cross-encoder reranker
 │       ├── embeddings.py        # LM Studio embeddings
+│       ├── llm_gateway.py       # LiteLLM multi-provider gateway
 │       ├── vectordb.py          # Qdrant operations
 │       └── pipeline.py          # Search orchestration
 │
@@ -348,6 +369,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] Multi-collection support
 - [x] Dynamic context management (LLM token limits)
 - [x] Document/collection deletion
+- [x] Support Draft Mode
+- [x] LiteLLM Gateway (7 providers)
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -499,6 +522,8 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] Support multi-collections
 - [x] Gestion dynamique du contexte LLM
 - [x] Suppression documents/collections
+- [x] Mode Brouillon Support
+- [x] LiteLLM Gateway (7 providers)
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 
