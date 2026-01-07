@@ -1,28 +1,28 @@
-# Règles du Projet Mail2Rag
+# Mail2Rag Project Rules
 
 ## Architecture (Python & Docker)
 
-- **Microservices** : Architecture Docker Compose stricte.
-  - `mail2rag` : App principale (Traitement emails).
-  - `ragproxy` : API FastAPI (RAG & Embeddings).
-  - `streamlit_admin` : Dashboard UI.
-- **État** : Tout état persistant DOIT être dans `/state` ou des volumes Docker nommés.
-- **Logs** : Utiliser `logging` (Python) ou stdout/stderr pour que Docker capture les logs.
+- **Microservices**: Strict Docker Compose architecture.
+  - `mail2rag`: Main App (Email processing).
+  - `ragproxy`: FastAPI API (RAG & Embeddings).
+  - `streamlit_admin`: Dashboard UI.
+- **State**: All persistent state MUST be in `/state` or named Docker volumes.
+- **Logs**: Use `logging` (Python) or stdout/stderr for Docker capture.
 
 ## Python Standards
 
-- **Versions** : Python 3.10+. Utiliser les `type hints` partout.
-- **Dépendances** : Si ajout de lib, mettre à jour `requirements.txt` dans le sous-dossier concerné (`mail2rag/`, `ragproxy/`, etc.).
-- **Async** : `ragproxy` (FastAPI) est asynchrone, utiliser `async/await` correctement.
+- **Versions**: Python 3.10+. Use `type hints` everywhere.
+- **Dependencies**: When adding a lib, update `requirements.txt` in the relevant subfolder (`mail2rag/`, `ragproxy/`, etc.).
+- **Async**: `ragproxy` (FastAPI) is asynchronous; use `async/await` correctly.
 
 ## Deployment & Ops
 
-- **Docker** : Toujours tester via `docker-compose up --build` après modification.
-- **Env Vars** : JAMAIS de secrets en dur. Utiliser `.env` et mettre à jour `.env.example` si nouvelle variable.
-- **Nettoyage** : Préférer `docker-compose down` pour éteindre proprement.
+- **Docker**: Always test via `docker-compose up --build` after modification.
+- **Env Vars**: NEVER hardcode secrets. Use `.env` and update `.env.example` if a new variable is added.
+- **Cleanup**: Prefer `docker-compose down` to shut down cleanly.
 
 ## Testing & Validation
 
-- **RAG Proxy** : Tester les endpoints via Swagger (`localhost:8000/docs`).
-- **UI** : Vérifier le rendu Streamlit (`localhost:8501`).
-- **Emails** : Utiliser `send_test_email.py` pour valider le flux d'ingestion.
+- **RAG Proxy**: Test endpoints via Swagger (`localhost:8000/docs`).
+- **UI**: Verify Streamlit rendering (`localhost:8501`).
+- **Emails**: Use `send_test_email.py` to validate the ingestion flow.
