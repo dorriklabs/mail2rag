@@ -75,9 +75,23 @@ class RAGPipeline:
         if workspace and "," in workspace:
             collections = [w.strip() for w in workspace.split(",") if w.strip()]
         else:
-            collections = [workspace]
+            collections = [workspace] if workspace else []
             
+        final_collections = []
         for coll in collections:
+            if coll == "*":
+                try:
+                    all_colls = self.vdb.list_collections()
+                    final_collections.extend(all_colls)
+                except Exception as e:
+                    logger.error(f"Failed to list collections for wildcard search: {e}")
+            else:
+                final_collections.append(coll)
+                
+        # Remove duplicates
+        final_collections = list(dict.fromkeys(final_collections))
+            
+        for coll in final_collections:
             candidates = self.vdb.search(
                 query_text=query,
                 query_vector=query_vector,

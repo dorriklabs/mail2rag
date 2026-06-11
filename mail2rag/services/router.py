@@ -62,6 +62,9 @@ class RouterService:
         """
         if not text:
             return self.config.default_workspace
+            
+        if text == "*":
+            return "*"
 
         # 1. Minuscules + trim
         text = text.lower().strip()
@@ -258,14 +261,32 @@ class RouterService:
             allowed_slugs = [self._slugify(w) for w in allowed_ws]
 
             if not getattr(self.config, "enforce_strict_routing", False):
-                # Mode permissif : on accepte tout
-                target_ws_list = requested_slugs
+                # Mode permissif : on accepte tout et on gère l'étoile
+                target_ws_list = []
+                for req_slug, req_raw in zip(requested_slugs, requested_list):
+                    if req_raw == "*":
+                        if "*" in allowed_ws:
+                            target_ws_list.append("*")
+                        else:
+                            target_ws_list.append(default_slug)
+                            target_ws_list.extend([w for w in allowed_slugs if w != "*"])
+                    else:
+                        target_ws_list.append(req_slug)
+                        
+                target_ws_list = list(dict.fromkeys(target_ws_list)) # deduplicate
                 logger.debug("-> Routage explicite (Mode permissif) : '%s'", target_ws_list)
             else:
                 # Mode strict : on vérifie chaque workspace demandé
                 valid_slugs = []
                 for req_slug, req_raw in zip(requested_slugs, requested_list):
-                    if (req_slug == default_slug) or (req_slug in allowed_slugs) or ("*" in allowed_ws):
+                    if req_raw == "*":
+                        if "*" in allowed_ws:
+                            valid_slugs.append("*")
+                        else:
+                            # S'il demande * mais n'a pas l'ACL suprême, on lui donne tous ses accès spécifiques
+                            valid_slugs.append(default_slug)
+                            valid_slugs.extend([w for w in allowed_slugs if w != "*"])
+                    elif (req_slug == default_slug) or (req_slug in allowed_slugs) or ("*" in allowed_ws):
                         valid_slugs.append(req_slug)
                     else:
                         rejected_workspaces.append(req_raw)
@@ -275,7 +296,7 @@ class RouterService:
                         )
                 
                 if valid_slugs:
-                    target_ws_list = valid_slugs
+                    target_ws_list = list(dict.fromkeys(valid_slugs)) # deduplicate
                     logger.debug("-> Routage explicite (Mode strict) AUTORISÉ : '%s'", target_ws_list)
                 else:
                     logger.warning("Aucun workspace autorisé. Redirection vers '%s'.", default_ws)
