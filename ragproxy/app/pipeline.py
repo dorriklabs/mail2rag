@@ -90,15 +90,44 @@ class RAGPipeline:
                 
         # Remove duplicates
         final_collections = list(dict.fromkeys(final_collections))
+        
+        # -----------------------------------------------------------------
+        # Optimisation : Limite dynamique & Multi-Threading
+        # -----------------------------------------------------------------
+        import concurrent.futures
+        
+        # Limite de sécurité absolue pour le Reranker (ex: 150 docs max)
+        MAX_TOTAL_DOCS = 150
+        num_colls = len(final_collections)
+        
+        if num_colls > 0:
+            # Si beaucoup de collections, on réduit le top_k par collection
+            dynamic_top_k = max(3, min(top_k, MAX_TOTAL_DOCS // num_colls))
+        else:
+            dynamic_top_k = top_k
             
-        for coll in final_collections:
-            candidates = self.vdb.search(
-                query_text=query,
-                query_vector=query_vector,
-                limit=top_k,
-                collection_name=coll,  # None = default collection
-            )
-            merged_candidates.extend(candidates)
+        merged_candidates = []
+        
+        # Parallélisation des appels Qdrant (Max 20 threads)
+        max_threads = max(1, min(20, num_colls))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+            future_to_coll = {
+                executor.submit(
+                    self.vdb.search,
+                    query_text=query,
+                    query_vector=query_vector,
+                    limit=dynamic_top_k,
+                    collection_name=coll,
+                ): coll for coll in final_collections
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_coll):
+                coll = future_to_coll[future]
+                try:
+                    candidates = future.result()
+                    merged_candidates.extend(candidates)
+                except Exception as e:
+                    logger.error(f"Concurrent search failed for collection {coll}: {e}")
             
         debug_info["timings"]["hybrid_search"] = round(time.time() - t0, 3)
         debug_info["counts"]["merged_candidates"] = len(merged_candidates)
