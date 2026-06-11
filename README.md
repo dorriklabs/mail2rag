@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.15.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.16.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -172,6 +172,25 @@ ENABLE_SEMANTIC_DISPATCH=true
 SEMANTIC_DISPATCH_MAPPING=Urbanisme:urba@mairie.fr,Etat-Civil:etat-civil@mairie.fr,Police:police@mairie.fr
 ```
 *(If the AI doesn't know where to route the email, it safely leaves it in the INBOX)*
+
+### 🔒 Strict Routing & Access Control (ACL) (NEW in v3.16.0)
+
+Enforce strict security boundaries between workspaces. When enabled, users cannot bypass their assigned workspace by typing `Workspace: xxx` in their emails, **unless explicitly allowed via ACLs**.
+
+**Configuration:** Enable in `.env`:
+```env
+ENFORCE_STRICT_ROUTING=true
+```
+
+**ACL Definition (`routing.json`):**
+```json
+{
+    "type": "sender",
+    "value": "mayor@city.gov",
+    "workspace": "public_workspace",
+    "allowed_workspaces": ["*", "hr_workspace"]
+}
+```
 
 ### 🔌 LLM Provider Gateway (NEW in v3.10.0)
 
@@ -501,6 +520,25 @@ ENABLE_SEMANTIC_DISPATCH=true
 SEMANTIC_DISPATCH_MAPPING=Urbanisme:urba@mairie.fr,Etat-Civil:etat-civil@mairie.fr
 ```
 *(Si l'IA ne sait pas où classer l'e-mail, elle le laisse en sécurité dans l'INBOX)*
+
+### 🔒 Routage Strict & Contrôle d'Accès (ACL) (NOUVEAU v3.16.0)
+
+Garantissez le cloisonnement strict de vos données. Une fois activé, les utilisateurs ne peuvent plus contourner le routage automatique en tapant `Workspace: xxx` dans leurs e-mails, **sauf s'ils y sont explicitement autorisés via des ACL**.
+
+**Configuration :** Activer dans le `.env` :
+```env
+ENFORCE_STRICT_ROUTING=true
+```
+
+**Définition des ACL (`routing.json`) :**
+```json
+{
+    "type": "sender",
+    "value": "maire@mairie.fr",
+    "workspace": "public_workspace",
+    "allowed_workspaces": ["*", "rh_workspace"]
+}
+```
 
 ---
 
