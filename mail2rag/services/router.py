@@ -176,10 +176,10 @@ class RouterService:
         """
         Détermine le workspace cible pour un email donné.
 
-        L'algorithme est :
-        1. Chercher une mention explicite dans le corps (Workspace:/Dossier:)
-        2. Sinon, appliquer les règles définies dans routing.json
-        3. Sinon, utiliser DEFAULT_WORKSPACE
+        L'algorithme avec ACL :
+        1. Appliquer les règles définies dans routing.json pour trouver le workspace par défaut et les allowed_workspaces.
+        2. Chercher une mention explicite dans le corps (Workspace:/Dossier:)
+        3. Valider la permission si ENFORCE_STRICT_ROUTING=true.
 
         Le résultat est toujours renvoyé sous forme de slug.
         """
@@ -189,43 +189,19 @@ class RouterService:
 
         logger.debug("Routage pour Sender='%s', Subject='%s'", sender, subject)
 
-        # Versions normalisées (minuscules) pour les comparaisons
         sender_l = sender.lower()
         subject_l = subject.lower()
         body_l = body.lower()
         sender_domain = self._extract_sender_domain(sender)
 
-        # Workspace de travail (raw, non slugifié)
-        raw_ws: str = self.config.default_workspace
+        # ------------------------------------------------------------------
+        # 1. Règles automatiques (Détermination du contexte utilisateur)
+        # ------------------------------------------------------------------
+        default_ws = self.config.default_workspace
+        allowed_ws = []
+        matched_rule = None
 
-        # ------------------------------------------------------------------
-        # 1. Mention explicite dans le corps
-        # ------------------------------------------------------------------
-        # Exemple de ligne :
-        #   Workspace: projet_x
-        #   Dossier : Client Y
-        for line in body.splitlines():
-            clean_line = line.strip()
-            if not clean_line:
-                continue
-
-            # Regex souple (avec ou sans espace avant les deux-points)
-            match = re.match(
-                r"^(?:Dossier|Workspace)\s*:\s*(.+)",
-                clean_line,
-                re.IGNORECASE,
-            )
-            if match:
-                raw_ws_candidate = match.group(1).strip()
-                if raw_ws_candidate:
-                    raw_ws = raw_ws_candidate
-                    logger.debug("-> Routage explicite (CORPS) : '%s'", raw_ws)
-                    break
-
-        # ------------------------------------------------------------------
-        # 2. Règles automatiques (si pas de workspace explicite)
-        # ------------------------------------------------------------------
-        if raw_ws == self.config.default_workspace and self.rules:
+        if self.rules:
             for rule in self.rules:
                 workspace = (rule.get("workspace") or "").strip()
                 if not workspace:
@@ -233,36 +209,70 @@ class RouterService:
 
                 try:
                     if self._match_rule(
-                        rule,
-                        sender,
-                        subject,
-                        body,
-                        sender_l,
-                        subject_l,
-                        body_l,
-                        sender_domain,
+                        rule, sender, subject, body, sender_l, subject_l, body_l, sender_domain
                     ):
-                        raw_ws = workspace
+                        default_ws = workspace
+                        # Extraire les ACLs s'ils existent
+                        allowed_ws = rule.get("allowed_workspaces", [])
+                        if not isinstance(allowed_ws, list):
+                            allowed_ws = [str(allowed_ws)]
+                        matched_rule = rule
                         logger.debug(
-                            "-> Règle appliquée (%s='%s') -> %s",
-                            rule.get("type"),
-                            rule.get("value"),
-                            raw_ws,
+                            "-> Règle appliquée (%s='%s') -> par défaut: %s, allowed: %s",
+                            rule.get("type"), rule.get("value"), default_ws, allowed_ws
                         )
                         break
                 except Exception as e:
-                    logger.error(
-                        "Erreur lors de l'application de la règle %s : %s",
-                        rule,
-                        e,
-                    )
+                    logger.error("Erreur lors de l'application de la règle %s : %s", rule, e)
                     continue
 
+        target_ws = default_ws
+
         # ------------------------------------------------------------------
-        # 3. Slugification finale
+        # 2. Mention explicite dans le corps
         # ------------------------------------------------------------------
-        final_slug = self._slugify(raw_ws)
-        if final_slug != raw_ws:
-            logger.debug("-> Slugifié : '%s' -> '%s'", raw_ws, final_slug)
+        requested_ws = None
+        for line in body.splitlines():
+            clean_line = line.strip()
+            if not clean_line:
+                continue
+
+            match = re.match(r"^(?:Dossier|Workspace|Collection)\s*:\s*(.+)", clean_line, re.IGNORECASE)
+            if match:
+                candidate = match.group(1).strip()
+                if candidate:
+                    requested_ws = candidate
+                    break
+
+        # ------------------------------------------------------------------
+        # 3. Validation ACL (Strict Routing)
+        # ------------------------------------------------------------------
+        if requested_ws:
+            requested_slug = self._slugify(requested_ws)
+            default_slug = self._slugify(default_ws)
+            allowed_slugs = [self._slugify(w) for w in allowed_ws]
+
+            if not getattr(self.config, "enforce_strict_routing", False):
+                # Mode permissif : on accepte toujours
+                target_ws = requested_ws
+                logger.debug("-> Routage explicite (Mode permissif) : '%s'", target_ws)
+            else:
+                # Mode strict : on vérifie les ACLs
+                if (requested_slug == default_slug) or (requested_slug in allowed_slugs) or ("*" in allowed_ws):
+                    target_ws = requested_ws
+                    logger.debug("-> Routage explicite (Mode strict) AUTORISÉ : '%s'", target_ws)
+                else:
+                    logger.warning(
+                        "⚠️ Accès refusé au workspace '%s' pour '%s'. Redirection vers '%s'.",
+                        requested_ws, sender, default_ws
+                    )
+                    target_ws = default_ws
+
+        # ------------------------------------------------------------------
+        # 4. Slugification finale
+        # ------------------------------------------------------------------
+        final_slug = self._slugify(target_ws)
+        if final_slug != target_ws:
+            logger.debug("-> Slugifié : '%s' -> '%s'", target_ws, final_slug)
 
         return final_slug
