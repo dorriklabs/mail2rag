@@ -142,43 +142,11 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
 
     def trigger_bm25_rebuild(workspace: str = None) -> None:
         """
-        Déclenche la reconstruction de l'index BM25 via le RAG Proxy, si activé.
-        Si workspace est fourni, reconstruit uniquement pour ce workspace.
-        Sinon, tente une reconstruction globale ou intelligente.
+        Obsolète : Le BM25 est maintenant natif dans Qdrant via les vecteurs sparses (SPLADE/BM25).
+        Plus besoin de reconstruction manuelle.
         """
-        if not config.auto_rebuild_bm25:
-            logger.debug("AUTO_REBUILD_BM25 désactivé, aucun rebuild BM25 lancé.")
-            return
-
-        base = config.rag_proxy_url.rstrip("/")
-        
-        if workspace:
-            # Endpoint spécifique au workspace
-            candidates = [f"/admin/build-bm25/{workspace}"]
-        else:
-            # Endpoints globaux
-            candidates = ["/admin/auto-rebuild-bm25", "/admin/rebuild-all-bm25"]
-
-        for path in candidates:
-            url = f"{base}{path}"
-            try:
-                logger.info("Déclenchement rebuild BM25 via %s ...", url)
-                resp = requests.post(url, timeout=config.rag_proxy_timeout)
-                if resp.ok:
-                    logger.info("✅ Rebuild BM25 déclenché avec succès via %s", url)
-                    return
-                logger.warning(
-                    "Endpoint %s a répondu %s : %s",
-                    url,
-                    resp.status_code,
-                    resp.text[:300],
-                )
-            except Exception as e:
-                logger.warning(
-                    "Erreur lors de l'appel rebuild BM25 (%s): %s", url, e
-                )
-
-        logger.error("Impossible de déclencher le rebuild BM25 sur les endpoints connus.")
+        logger.debug("Rebuild BM25 ignoré : Le BM25 est géré nativement par Qdrant en temps réel.")
+        return
 
     ingestion_service = IngestionService(
         config=config,
