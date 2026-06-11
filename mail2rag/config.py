@@ -143,6 +143,11 @@ class Config:
         self.log_path = Path(log_path_str)
 
         # ------------------------------------------------------------------
+        # SECURITY & ROUTING
+        # ------------------------------------------------------------------
+        self.enforce_strict_routing = self._get_bool("ENFORCE_STRICT_ROUTING", False)
+
+        # ------------------------------------------------------------------
         # WORKERS
         # ------------------------------------------------------------------
         self.worker_count = int(os.getenv("WORKER_COUNT", "2"))

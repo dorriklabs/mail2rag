@@ -66,11 +66,15 @@ class ChatService:
             cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")
             
-            # Extraction collection spécifique du corps (syntaxe: dossier : xxx ou collection : xxx)
-            collection_to_search = self._extract_collection_from_body(query_content, workspace)
-            
-            # Nettoyer la query en retirant la ligne de collection si présente
-            query_content_cleaned = self._remove_collection_line(query_content)
+            if self.config.enforce_strict_routing:
+                collection_to_search = workspace
+                query_content_cleaned = query_content
+                self.logger.debug("Strict routing activé, extraction du workspace ignorée.")
+            else:
+                # Extraction collection spécifique du corps (syntaxe: dossier : xxx ou collection : xxx)
+                collection_to_search = self._extract_collection_from_body(query_content, workspace)
+                # Nettoyer la query en retirant la ligne de collection si présente
+                query_content_cleaned = self._remove_collection_line(query_content)
 
             query_message = f"Sujet : {clean_subject}\n\nQuestion :\n{query_content_cleaned}"
 
