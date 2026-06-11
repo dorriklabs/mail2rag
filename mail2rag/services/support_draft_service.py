@@ -130,7 +130,7 @@ class SupportDraftService:
             )
             
             # 2. Extraire et nettoyer la question
-            cleaned_body = self.cleaner.clean_body(email.body)
+            cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query = self._build_query(email.subject, cleaned_body)
             
             # 3. Rechercher dans la KB

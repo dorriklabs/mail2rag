@@ -130,7 +130,7 @@ class IngestionService:
         use_qa_rewrite = bool(ws_cfg.get("qa_rewrite", False))
 
         if not use_qa_rewrite:
-            return self.cleaner.clean_body(email.body)
+            return self.cleaner.clean_body(email.body, subject=email.subject)
 
         self.logger.info(
             "🧠 Réécriture Q/R support activée pour UID %s dans workspace '%s'",
@@ -151,7 +151,7 @@ class IngestionService:
                 e,
                 exc_info=True,
             )
-            return self.cleaner.clean_body(email.body)
+            return self.cleaner.clean_body(email.body, subject=email.subject)
 
     def _build_email_summary(
         self,

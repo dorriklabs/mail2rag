@@ -17,11 +17,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.12.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.14.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/Qdrant-Vector_DB-FF6B6B" alt="Qdrant"/>
+  <img src="https://img.shields.io/badge/Qdrant-v1.10+-FF6B6B" alt="Qdrant"/>
   <img src="https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit"/>
   <img src="https://img.shields.io/badge/LiteLLM-Multi_Provider-purple" alt="LiteLLM"/>
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"/>
@@ -38,7 +38,7 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.12.0**: **Task Scheduler** for background jobs and **Manual Upload**. Plus LiteLLM Gateway with 7 providers!
+> 🆕 **v3.14.0**: **Native Qdrant Hybrid Search (Dense+Sparse)** and **Parent-Child Context Retrieval**!
 
 ---
 
@@ -91,8 +91,9 @@ open http://localhost:8501
 <td width="50%" valign="top">
 
 ### 🔍 Hybrid Search
-- Vector similarity (Qdrant)
-- BM25 keyword matching
+- Native Qdrant Dense Vectors
+- Native Qdrant Sparse Vectors (FastEmbed)
+- Parent-Child Context Retrieval (Sliding window)
 - Cross-encoder reranking (local)
 - Multi-collection support
 
@@ -115,7 +116,7 @@ Subject: Chat: What are the Q4 highlights?
 | **Documents** | Browse, search, filter, delete indexed docs |
 | **Upload** | Manual document upload and ingestion |
 | **Chat** | Test RAG queries directly with sources display |
-| **Admin** | Rebuild BM25, delete collections, manage system |
+| **Admin** | Manage collections, system monitoring |
 
 ### 🎫 Support Draft Mode (NEW in v3.9.0)
 
@@ -185,7 +186,6 @@ GROQ_API_KEY=gsk_...
 
 A robust scheduling manager for background tasks:
 - Automated email ingestion at configurable intervals
-- Scheduled BM25 index rebuilding
 - Periodic vector database optimization
 
 ---
@@ -208,7 +208,7 @@ A robust scheduling manager for background tasks:
 │     TIKA      │                 │     RAG PROXY      │
 │ • OCR         │                 │ • Chunking         │
 │ • EXIF        │                 │ • Embeddings       │
-│ • Text Extract│                 │ • BM25 Index       │
+│ • Text Extract│                 │ • Sparse Vectors   │
 └───────────────┘                 │ • Cross-Encoder    │
                                   │ • Chat Generation  │
                                   └─────────┬──────────┘
@@ -230,7 +230,7 @@ A robust scheduling manager for background tasks:
 |---------|-------------|------|-------------|
 | **qdrant** | `qdrant/qdrant:latest` | 6333, 6334 | Vector database |
 | **tika** | `apache/tika:latest-full` | 9998 | Text extraction + OCR |
-| **rag_proxy** | Built locally | 8000 | FastAPI: chunking, embeddings, BM25, reranking, chat |
+| **rag_proxy** | Built locally | 8000 | FastAPI: chunking, embeddings, hybrid search, reranking, chat |
 | **mail2rag** | Built locally | - | Main email processing app |
 | **streamlit_admin** | Built locally | 8501 | Admin dashboard |
 | **archive_server** | `nginx:alpine` | 8080 | Static file server for archived documents |
@@ -263,7 +263,6 @@ EMBED_MODEL=text-embedding-bge-m3
 |----------|---------|-------------|
 | **Ingestion** |||
 | `USE_RAG_PROXY_FOR_SEARCH` | `true` | Enable hybrid search via RAG Proxy |
-| `AUTO_REBUILD_BM25` | `true` | Auto-update BM25 after ingestion |
 | `CHUNK_SIZE` | `800` | Text chunk size (chars) |
 | `CHUNK_OVERLAP` | `100` | Overlap between chunks |
 | **Search** |||
@@ -308,7 +307,6 @@ mail2rag/
 ├── ragproxy/                    # FastAPI RAG engine
 │   ├── main.py                  # FastAPI entry point
 │   └── app/
-│       ├── bm25.py              # BM25 keyword search
 │       ├── chunker.py           # Intelligent text chunking
 │       ├── local_reranker.py    # Cross-encoder reranker
 │       ├── embeddings.py        # LM Studio embeddings
@@ -337,12 +335,6 @@ docker-compose up -d
 docker-compose logs -f mail2rag
 docker-compose logs -f rag_proxy
 
-# Rebuild after code changes
-docker-compose up -d --build
-
-# Rebuild BM25 index for a collection
-curl -X POST "http://localhost:8000/rebuild-bm25?collection=default-workspace"
-
 # Check RAG Proxy health
 curl http://localhost:8000/health
 
@@ -356,9 +348,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 |----------|--------|-------------|
 | `/health` | GET | Health check |
 | `/ingest` | POST | Ingest document (chunking + embedding) |
-| `/search` | POST | Hybrid search (vector + BM25 + rerank) |
-| `/chat` | POST | RAG chat generation |
-| `/rebuild-bm25` | POST | Rebuild BM25 index |
+| `/search` | POST | Hybrid search (vector + sparse + rerank) |
 | `/collections` | GET | List all collections |
 | `/docs/{id}` | DELETE | Delete document |
 
@@ -369,8 +359,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 ## 🗺️ Roadmap
 
 - [x] Streamlit Admin Dashboard
-- [x] Hybrid search (Vector + BM25)
-- [x] Local cross-encoder reranker
+- [x] Native Qdrant Hybrid search (Dense + Sparse)
+- [x] Parent-Child Context Retrieval
 - [x] Apache Tika integration
 - [x] EXIF metadata extraction
 - [x] Vision AI for images/PDFs
@@ -413,7 +403,7 @@ Mail2RAG surveille votre boîte mail et **automatiquement** :
 2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking Cross-Encoder)
 3. 💬 Répond aux questions par email ou via le dashboard Streamlit
 
-> 🆕 **v3.12.0** : **Planificateur de tâches** en arrière-plan et **Page d'upload manuel** dans le dashboard !
+> 🆕 **v3.14.0** : **Recherche Hybride Qdrant Native** et **Contexte Parent-Enfant** !
 
 ---
 
@@ -460,8 +450,9 @@ open http://localhost:8501
 | **Tesseract** | OCR via Tika |
 
 ### 🔍 Recherche Hybride
-- Similarité vectorielle (Qdrant)
-- Correspondance mots-clés BM25
+- Similarité vectorielle Dense (Qdrant)
+- Vecteurs Creux (Sparse Vectors / FastEmbed) natifs
+- Parent-Child Context Retrieval (Extension de contexte)
 - Reranking cross-encoder local
 - Support multi-collections
 
@@ -482,7 +473,7 @@ Sujet: Chat: Quels sont les points clés du T4 ?
 |---------|------|-------------|
 | **qdrant** | 6333 | Base de données vectorielle |
 | **tika** | 9998 | Extraction texte + OCR |
-| **rag_proxy** | 8000 | FastAPI : chunking, embeddings, BM25, reranking, chat |
+| **rag_proxy** | 8000 | FastAPI : chunking, embeddings, recherche hybride, reranking, chat |
 | **mail2rag** | - | Application principale de traitement email |
 | **streamlit_admin** | 8501 | Dashboard d'administration |
 | **archive_server** | 8080 | Serveur de fichiers archivés |
@@ -512,7 +503,6 @@ EMBED_MODEL=text-embedding-bge-m3
 | Variable | Défaut | Description |
 |----------|--------|-------------|
 | `USE_RAG_PROXY_FOR_SEARCH` | `true` | Recherche hybride via RAG Proxy |
-| `AUTO_REBUILD_BM25` | `true` | Rebuild auto après ingestion |
 | `CHUNK_SIZE` | `800` | Taille des chunks (caractères) |
 | `USE_LOCAL_RERANKER` | `true` | Activer le reranker cross-encoder |
 | `TIKA_ENABLE` | `true` | Activer Apache Tika |
@@ -526,7 +516,8 @@ EMBED_MODEL=text-embedding-bge-m3
 ## 🗺️ Feuille de Route
 
 - [x] Dashboard Admin Streamlit
-- [x] Recherche hybride (Vecteur + BM25)
+- [x] Recherche Hybride Native Qdrant (Dense + Sparse)
+- [x] Parent-Child Context Retrieval
 - [x] Reranker cross-encoder local
 - [x] Intégration Apache Tika
 - [x] Extraction métadonnées EXIF

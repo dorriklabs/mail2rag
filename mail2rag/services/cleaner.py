@@ -126,17 +126,24 @@ class CleanerService:
 
         return "\n".join(cleaned_lines)
 
-    def clean_body(self, text: str) -> str:
+    def clean_body(self, text: str, subject: str = "") -> str:
         """Nettoie le corps du mail (reply chain, signatures, disclaimers, quotes)."""
         if not text:
             return ""
+
+        is_forward = False
+        if subject:
+            subj_lower = subject.lower().strip()
+            if subj_lower.startswith(("fwd:", "fw:", "tr:", "transféré :", "[fwd:", "[tr:", "tr :")):
+                is_forward = True
 
         # Normalisation des retours à la ligne
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         original_len = len(text)
 
-        # 1. Couper l'historique (Reply) via détection de headers
-        text = self._strip_reply_history(text)
+        # 1. Couper l'historique (Reply) via détection de headers, SAUF si forward
+        if not is_forward:
+            text = self._strip_reply_history(text)
 
         # 2. Retirer les signatures (Cordialement, Best regards, etc.)
         text = self.regex_signatures.sub("", text)
@@ -147,8 +154,9 @@ class CleanerService:
         # 4. Nettoyage des footers mobiles (envoyé depuis mon iPhone / Android ...)
         text = self.regex_mobile_footers.sub("", text)
 
-        # 5. Supprimer les lignes citées (commençant par ">")
-        text = self._remove_quoted_lines(text)
+        # 5. Supprimer les lignes citées (commençant par ">"), SAUF si forward
+        if not is_forward:
+            text = self._remove_quoted_lines(text)
 
         # 6. Trim et réduction des multiples lignes vides
         text = text.strip()

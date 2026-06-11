@@ -63,7 +63,7 @@ class ChatService:
         try:
             workspace = self.router.determine_workspace(email.email_data)
 
-            cleaned_body = self.cleaner.clean_body(email.body)
+            cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")
             
             # Extraction collection spécifique du corps (syntaxe: dossier : xxx ou collection : xxx)
