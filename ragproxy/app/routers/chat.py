@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Chat"])
 
 # Pipeline instance (will be set by main.py)
-pipeline: RAGPipeline = None
+pipeline: RAGPipeline = None # type: ignore
 
 # Estimation: ~4 caractères par token (approximation pour le français)
 CHARS_PER_TOKEN = 4

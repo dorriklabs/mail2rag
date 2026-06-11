@@ -92,3 +92,17 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]] = []
     debug_info: Optional[Dict] = None
+
+# ---------------------------------------------------------------------------
+# Cron Scheduler
+# ---------------------------------------------------------------------------
+
+class CronConfigRequest(BaseModel):
+    task_name: str
+    active: bool
+    hour: str
+    minute: str
+
+class CronConfigResponse(BaseModel):
+    status: str
+    config: Dict[str, Any]

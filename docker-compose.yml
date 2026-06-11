@@ -69,6 +69,9 @@ services:
       REQUEST_TIMEOUT: "20"
     volumes:
       - bm25_data:/bm25
+      - mail2rag_archive:/archive
+      - ./scripts:/app/scripts:ro
+      - ./state:/app/state
     ports:
       - "8000:8000"
     depends_on:

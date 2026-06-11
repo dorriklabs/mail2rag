@@ -6,3 +6,4 @@ rank-bm25
 sentence-transformers
 pydantic
 litellm>=1.50.0
+apscheduler

@@ -3,7 +3,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 from qdrant_client import QdrantClient
 
@@ -17,7 +17,7 @@ class VectorDBProvider(ABC):
     """Interface générique pour toutes les bases de données vectorielles."""
     
     @abstractmethod
-    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
+    def search(self, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
         """Recherche les vecteurs les plus proches."""
         pass
 
@@ -90,7 +90,7 @@ class QdrantProvider(VectorDBProvider):
         self.collection_name = collection_name
         logger.info(f"Initialized QdrantProvider on {host}:{port} (collection: {collection_name})")
 
-    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
+    def search(self, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
         target_collection = collection_name or self.collection_name
         try:
             hits = self.client.query_points(
@@ -275,7 +275,7 @@ class QdrantProvider(VectorDBProvider):
         Returns:
             Nombre de documents supprimés
         """
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import Filter, FieldCondition, MatchValue, PointIdsList
         
         try:
             # Construire le filtre Qdrant
@@ -312,7 +312,7 @@ class QdrantProvider(VectorDBProvider):
             # Supprimer les points
             self.client.delete(
                 collection_name=collection_name,
-                points_selector=points_to_delete,
+                points_selector=PointIdsList(points=points_to_delete), # type: ignore
             )
             
             logger.info(f"Deleted {len(points_to_delete)} documents from '{collection_name}'")
@@ -333,7 +333,7 @@ class VectorDBService:
         self.provider: VectorDBProvider = QdrantProvider(host, port, collection_name)
         self.collection_name = collection_name
 
-    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
+    def search(self, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
         return self.provider.search(query_vector, limit, collection_name)
 
     def is_ready(self) -> bool:

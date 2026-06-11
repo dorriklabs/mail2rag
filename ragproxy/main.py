@@ -21,11 +21,21 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.scheduler_manager import scheduler_manager
+    scheduler_manager.start()
+    yield
+    scheduler_manager.shutdown()
+
 # Create FastAPI app
 app = FastAPI(
     title="RAG Proxy",
     description="Hybrid RAG search with Vector + BM25 + Reranking",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add authentication middleware if enabled

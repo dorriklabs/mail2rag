@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter
 
 from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
-from app.models import IngestRequest, IngestResponse
+from app.models import IngestRequest, IngestResponse, CronConfigRequest, CronConfigResponse
 from app.pipeline import RAGPipeline
 from app.chunker import TextChunker
 from app.vectordb import QdrantProvider
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 # Pipeline instance (will be set by main.py)
-pipeline: RAGPipeline = None
+pipeline: RAGPipeline = None # type: ignore
 
 
 def set_pipeline(p: RAGPipeline):
@@ -140,9 +140,8 @@ def delete_document(doc_id: str, collection: Optional[str] = None):
         for key in ["uid", "doc_id", "message_id"]:
             try:
                 count = pipeline.vdb.delete_by_metadata(
-                    key=key,
-                    value=doc_id,
                     collection_name=target_collection,
+                    metadata_filter={key: doc_id},
                 )
                 deleted_count += count
                 if count > 0:
@@ -277,3 +276,27 @@ def delete_collection(name: str):
             "collection": name,
             "message": str(e)
         }
+
+@router.get("/cron", response_model=CronConfigResponse)
+def get_cron_config():
+    """Get the current cron configuration."""
+    from app.scheduler_manager import scheduler_manager
+    config = scheduler_manager.get_config()
+    return CronConfigResponse(status="ok", config=config)
+
+@router.post("/cron", response_model=CronConfigResponse)
+def update_cron_config(req: CronConfigRequest):
+    """Update cron configuration."""
+    from app.scheduler_manager import scheduler_manager
+    config = scheduler_manager.update_config(req.task_name, req.active, req.hour, req.minute)
+    return CronConfigResponse(status="ok", config={req.task_name: config})
+
+@router.post("/cron/{task_name}/run")
+async def run_cron_task(task_name: str):
+    """Run a specific cron task immediately."""
+    from app.scheduler_manager import scheduler_manager
+    if task_name == "rgpd_purge":
+        import asyncio
+        asyncio.create_task(scheduler_manager.run_rgpd_purge())
+        return {"status": "ok", "message": "Task 'rgpd_purge' started in background."}
+    return {"status": "error", "message": f"Unknown task: {task_name}"}

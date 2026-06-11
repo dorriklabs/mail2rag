@@ -1,0 +1,16 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "ragproxy",
+    "streamlit_admin"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "ragproxy"
+    },
+    {
+      "root": "streamlit_admin"
+    }
+  ]
+}

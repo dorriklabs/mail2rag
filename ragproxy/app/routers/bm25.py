@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["BM25"])
 
 # Pipeline instance (will be set by main.py)
-pipeline: RAGPipeline = None
+pipeline: RAGPipeline = None # type: ignore
 
 
 def set_pipeline(p: RAGPipeline):
