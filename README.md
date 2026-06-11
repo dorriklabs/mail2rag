@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.10.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.12.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -38,7 +38,7 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.10.0**: **LiteLLM Gateway** - Support for 7 LLM providers (LM Studio, OpenAI, Anthropic, Groq, Mistral, Gemini, Ollama)!
+> 🆕 **v3.12.0**: **Task Scheduler** for background jobs and **Manual Upload**. Plus LiteLLM Gateway with 7 providers!
 
 ---
 
@@ -113,6 +113,7 @@ Subject: Chat: What are the Q4 highlights?
 |------|----------|
 | **Overview** | Stats, document counts, collection metrics |
 | **Documents** | Browse, search, filter, delete indexed docs |
+| **Upload** | Manual document upload and ingestion |
 | **Chat** | Test RAG queries directly with sources display |
 | **Admin** | Rebuild BM25, delete collections, manage system |
 
@@ -179,6 +180,13 @@ Use **any LLM provider** without code changes:
 LLM_PROVIDER=groq  # or openai, anthropic, mistral, gemini, ollama
 GROQ_API_KEY=gsk_...
 ```
+
+### ⏱️ Automated Tasks Scheduler (NEW in v3.12.0)
+
+A robust scheduling manager for background tasks:
+- Automated email ingestion at configurable intervals
+- Scheduled BM25 index rebuilding
+- Periodic vector database optimization
 
 ---
 
@@ -371,6 +379,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] Document/collection deletion
 - [x] Support Draft Mode
 - [x] LiteLLM Gateway (7 providers)
+- [x] Manual document upload page
+- [x] Automatic tasks scheduling manager
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -402,6 +412,8 @@ Mail2RAG surveille votre boîte mail et **automatiquement** :
 1. 📥 Ingère emails + pièces jointes dans Qdrant (base vectorielle)
 2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking Cross-Encoder)
 3. 💬 Répond aux questions par email ou via le dashboard Streamlit
+
+> 🆕 **v3.12.0** : **Planificateur de tâches** en arrière-plan et **Page d'upload manuel** dans le dashboard !
 
 ---
 
@@ -524,6 +536,8 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] Suppression documents/collections
 - [x] Mode Brouillon Support
 - [x] LiteLLM Gateway (7 providers)
+- [x] Page d'upload manuel de documents
+- [x] Planificateur automatique de tâches
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 

@@ -32,10 +32,12 @@ ARCHIVE_PATH = os.environ.get("ARCHIVE_PATH", "/archive")
 
 # Durées de conservation (en jours) selon les collections (Workspaces)
 # "default" s'applique aux collections non spécifiées explicitement.
+# Utilisez -1 pour une conservation infinie (pas de purge).
 RETENTION_POLICIES = {
     "default": int(os.environ.get("RETENTION_DEFAULT_DAYS", 365 * 2)),  # 2 ans par défaut
     "urbanisme": 365 * 10,  # 10 ans pour l'urbanisme
     "rh": 365 * 2,         # 2 ans pour les RH
+    "plui": -1,            # Conservation infinie
 }
 
 def get_collections():
@@ -100,6 +102,11 @@ def run_purge():
     
     for collection in collections:
         retention_days = get_retention_days(collection)
+        
+        if retention_days < 0:
+            logger.info(f"Collection '{collection}' ignorée (conservation infinie).")
+            continue
+            
         cutoff_date = now - timedelta(days=retention_days)
         logger.info(f"Analyse de la collection '{collection}' (Purge avant le {cutoff_date.strftime('%Y-%m-%d')})")
         

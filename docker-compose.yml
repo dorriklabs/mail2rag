@@ -3,7 +3,6 @@ volumes:
   qdrant_data:
   bm25_data:
 
-
 networks:
   rag_net:
     driver: bridge
@@ -11,29 +10,35 @@ networks:
 services:
   # 1. QDRANT (Vector Database)
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.9.0
     container_name: qdrant
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "9110:6333"
+      - "9111:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - rag_net
 
   # 3. TIKA (Document Text Extraction)
   tika:
-    image: apache/tika:latest-full # Avec Tesseract OCR
+    image: apache/tika:2.9.2.0-full # Avec Tesseract OCR
     container_name: mail2rag-tika
     ports:
-      - "9998:9998"
+      - "9120:9998"
     command: [ "-h", "0.0.0.0" ]
     restart: unless-stopped
     networks:
       - rag_net
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:9998/tika || exit 1" ]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:9998/tika > /dev/null || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -73,10 +78,16 @@ services:
       - ./scripts:/app/scripts:ro
       - ./state:/app/state
     ports:
-      - "8000:8000"
+      - "9100:8000"
     depends_on:
       qdrant:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/openapi.json\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
     networks:
       - rag_net
@@ -110,11 +121,11 @@ services:
       - mail2rag_archive:/var/lib/mail2rag/mail2rag_archive
     depends_on:
       qdrant:
-        condition: service_started
+        condition: service_healthy
       tika:
-        condition: service_started
+        condition: service_healthy
       rag_proxy:
-        condition: service_started
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -126,7 +137,7 @@ services:
     build: ./streamlit_admin
     container_name: streamlit_admin
     ports:
-      - "8501:8501"
+      - "9101:8501"
     volumes:
       # Accès à l'archive pour suppression de dossiers
       - mail2rag_archive:/archive
@@ -137,8 +148,10 @@ services:
       - LM_STUDIO_URL=http://host.docker.internal:1234
       - ARCHIVE_PATH=/archive
     depends_on:
-      - rag_proxy
-      - qdrant
+      rag_proxy:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     networks:
       - rag_net
     extra_hosts:
@@ -147,10 +160,10 @@ services:
 
   # 5. ARCHIVE SERVER (NGINX)
   archive_server:
-    image: nginx:alpine
+    image: nginx:1.25-alpine
     container_name: mail2rag_archive_server
     ports:
-      - "8080:80"
+      - "9102:80"
     volumes:
       # Custom Nginx configuration
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
