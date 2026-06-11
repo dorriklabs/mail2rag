@@ -32,38 +32,13 @@ They override or refine global rules defined in `GEMINI.md`.
 
 ---
 
-## Quality & Safety
-
-- **Cleanup**
-  - All debug code (`print`, `pdb`, `breakpoint`)  
-    **must be removed before review**.
-  - Temporary code is not acceptable in committed changes.
+## Quality & Testing
 
 - **Mandatory Linting (Pre-flight)**
   - Every Python file modified must pass `flake8` or `ruff` check if available.
   - No file with syntax errors or typing violations (mypy) should ever leave the local environment.
 
----
+- **Unit Testing**
+  - Use `pytest` for all unit testing.
+  - Execute tests within the relevant Docker container (e.g., `docker-compose exec mail2rag pytest`).
 
-## Workflow & Indexing (IA-Aware)
-
-- **Index Smart**
-  - Use `wsl python3 tools/ag_indexer.py query <symbol>` when exploring
-    **new or unfamiliar** parts of the codebase.
-
-- **Symbol-First Navigation**
-  - Always search by symbol (class/function) before browsing files manually.
-
-- **Skip When Redundant**
-  - Do NOT use the indexer if:
-    - the file is already open,
-    - the location is known from context,
-    - or you are continuing work on a recently modified file.
-
-- **No Guessing**
-  - Never infer file paths or symbol locations without:
-    - querying the indexer, or
-    - relying on an explicitly opened file.
-
-- **Mention When Used**
-  - Explicitly state *"Interrogation de l'indexeur..."* when a query is performed.
