@@ -195,6 +195,7 @@ ENFORCE_STRICT_ROUTING=true
 **Multi-Workspace & Global Search:**
 - **Comma-separated search:** Users can search across multiple allowed workspaces by separating them with a comma (e.g., `Workspace: police, hr`). The RAG Proxy will query all of them and use the **Cross-Encoder Reranker** to fuse and keep the best absolute results regardless of their origin collection.
 - **Wildcard search (`*`):** A user can ask for `Workspace: *`. The router will automatically expand this to all workspaces they have access to. If they have the absolute `["*"]` ACL, it dynamically expands to all collections in the Qdrant database. If they don't have access to a requested workspace, the system safely ignores it and adds a warning to the final response.
+- **High-Performance Concurrency:** When querying multiple workspaces, Mail2RAG uses **Multi-Threading** to fetch vectors concurrently from Qdrant, dropping response times to mere milliseconds. A **Dynamic Top-K Limiter** automatically protects the AI Reranker from being overwhelmed when querying dozens of collections simultaneously, ensuring sub-second speeds.
 
 ### 🔌 LLM Provider Gateway (NEW in v3.10.0)
 
@@ -547,6 +548,7 @@ ENFORCE_STRICT_ROUTING=true
 **Recherche Multi-Workspaces & Globale :**
 - **Recherche multiple (virgule) :** Les utilisateurs peuvent chercher dans plusieurs workspaces en les séparant par des virgules (ex: `Workspace: police, rh`). Le RAG Proxy interrogera toutes les bases concernées et utilisera le **Reranker Cross-Encoder** pour fusionner et conserver les meilleurs résultats absolus, peu importe leur collection d'origine.
 - **Recherche Globale (`*`) :** Un utilisateur peut demander `Workspace: *`. Le routeur convertira automatiquement cette étoile en la liste de tous les dossiers auxquels il a droit. S'il possède l'ACL suprême `["*"]`, la recherche sera étendue à toutes les bases existantes dans Qdrant en temps réel. Si un utilisateur demande un accès non autorisé, la demande est ignorée de façon sécurisée et un avertissement est ajouté à la réponse.
+- **Haute Performance (Concurrency) :** Lors de la recherche sur de multiples workspaces, Mail2RAG utilise du **Multi-Threading** pour interroger toutes les bases Qdrant en parallèle, garantissant une extraction en quelques millisecondes. Une **Limite Top-K Dynamique** protège automatiquement le Reranker IA contre la surcharge si un utilisateur interroge 50 collections à la fois, assurant un temps de réponse instantané.
 
 ---
 
