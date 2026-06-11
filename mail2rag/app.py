@@ -26,6 +26,7 @@ from services.tika_client import TikaClient
 from services.ragproxy_client import RAGProxyClient
 from services.draft_service import DraftService
 from services.support_draft_service import SupportDraftService
+from services.dispatch_service import DispatchService
 from services.usage_tracker import UsageTracker
 from models import ParsedEmail
 
@@ -233,6 +234,14 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         usage_tracker=usage_tracker,
     )
 
+    # Dispatch Sémantique
+    dispatch_service = DispatchService(
+        config=config,
+        logger_instance=logger,
+        mail_service=mail_service,
+        cleaner=cleaner,
+    )
+
     return {
         "config": config,
         "logger": logger,
@@ -246,6 +255,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "maintenance": maintenance,
         "router": router,
         "support_draft_service": support_draft_service,
+        "dispatch_service": dispatch_service,
         "usage_tracker": usage_tracker,
     }
 
@@ -350,6 +360,7 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
             # Services additionnels du context
             router: RouterService = context["router"]
             support_draft_service: SupportDraftService = context.get("support_draft_service")
+            dispatch_service: DispatchService = context.get("dispatch_service")
 
             try:
                 if is_diagnostic_email(parsed_email.subject):
@@ -358,6 +369,10 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                 elif is_chat_email(parsed_email.subject):
                     # Mode Chat : Chat: / Question:
                     chat_service.handle_chat(parsed_email)
+                elif config.enable_semantic_dispatch and dispatch_service.handle_dispatch(parsed_email):
+                    # Le Routeur Sémantique a déplacé l'email dans un sous-dossier, on s'arrête là.
+                    logger.info("Email UID %s classé par le Dispatch IA. Fin du traitement.", uid)
+                    pass
                 elif support_draft_service and is_support_draft_mode(parsed_email, router, config):
                     # Mode Support Draft : génère un brouillon
                     support_draft_service.handle_support_request(parsed_email)

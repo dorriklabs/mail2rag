@@ -156,62 +156,9 @@ class DraftService:
 
     def move_to_processed(self, uid: int) -> bool:
         """
-        Déplace un email vers le dossier 'En cours'.
-        
-        Crée le dossier s'il n'existe pas.
-        
-        Args:
-            uid: UID de l'email à déplacer
-            
-        Returns:
-            True si déplacement réussi, False sinon
+        Déplace un email vers le dossier 'En cours' via le MailService.
         """
-        try:
-            self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                self.logger.error("❌ Connexion IMAP non disponible")
-                return False
-            
-            # Créer le dossier si nécessaire
-            if not self._folder_exists(self.processed_folder):
-                self._create_folder(self.processed_folder)
-            
-            # Sélectionner INBOX (source)
-            source_folder = self.mail_service.imap_folder
-            server.select_folder(source_folder)
-            
-            # Déplacer l'email
-            try:
-                # Essayer MOVE (extension IMAP)
-                server.move([uid], self.processed_folder)
-                self.logger.info(
-                    "📨 Email UID %s déplacé vers '%s'",
-                    uid,
-                    self.processed_folder,
-                )
-                return True
-            except Exception:
-                # Fallback: COPY + DELETE
-                server.copy([uid], self.processed_folder)
-                server.delete_messages([uid])
-                server.expunge()
-                self.logger.info(
-                    "📨 Email UID %s copié+supprimé vers '%s'",
-                    uid,
-                    self.processed_folder,
-                )
-                return True
-                
-        except Exception as e:
-            self.logger.error(
-                "❌ Erreur lors du déplacement de l'email UID %s: %s",
-                uid,
-                e,
-                exc_info=True,
-            )
-            return False
+        return self.mail_service.move_message(uid, self.processed_folder)
 
     def _find_drafts_folder(self) -> Optional[str]:
         """
@@ -318,42 +265,7 @@ class DraftService:
             )
             return False
 
-    def _folder_exists(self, folder_name: str) -> bool:
-        """Vérifie si un dossier IMAP existe."""
-        try:
-            self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                return False
-            
-            folders = server.list_folders()
-            folder_names = [f[2] for f in folders]
-            return folder_name in folder_names
-            
-        except Exception:
-            return False
 
-    def _create_folder(self, folder_name: str) -> bool:
-        """Crée un dossier IMAP."""
-        try:
-            self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                return False
-            
-            server.create_folder(folder_name)
-            self.logger.info("📁 Dossier IMAP '%s' créé", folder_name)
-            return True
-            
-        except Exception as e:
-            self.logger.error(
-                "❌ Erreur lors de la création du dossier '%s': %s",
-                folder_name,
-                e,
-            )
-            return False
 
     def _get_domain(self) -> str:
         """Extrait le domaine de l'adresse email configurée."""

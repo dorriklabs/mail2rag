@@ -169,6 +169,58 @@ class MailService:
             logger.debug("Aucun message correspondant aux critères IMAP.")
         return {}
 
+    def folder_exists(self, folder_name: str) -> bool:
+        """Vérifie si un dossier IMAP existe."""
+        try:
+            self.ensure_connection()
+            if not self.server:
+                return False
+            folders = self.server.list_folders()
+            folder_names = [f[2] for f in folders]
+            return folder_name in folder_names
+        except Exception:
+            return False
+
+    def create_folder(self, folder_name: str) -> bool:
+        """Crée un dossier IMAP."""
+        try:
+            self.ensure_connection()
+            if not self.server:
+                return False
+            self.server.create_folder(folder_name)
+            logger.info("📁 Dossier IMAP '%s' créé", folder_name)
+            return True
+        except Exception as e:
+            logger.error("❌ Erreur lors de la création du dossier '%s': %s", folder_name, e)
+            return False
+
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un email vers un autre dossier. Crée le dossier cible si besoin."""
+        try:
+            self.ensure_connection()
+            if not self.server:
+                return False
+            
+            if not self.folder_exists(dest_folder):
+                self.create_folder(dest_folder)
+                
+            src = source_folder or self.imap_folder
+            self.server.select_folder(src)
+            
+            try:
+                self.server.move([uid], dest_folder)
+                logger.info("📨 Email UID %s déplacé vers '%s'", uid, dest_folder)
+                return True
+            except Exception:
+                self.server.copy([uid], dest_folder)
+                self.server.delete_messages([uid])
+                self.server.expunge()
+                logger.info("📨 Email UID %s copié+supprimé vers '%s'", uid, dest_folder)
+                return True
+        except Exception as e:
+            logger.error("❌ Erreur lors du déplacement UID %s vers '%s': %s", uid, dest_folder, e, exc_info=True)
+            return False
+
     # ------------------------------------------------------------------ #
     # SMTP (Envoi des réponses)
     # ------------------------------------------------------------------ #
@@ -235,6 +287,36 @@ class MailService:
             msg.attach(MIMEText(body, "plain", "utf-8"))
 
         self._send_message_smtp(msg, log_context=f"réponse à {to_email}")
+
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str) -> bool:
+        """
+        Transfère (forward) un email original vers une autre adresse.
+        Attache l'email complet d'origine (message/rfc822) pour préserver toutes les pièces jointes.
+        """
+        from email.mime.message import MIMEMessage
+
+        msg = MIMEMultipart()
+        from_addr = getattr(self.config, "smtp_from", None) or self.config.smtp_user
+        msg["From"] = f"Mail2RAG Dispatch <{from_addr}>"
+        msg["To"] = to_email
+        msg["Subject"] = f"[Dispatch IA] TR: {parsed_email.subject}"
+
+        header_text = (
+            "--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n"
+            f"De : {parsed_email.sender}\n"
+            f"Sujet original : {parsed_email.subject}\n"
+            f"Reçu le : {parsed_email.date}\n"
+            "-----------------------------------------------------------------\n\n"
+            "L'email original complet (et ses pièces jointes) est attaché à ce message.\n"
+        )
+        
+        msg.attach(MIMEText(header_text, "plain", "utf-8"))
+        
+        # On attache le message original complet
+        msg.attach(MIMEMessage(parsed_email.msg))
+
+        logger.info("📧 Transfert IA UID %s vers %s", parsed_email.uid, to_email)
+        return self._send_message_smtp(msg, log_context=f"transfert vers {to_email}")
 
     def send_synthetic_email(
         self,

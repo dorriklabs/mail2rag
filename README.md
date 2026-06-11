@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.14.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.15.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -162,6 +162,17 @@ Automatically generate response drafts for support teams:
 }
 ```
 
+### 🧠 Semantic Router / Dispatch IA (NEW in v3.15.0)
+
+Automatically forward public inbox emails (e.g. `contact@...`) to the right department email addresses based on AI semantic understanding. The original email is then archived in IMAP.
+
+**Configuration:** Enable in `.env`:
+```env
+ENABLE_SEMANTIC_DISPATCH=true
+SEMANTIC_DISPATCH_MAPPING=Urbanisme:urba@mairie.fr,Etat-Civil:etat-civil@mairie.fr,Police:police@mairie.fr
+```
+*(If the AI doesn't know where to route the email, it safely leaves it in the INBOX)*
+
 ### 🔌 LLM Provider Gateway (NEW in v3.10.0)
 
 Use **any LLM provider** without code changes:
@@ -223,6 +234,22 @@ A robust scheduling manager for background tasks:
                                     │    Chat)      │
                                     └───────────────┘
 ```
+
+```
+
+### Secure Architecture for Production (Dual Box Strategy)
+
+When deploying to a public environment (like a City Hall), **never connect the AI with full Chat/Ingestion permissions directly to the public inbox (`contact@...`)**. Instead, run two parallel Docker instances of Mail2RAG:
+
+1. **Instance 1: Internal Assistant (`rag@domain.com`)**
+   - **Access**: Internal network only
+   - **Features**: Ingestion (`USE_RAG_PROXY_FOR_SEARCH=true`), Chat Mode
+   - **Role**: AI assistant for employees
+
+2. **Instance 2: Public Sorter (`contact@domain.com`)**
+   - **Access**: Public
+   - **Features**: Semantic Dispatch (`ENABLE_SEMANTIC_DISPATCH=true`), Support Draft Mode
+   - **Role**: Silent sorter. Forwards emails to departments and prepares Drafts. **Zero risk** of sending an hallucinated email to a citizen.
 
 ### Services Stack
 
@@ -463,9 +490,34 @@ Sujet: Chat: Quels sont les points clés du T4 ?
 ```
 → Recevez une réponse IA avec citations des sources
 
+### 🧠 Routeur Sémantique / Dispatch IA (NOUVEAU v3.15.0)
+
+Transfère (Forward SMTP) automatiquement les e-mails de la boîte de réception publique (ex: `contact@...`) vers les vraies adresses e-mails des services concernés grâce à la compréhension sémantique de l'IA. L'e-mail original est ensuite archivé.
+
+**Configuration :** Activer dans le `.env` :
+```env
+ENABLE_SEMANTIC_DISPATCH=true
+SEMANTIC_DISPATCH_MAPPING=Urbanisme:urba@mairie.fr,Etat-Civil:etat-civil@mairie.fr
+```
+*(Si l'IA ne sait pas où classer l'e-mail, elle le laisse en sécurité dans l'INBOX)*
+
 ---
 
 ## 🏗️ Architecture
+
+### Architecture Sécurisée pour la Production (Stratégie à 2 Boîtes)
+
+Lors du déploiement dans un environnement public (comme une Mairie), **ne connectez jamais l'IA avec tous les droits (Chat/Ingestion) directement sur la boîte publique (`contact@...`)**. À la place, lancez deux instances Docker parallèles de Mail2RAG :
+
+1. **Instance 1 : Assistant Interne (`rag@domaine.fr`)**
+   - **Accès** : Réseau interne uniquement
+   - **Fonctions** : Ingestion (`USE_RAG_PROXY_FOR_SEARCH=true`), Mode Chat
+   - **Rôle** : Assistant IA pour les agents
+
+2. **Instance 2 : Trieur Public (`contact@domaine.fr`)**
+   - **Accès** : Public
+   - **Fonctions** : Routeur Sémantique (`ENABLE_SEMANTIC_DISPATCH=true`), Mode Brouillon Support
+   - **Rôle** : Trieur silencieux. Transfère les e-mails aux services et prépare les brouillons. **Zéro risque** d'envoyer un e-mail halluciné à un citoyen.
 
 ### Stack des Services
 
@@ -525,6 +577,7 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] Support multi-collections
 - [x] Gestion dynamique du contexte LLM
 - [x] Suppression documents/collections
+- [x] Routeur Sémantique (Dispatch IA) pour tri IMAP
 - [x] Mode Brouillon Support
 - [x] LiteLLM Gateway (7 providers)
 - [x] Page d'upload manuel de documents

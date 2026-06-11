@@ -66,6 +66,19 @@ class Config:
         self.draft_timeout_hours = int(os.getenv("DRAFT_TIMEOUT_HOURS", "24"))
 
         # ------------------------------------------------------------------
+        # SEMANTIC DISPATCH (Dispatch IA)
+        # ------------------------------------------------------------------
+        self.enable_semantic_dispatch = self._get_bool("ENABLE_SEMANTIC_DISPATCH", False)
+        mapping_str = os.getenv(
+            "SEMANTIC_DISPATCH_MAPPING", "Urbanisme:urba@mairie.fr,Etat-Civil:etat-civil@mairie.fr"
+        )
+        self.semantic_dispatch_mapping = {}
+        for pair in mapping_str.split(","):
+            parts = pair.split(":")
+            if len(parts) == 2:
+                self.semantic_dispatch_mapping[parts[0].strip()] = parts[1].strip()
+
+        # ------------------------------------------------------------------
         # SAAS-READY (Multi-tenant preparation)
         # ------------------------------------------------------------------
         # Identifiant unique du tenant (vide = mode standalone)
