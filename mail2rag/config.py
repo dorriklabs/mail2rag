@@ -216,6 +216,10 @@ class Config:
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "800"))
         self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
         self.chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive")
+        
+        # SMART INGESTION FILTER
+        # ------------------------------------------------------------------
+        self.enable_smart_ingestion_filter = self._get_bool("ENABLE_SMART_INGESTION_FILTER", False)
 
         # ------------------------------------------------------------------
         # LLM DIRECT (pour RAG Proxy : génération finale)

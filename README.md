@@ -385,7 +385,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 
 ## 🗺️ Roadmap
 
-- [x] Streamlit Admin Dashboard
+- [x] Streamlit Admin Dashboard : Interface Streamlit pour la supervision (recherche, stats, suppression).
+- [x] Smart Ingestion Filter : (Optionnel) L'IA filtre les e-mails sans valeur documentaire ("Merci", "C'est noté") avant l'ingestion pour garder une base de connaissances propre.
 - [x] Native Qdrant Hybrid search (Dense + Sparse)
 - [x] Parent-Child Context Retrieval
 - [x] Apache Tika integration

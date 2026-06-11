@@ -56,6 +56,24 @@ class IngestionService:
     def ingest_email(self, email: ParsedEmail) -> None:
         """Pipeline complet d'ingestion RAG pour un email non-CHAT."""
         try:
+            # --- SMART INGESTION FILTER ---
+            if getattr(self.config, "enable_smart_ingestion_filter", False):
+                has_attachments = False
+                if email.msg.is_multipart():
+                    for part in email.msg.walk():
+                        if part.get("Content-Disposition"):
+                            has_attachments = True
+                            break
+                            
+                if not has_attachments:
+                    if not self._is_knowledge_worthy(email.subject, email.body):
+                        self.logger.info("♻️ Filtre IA : Email ignoré (sans valeur documentaire). UID %s", email.uid)
+                        # Archiver l'email ignoré
+                        archive_folder = getattr(self.config, "smart_filter_archive_folder", "Archive-Filtre")
+                        self.mail_service.move_message(email.uid, archive_folder)
+                        return
+            # ------------------------------
+            
             workspace = self.router.determine_workspace(email.email_data)
 
             safe_subject = sanitize_filename(
@@ -193,6 +211,49 @@ class IngestionService:
         if len(preview) > max_chars:
             preview = preview[:max_chars].rstrip() + "..."
         return preview
+
+    def _is_knowledge_worthy(self, subject: str, body: str) -> bool:
+        """
+        Demande au LLM si l'email contient une connaissance utile à archiver.
+        Retourne True par défaut en cas de doute ou d'erreur.
+        """
+        import requests
+        if not self.config.ai_api_url:
+            return True
+            
+        prompt = (
+            "Tu es un bibliothécaire IA responsable d'une base de connaissances d'entreprise. "
+            "Ton rôle est de filtrer les e-mails entrants.\n\n"
+            f"Sujet de l'e-mail: {subject}\n"
+            f"Corps de l'e-mail:\n{body}\n\n"
+            "Question : Cet e-mail contient-il des informations utiles, des procédures, des règles "
+            "ou des connaissances factuelles qui méritent d'être indexées et archivées ? "
+            "Réponds UNIQUEMENT par le mot 'OUI' ou 'NON'. "
+            "Au moindre doute ou s'il s'agit d'une demande métier claire, réponds 'OUI'. "
+            "Si c'est juste un e-mail de politesse ('merci', 'ok', 'bonne journée'), une newsletter inutile ou un spam, réponds 'NON'."
+        )
+        
+        try:
+            resp = requests.post(
+                self.config.ai_api_url,
+                json={
+                    "model": self.config.ai_model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                    "max_tokens": 10
+                },
+                timeout=30
+            )
+            resp.raise_for_status()
+            answer = resp.json()["choices"][0]["message"]["content"].strip().upper()
+            
+            # Au moindre doute, on indexe (True)
+            if "NON" in answer and "OUI" not in answer:
+                return False
+            return True
+        except Exception as e:
+            self.logger.warning("⚠️ Échec du Smart Filter IA, ingestion forcée par sécurité : %s", e)
+            return True
 
     # ------------------------------------------------------------------ #
     # Fichier principal d'email
