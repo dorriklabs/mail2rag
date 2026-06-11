@@ -68,14 +68,24 @@ class RAGPipeline:
         query_vector = self.embedder.embed(query)
         debug_info["timings"]["embedding"] = round(time.time() - t0, 3)
 
-        # 2. Recherche Hybride (Qdrant)
+        # 2. Recherche Hybride (Qdrant) Multi-Collection
         t0 = time.time()
-        merged_candidates = self.vdb.search(
-            query_text=query,
-            query_vector=query_vector,
-            limit=top_k,
-            collection_name=workspace,  # None = default collection
-        )
+        merged_candidates = []
+        
+        if workspace and "," in workspace:
+            collections = [w.strip() for w in workspace.split(",") if w.strip()]
+        else:
+            collections = [workspace]
+            
+        for coll in collections:
+            candidates = self.vdb.search(
+                query_text=query,
+                query_vector=query_vector,
+                limit=top_k,
+                collection_name=coll,  # None = default collection
+            )
+            merged_candidates.extend(candidates)
+            
         debug_info["timings"]["hybrid_search"] = round(time.time() - t0, 3)
         debug_info["counts"]["merged_candidates"] = len(merged_candidates)
 

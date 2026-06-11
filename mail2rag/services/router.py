@@ -172,7 +172,7 @@ class RouterService:
     # ------------------------------------------------------------------ #
     #  API PUBLIQUE
     # ------------------------------------------------------------------ #
-    def determine_workspace(self, email_data: Dict[str, Any]) -> str:
+    def determine_workspace(self, email_data: Dict[str, Any], return_rejected: bool = False) -> str | tuple[str, List[str]]:
         """
         Détermine le workspace cible pour un email donné.
 
@@ -181,7 +181,7 @@ class RouterService:
         2. Chercher une mention explicite dans le corps (Workspace:/Dossier:)
         3. Valider la permission si ENFORCE_STRICT_ROUTING=true.
 
-        Le résultat est toujours renvoyé sous forme de slug.
+        Le résultat est toujours renvoyé sous forme de slug (ou slugs séparés par virgules).
         """
         body = (email_data.get("body") or "").strip()
         subject = (email_data.get("subject") or "").strip()
@@ -245,34 +245,51 @@ class RouterService:
                     break
 
         # ------------------------------------------------------------------
-        # 3. Validation ACL (Strict Routing)
+        # 3. Validation ACL (Strict Routing) et Multi-Workspace
         # ------------------------------------------------------------------
+        rejected_workspaces = []
+        target_ws_list = [default_ws]
+        
         if requested_ws:
-            requested_slug = self._slugify(requested_ws)
+            requested_list = [w.strip() for w in requested_ws.split(",") if w.strip()]
+            requested_slugs = [self._slugify(w) for w in requested_list]
+            
             default_slug = self._slugify(default_ws)
             allowed_slugs = [self._slugify(w) for w in allowed_ws]
 
             if not getattr(self.config, "enforce_strict_routing", False):
-                # Mode permissif : on accepte toujours
-                target_ws = requested_ws
-                logger.debug("-> Routage explicite (Mode permissif) : '%s'", target_ws)
+                # Mode permissif : on accepte tout
+                target_ws_list = requested_slugs
+                logger.debug("-> Routage explicite (Mode permissif) : '%s'", target_ws_list)
             else:
-                # Mode strict : on vérifie les ACLs
-                if (requested_slug == default_slug) or (requested_slug in allowed_slugs) or ("*" in allowed_ws):
-                    target_ws = requested_ws
-                    logger.debug("-> Routage explicite (Mode strict) AUTORISÉ : '%s'", target_ws)
+                # Mode strict : on vérifie chaque workspace demandé
+                valid_slugs = []
+                for req_slug, req_raw in zip(requested_slugs, requested_list):
+                    if (req_slug == default_slug) or (req_slug in allowed_slugs) or ("*" in allowed_ws):
+                        valid_slugs.append(req_slug)
+                    else:
+                        rejected_workspaces.append(req_raw)
+                        logger.warning(
+                            "⚠️ Accès refusé au workspace '%s' pour '%s'.",
+                            req_raw, sender
+                        )
+                
+                if valid_slugs:
+                    target_ws_list = valid_slugs
+                    logger.debug("-> Routage explicite (Mode strict) AUTORISÉ : '%s'", target_ws_list)
                 else:
-                    logger.warning(
-                        "⚠️ Accès refusé au workspace '%s' pour '%s'. Redirection vers '%s'.",
-                        requested_ws, sender, default_ws
-                    )
-                    target_ws = default_ws
+                    logger.warning("Aucun workspace autorisé. Redirection vers '%s'.", default_ws)
+                    target_ws_list = [default_slug]
+        else:
+            target_ws_list = [self._slugify(default_ws)]
 
         # ------------------------------------------------------------------
         # 4. Slugification finale
         # ------------------------------------------------------------------
-        final_slug = self._slugify(target_ws)
-        if final_slug != target_ws:
-            logger.debug("-> Slugifié : '%s' -> '%s'", target_ws, final_slug)
+        # Les éléments dans target_ws_list sont déjà slugifiés
+        final_slug = ",".join(target_ws_list)
+        logger.debug("-> Résultat final du routage : '%s'", final_slug)
 
+        if return_rejected:
+            return final_slug, rejected_workspaces
         return final_slug

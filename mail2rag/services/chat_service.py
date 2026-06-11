@@ -61,7 +61,7 @@ class ChatService:
         workspace: str | None = None
 
         try:
-            workspace = self.router.determine_workspace(email.email_data)
+            workspace, rejected = self.router.determine_workspace(email.email_data, return_rejected=True)
 
             cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")
@@ -75,12 +75,16 @@ class ChatService:
 
             # Recherche via RAG Proxy (hybride)
             self.logger.info(
-                "🔍 [RAG Proxy] Recherche hybride pour '%s' dans collection '%s'...", 
+                "🔍 [RAG Proxy] Recherche hybride pour '%s' dans collection(s) '%s'...", 
                 clean_subject, collection_to_search
             )
             response_text, sources = self._search_via_rag_proxy(
                 query_message, collection_to_search
             )
+            
+            if rejected:
+                warning_msg = f"⚠️ Vous n'avez pas accès aux espaces de travail suivants : {', '.join(rejected)}.\n\n"
+                response_text = warning_msg + response_text
 
             # Sauvegarde optionnelle du chat (log-only, non indexé)
             if self.config.save_chat_history:
