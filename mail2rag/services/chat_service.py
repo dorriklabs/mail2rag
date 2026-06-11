@@ -263,7 +263,7 @@ class ChatService:
             meta = chunk.get("metadata", {}) or {}
             score = float(chunk.get("score", 0.0))
 
-            source_title = meta.get("title", "Document inconnu")
+            source_title = meta.get("title") or meta.get("filename") or meta.get("subject") or "Document inconnu"
             
             # --- Enrichissement des métadonnées pour les liens ---
             # On essaie d'extraire l'UID du nom de fichier pour retrouver le secure_id
