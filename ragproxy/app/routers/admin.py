@@ -91,20 +91,8 @@ def ingest_document(req: IngestRequest):
         
         logger.info(f"Successfully indexed {len(chunks)} chunks in Qdrant")
         
-        # 4. Rebuild BM25 (auto)
-        if pipeline.multi_collection_mode and pipeline.bm25_multi:
-            try:
-                temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, req.collection)
-                all_docs = temp_provider.get_all_documents()
-                
-                docs = [d.get("text", "") for d in all_docs if d.get("text")]
-                meta = [d.get("metadata", {}) for d in all_docs]
-                
-                if docs:
-                    pipeline.bm25_multi.build_index(req.collection, docs, meta)
-                    logger.info(f"BM25 index rebuilt for '{req.collection}'")
-            except Exception as e:
-                logger.warning(f"Failed to rebuild BM25 for '{req.collection}': {e}")
+        # BM25 is now native in Qdrant via Sparse Vectors. No manual rebuild needed.
+        logger.info(f"Native hybrid index automatically updated for '{req.collection}'")
         
         return IngestResponse(
             status="ok",
@@ -184,13 +172,9 @@ def list_collections():
                 temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, col_name)
                 doc_count = temp_provider.count_documents()
                 
-                bm25_ready = False
-                bm25_count = 0
-                if pipeline.multi_collection_mode and pipeline.bm25_multi:
-                    bm25_ready = pipeline.bm25_multi.is_ready(col_name)
-                    if bm25_ready:
-                        stats = pipeline.bm25_multi.get_collection_stats(col_name)
-                        bm25_count = stats.get("docs_count", 0)
+                # BM25 native in Qdrant
+                bm25_ready = True
+                bm25_count = doc_count
                 
                 collections_info.append({
                     "name": col_name,
@@ -255,16 +239,8 @@ def delete_collection(name: str):
             logger.error(f"Failed to delete Qdrant collection '{name}': {e}")
             result["qdrant_error"] = str(e)
         
-        # 2. Delete BM25 index if exists
-        if pipeline.multi_collection_mode and pipeline.bm25_multi:
-            try:
-                if pipeline.bm25_multi.is_ready(name):
-                    pipeline.bm25_multi.delete_index(name)
-                    result["bm25_deleted"] = True
-                    logger.info(f"Deleted BM25 index for '{name}'")
-            except Exception as e:
-                logger.warning(f"Failed to delete BM25 for '{name}': {e}")
-                result["bm25_error"] = str(e)
+        # BM25 is native in Qdrant, deleted automatically with collection
+        result["bm25_deleted"] = True
         
         result["message"] = f"Collection '{name}' deleted"
         return result

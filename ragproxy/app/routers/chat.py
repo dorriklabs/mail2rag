@@ -111,6 +111,11 @@ def chat(req: ChatRequest):
             text = chunk.get("text", "")
             metadata = chunk.get("metadata", {})
             
+            # Parent-Child Retrieval: utiliser le texte étendu si disponible
+            extended_text = metadata.get("extended_text")
+            if extended_text:
+                text = extended_text
+            
             # Estimate tokens for this chunk
             chunk_tokens = estimate_tokens(text) + 10  # +10 for formatting
             

@@ -272,11 +272,17 @@ class TextChunker:
         base_metadata = base_metadata or {}
         
         for i, chunk_text in enumerate(text_chunks):
+            # Calcul du contexte étendu (Parent-Child) : +400 chars avant/après
+            start_ext = max(0, char_position - 400)
+            end_ext = min(len(text), char_position + len(chunk_text) + 400)
+            extended_text = text[start_ext:end_ext]
+            
             chunk_metadata = {
                 **base_metadata,
                 "chunk_index": i,
                 "chunk_total": total_chunks,
                 "chunk_size": len(chunk_text),
+                "extended_text": extended_text,
             }
             
             chunk = Chunk(

@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from app.config import LOG_LEVEL, API_KEY_ENABLED
 from app.pipeline import RAGPipeline
-from app.routers import health, rag, chat, admin, bm25
+from app.routers import health, rag, chat, admin
 
 # Configure logging
 logging.basicConfig(
@@ -52,13 +52,11 @@ health.set_pipeline(pipeline)
 rag.set_pipeline(pipeline)
 chat.set_pipeline(pipeline)
 admin.set_pipeline(pipeline)
-bm25.set_pipeline(pipeline)
 
 # Include routers
 app.include_router(health.router)
 app.include_router(rag.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
-app.include_router(bm25.router)
 
 logger.info("RAG Proxy application started")
