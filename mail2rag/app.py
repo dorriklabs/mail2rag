@@ -14,6 +14,7 @@ from services.email_parser import EmailParser
 from services.mail import MailService
 from services.cleaner import CleanerService
 from services.router import RouterService
+from services.notification_service import NotificationService
 from services.processor import DocumentProcessor
 from services.email_renderer import EmailRenderer
 from services.support_qa import SupportQAService
@@ -127,6 +128,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     email_renderer = EmailRenderer(template_dir)
 
     support_qa = SupportQAService(config)
+    notification_service = NotificationService(config)
 
     state_manager = StateManager(config.state_path, logger)
     state = state_manager.load_state()
@@ -200,6 +202,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         cleaner=cleaner,
         email_renderer=email_renderer,
         usage_tracker=usage_tracker,
+        notification_service=notification_service,
     )
 
     # Dispatch Sémantique
@@ -209,6 +212,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         mail_service=mail_service,
         cleaner=cleaner,
         router=router,
+        notification_service=notification_service,
     )
 
     return {

@@ -242,18 +242,11 @@ class DraftService:
         """
         try:
             self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                return False
-            
-            # APPEND avec flags \Draft et \Seen
-            server.append(
-                drafts_folder,
-                message.as_bytes(),
-                flags=["\\Draft", "\\Seen"],
+            self.mail_service.append_message_to_folder(
+                folder=drafts_folder,
+                msg=message.as_bytes(),
+                flags=(br"\Draft", br"\Seen"),
             )
-            
             return True
             
         except Exception as e:

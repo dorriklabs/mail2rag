@@ -74,7 +74,7 @@ open http://localhost:8501
 <td width="50%" valign="top">
 
 ### 📥 Email Ingestion
-- IMAP monitoring with configurable polling
+- **Protocoles supportés :** IMAP classique ou Microsoft Graph API (OAuth2)
 - Smart routing by sender/subject rules
 - Intelligent chunking with overlap
 - Multi-format support (PDF, DOCX, images...)
@@ -158,7 +158,8 @@ Automatically generate response drafts for support teams:
 | **Low** (30-50%) | 🟡 Yellow | Needs completion |
 | **None** (<30%) | 🟡 Yellow | Manual response |
 
-**UX Improvements (v3.19.0):**
+**UX Improvements & Notifications:**
+- **Teams Webhooks:** Native integration to alert support channels when an AI draft is ready or an email is semantically dispatched.
 - **Safe Visual Banners:** AI drafts include a prominent dashed red banner (`⚠️ À EFFACER AVANT ENVOI`) to prevent accidental internal notes leakage.
 - **Seamless Replies:** Automatically forwards emails with the `Reply-To` header set to the original citizen, removing the need for agents to copy-paste email addresses.
 

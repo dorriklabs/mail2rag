@@ -67,6 +67,7 @@ class SupportDraftService:
         cleaner: "CleanerService",
         email_renderer: "EmailRenderer",
         usage_tracker: Optional["UsageTracker"] = None,
+        notification_service: Optional["NotificationService"] = None,
     ):
         """
         Initialise le service Support Draft.
@@ -89,6 +90,7 @@ class SupportDraftService:
         self.cleaner = cleaner
         self.email_renderer = email_renderer
         self.usage_tracker = usage_tracker
+        self.notification_service = notification_service
         
         # Chemin des prompts de style
         self.prompts_dir = Path(config.prompts_dir) / "response_prompts"
@@ -190,6 +192,17 @@ class SupportDraftService:
                     "✅ [Support Draft] Brouillon créé pour UID %s",
                     email.uid,
                 )
+
+                if self.notification_service:
+                    self.notification_service.send_teams_notification(
+                        title="Draft IA prêt à être validé",
+                        text=f"Un brouillon a été préparé en réponse à **{email.sender}**.\n\nSujet : *{email.subject}*",
+                        facts={
+                            "Expéditeur": email.sender,
+                            "Sujet": email.subject,
+                            "Workspace": workspace
+                        }
+                    )
             else:
                 self.logger.error(
                     "❌ [Support Draft] Échec création brouillon UID %s",

@@ -29,12 +29,14 @@ class DispatchService:
         mail_service: "MailService",
         cleaner: "CleanerService",
         router: "RouterService",
+        notification_service=None,
     ):
         self.config = config
         self.logger = logger_instance
         self.mail_service = mail_service
         self.cleaner = cleaner
         self.router = router
+        self.notification_service = notification_service
 
     def handle_dispatch(self, email: "ParsedEmail") -> bool:
         """
@@ -67,6 +69,18 @@ class DispatchService:
                 # 2. Archiver l'original dans IMAP pour ne plus le traiter
                 archive_folder = getattr(self.config, "semantic_dispatch_archive_folder", "Dispatch-Archive")
                 self.mail_service.move_message(email.uid, archive_folder)
+
+                # 3. Notification Teams
+                if self.notification_service:
+                    self.notification_service.send_teams_notification(
+                        title="Nouveau courrier trié",
+                        text=f"Le courrier de **{email.sender}** a été transféré au service **{matched_folder}**.\n\nSujet : *{email.subject}*",
+                        facts={
+                            "Expéditeur": email.sender,
+                            "Sujet": email.subject,
+                            "Service Cible": matched_folder
+                        }
+                    )
                 return True
             else:
                 self.logger.error("❌ Dispatch IA : Échec du transfert SMTP pour l'UID %s. L'e-mail reste dans INBOX.", email.uid)

@@ -27,8 +27,10 @@ class Config:
         self.log_backup_count = int(os.getenv("LOG_BACKUP_COUNT", "5"))
 
         # ------------------------------------------------------------------
-        # EMAIL (IMAP / SMTP)
+        # EMAIL (IMAP / SMTP / MICROSOFT GRAPH)
         # ------------------------------------------------------------------
+        self.mail_provider = os.getenv("MAIL_PROVIDER", "imap").lower()
+
         self.imap_server = os.getenv("IMAP_SERVER")
         self.imap_port = int(os.getenv("IMAP_PORT", "993"))
         self.imap_user = os.getenv("IMAP_USER")
@@ -54,6 +56,18 @@ class Config:
         # Timeouts IMAP/SMTP
         self.imap_timeout = int(os.getenv("IMAP_TIMEOUT", "30"))
         self.smtp_timeout = int(os.getenv("SMTP_TIMEOUT", "30"))
+
+        # Microsoft Graph Credentials (if mail_provider == "msgraph")
+        self.ms_tenant_id = os.getenv("MS_TENANT_ID")
+        self.ms_client_id = os.getenv("MS_CLIENT_ID")
+        self.ms_client_secret = os.getenv("MS_CLIENT_SECRET")
+
+        # ------------------------------------------------------------------
+        # NOTIFICATIONS (Teams Webhook)
+        # ------------------------------------------------------------------
+        self.teams_webhook_url = os.getenv("TEAMS_WEBHOOK_URL")
+
+
 
         # ------------------------------------------------------------------
         # SUPPORT DRAFT MODE
