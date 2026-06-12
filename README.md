@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.17.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.19.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -157,6 +157,10 @@ Automatically generate response drafts for support teams:
 | **Medium** (50-70%) | 🔵 Blue | Review suggested |
 | **Low** (30-50%) | 🟡 Yellow | Needs completion |
 | **None** (<30%) | 🟡 Yellow | Manual response |
+
+**UX Improvements (v3.19.0):**
+- **Safe Visual Banners:** AI drafts include a prominent dashed red banner (`⚠️ À EFFACER AVANT ENVOI`) to prevent accidental internal notes leakage.
+- **Seamless Replies:** Automatically forwards emails with the `Reply-To` header set to the original citizen, removing the need for agents to copy-paste email addresses.
 
 **Configuration:** Enable in `workspaces_config.json`:
 ```json

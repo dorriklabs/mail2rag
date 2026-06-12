@@ -299,10 +299,14 @@ class MailService:
         from_addr = getattr(self.config, "smtp_from", None) or self.config.smtp_user
         msg["From"] = f"Mail2RAG Dispatch <{from_addr}>"
         msg["To"] = to_email
+        msg["Reply-To"] = parsed_email.sender
         msg["Subject"] = f"[Dispatch IA] TR: {parsed_email.subject}"
 
         header_text = (
             "--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n"
+            "💡 ASTUCE IA : Si le mode Support Draft est activé pour votre service,\n"
+            "un brouillon de réponse vous attend déjà dans le dossier 'Brouillons'\n"
+            "de la boîte principale. Allez le valider au lieu de répondre ici !\n\n"
             f"De : {parsed_email.sender}\n"
             f"Sujet original : {parsed_email.subject}\n"
             f"Reçu le : {parsed_email.date}\n"

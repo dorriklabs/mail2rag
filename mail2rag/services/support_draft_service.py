@@ -542,8 +542,11 @@ STRUCTURE :
 <html>
 <head><meta charset="utf-8"></head>
 <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
-    <div style="background: {color}; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+    <div style="background: {color}; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #dc3545;">
         <h3 style="margin: 0;">{icon} {text}</h3>
+        <p style="color: #dc3545; font-weight: bold; margin-top: 10px; margin-bottom: 0; font-size: 14px;">
+            (⚠️ NOTE INTERNE IA : Cliquez sur ce bandeau et effacez-le avant d'envoyer votre réponse)
+        </p>
     </div>
     
     <div style="margin-bottom: 20px;">
