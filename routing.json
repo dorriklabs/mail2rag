@@ -26,5 +26,13 @@
             "workspace": "support-client"
         }
     ],
-    "default_workspace": "support-client"
+    "default_workspace": "support-client",
+    "semantic_dispatch": {
+        "enabled": false,
+        "mapping": {
+            "Urbanisme": "urba@mairie.fr",
+            "Etat-Civil": "etat-civil@mairie.fr",
+            "Police": "police@mairie.fr"
+        }
+    }
 }

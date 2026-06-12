@@ -10,6 +10,7 @@ import shutil
 import os
 from pathlib import Path
 from datetime import datetime
+from utils import get_filtered_collections
 
 st.set_page_config(page_title="Gestion Documents", page_icon="📄", layout="wide")
 
@@ -20,16 +21,7 @@ ARCHIVE_PATH = os.environ.get("ARCHIVE_PATH", "/archive")
 st.title("📄 Gestion des Documents")
 
 # Récupérer les collections
-def get_collections():
-    try:
-        response = requests.get(f"{RAG_PROXY_URL}/admin/collections", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "ok":
-                return [c["name"] for c in data.get("collections", [])]
-        return []
-    except:
-        return []
+collections = get_filtered_collections(RAG_PROXY_URL)
 
 # Récupérer les documents d'une collection
 def get_documents(collection, limit=100):

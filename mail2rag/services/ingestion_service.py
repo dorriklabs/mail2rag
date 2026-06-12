@@ -439,6 +439,7 @@ class IngestionService:
             workspace=workspace,
             files=files_list,
             archive_url=f"{self.config.archive_base_url}/{secure_id}/",
+            dashboard_url=self.config.dashboard_url,
             email_summary=email_summary,
         )
         notif_subject = f"Ingestion réussie - {email.subject}"

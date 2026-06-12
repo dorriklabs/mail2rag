@@ -7,6 +7,7 @@ import streamlit as st
 import requests
 import os
 from datetime import datetime
+from utils import get_filtered_collections
 
 st.set_page_config(page_title="Upload", page_icon="📤", layout="wide")
 
@@ -19,22 +20,14 @@ Cette page permet d'ajouter manuellement des documents textes volumineux
 directement dans le système RAG.
 """)
 
-# Récupérer les collections existantes pour le selectbox
-@st.cache_data(ttl=60)
-def get_collections():
-    try:
-        response = requests.get(f"{RAG_PROXY_URL}/admin/collections", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "ok":
-                return [c["name"] for c in data.get("collections", [])]
-        return []
-    except:
-        return []
+collections = get_filtered_collections(RAG_PROXY_URL)
+role = st.session_state.get("role", "user")
 
-collections = get_collections()
-# Ajouter l'option de créer une nouvelle collection
-options = ["-- Nouvelle Collection --"] + collections
+# Ajouter l'option de créer une nouvelle collection uniquement pour les admins
+if role == "admin":
+    options = ["-- Nouvelle Collection --"] + collections
+else:
+    options = collections
 
 col1, col2 = st.columns(2)
 

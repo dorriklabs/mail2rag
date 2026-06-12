@@ -158,6 +158,10 @@ class Config:
         # ------------------------------------------------------------------
         archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:8080")
         self.archive_base_url = archive_base.rstrip("/")
+        
+        # Dashboard URL
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8501")
+        self.dashboard_url = dashboard_url.rstrip("/")
 
         # ------------------------------------------------------------------
         # PROMPTS

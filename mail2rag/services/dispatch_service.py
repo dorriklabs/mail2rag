@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from config import Config
     from services.mail import MailService
     from services.cleaner import CleanerService
+    from services.router import RouterService
     from models import ParsedEmail
 
 logger = logging.getLogger(__name__)
@@ -27,18 +28,20 @@ class DispatchService:
         logger_instance: logging.Logger,
         mail_service: "MailService",
         cleaner: "CleanerService",
+        router: "RouterService",
     ):
         self.config = config
         self.logger = logger_instance
         self.mail_service = mail_service
         self.cleaner = cleaner
+        self.router = router
 
     def handle_dispatch(self, email: "ParsedEmail") -> bool:
         """
         Analyse l'email, le transfère au bon service par SMTP, et l'archive en IMAP.
         Retourne True s'il a été traité, False s'il reste dans INBOX.
         """
-        mapping = self.config.semantic_dispatch_mapping
+        mapping = self.router.semantic_dispatch_mapping
         if not mapping:
             return False
 

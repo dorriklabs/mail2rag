@@ -48,7 +48,7 @@ def rebuild_all_bm25():
         return None
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["🔨 Index BM25", "📜 Logs Système", "🔧 Configuration"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔨 Index BM25", "📜 Logs Système", "🔧 Configuration", "🔀 Routage Sémantique", "🧠 Prompts IA"])
 
 # =====================================
 # TAB 1 : Index BM25
@@ -329,3 +329,110 @@ docker-compose up -d
 # Footer
 st.divider()
 st.caption(f"Dernière mise à jour: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# =====================================
+# TAB 4 : Routage Sémantique
+# =====================================
+with tab4:
+    st.header("🔀 Routage Sémantique IA")
+    import json
+    import os
+    import pandas as pd
+    
+    routing_file = "/etc/mail2rag/routing.json"
+    
+    if not os.path.exists(routing_file):
+        st.error(f"Fichier de routage introuvable : {routing_file}")
+        st.info("Assurez-vous que le volume ./routing.json est bien monté dans docker-compose.yml")
+    else:
+        with open(routing_file, "r", encoding="utf-8") as f:
+            routing_data = json.load(f)
+            
+        sd_config = routing_data.get("semantic_dispatch", {"enabled": False, "mapping": {}})
+        
+        st.markdown("L'IA analyse le contenu des emails pour les transférer automatiquement au bon service.")
+        
+        enabled = st.toggle("Activer le Routage Sémantique", value=sd_config.get("enabled", False))
+        
+        st.subheader("Configuration des Services")
+        mapping = sd_config.get("mapping", {})
+        
+        df = pd.DataFrame(list(mapping.items()), columns=["Service", "Email"])
+        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+        
+        if st.button("💾 Sauvegarder la configuration", type="primary"):
+            new_mapping = {}
+            for _, row in edited_df.iterrows():
+                srv = str(row["Service"]).strip()
+                eml = str(row["Email"]).strip()
+                if srv and eml and srv != "None" and eml != "None":
+                    new_mapping[srv] = eml
+                    
+            routing_data["semantic_dispatch"] = {
+                "enabled": enabled,
+                "mapping": new_mapping
+            }
+            
+            with open(routing_file, "w", encoding="utf-8") as f:
+                json.dump(routing_data, f, indent=4, ensure_ascii=False)
+                
+            st.success("✅ Configuration du routage sémantique sauvegardée avec succès !")
+            st.rerun()
+
+# =====================================
+# TAB 5 : Prompts IA
+# =====================================
+with tab5:
+    from utils import load_workspaces_config, save_workspaces_config
+    
+    st.header("🧠 Personnalisation des Prompts par Workspace")
+    
+    st.markdown("""
+    Définissez ici des **instructions spécifiques (System Prompts)** pour chaque workspace.
+    Lorsque l'utilisateur interroge *uniquement* ce workspace, l'IA obéira à ces règles (ex: ton de la voix, format de réponse, contraintes métier).
+    """)
+    
+    ws_config = load_workspaces_config()
+    
+    collections_list = get_collections()
+    col_names = [c["name"] for c in collections_list] if collections_list else list(ws_config.keys())
+    
+    # Merge les noms du json avec ceux de Qdrant
+    all_workspaces = list(set(col_names + list(ws_config.keys())))
+    all_workspaces.sort()
+    
+    selected_ws = st.selectbox("Sélectionnez le workspace à configurer", all_workspaces)
+    
+    if selected_ws:
+        # Récupérer la config actuelle
+        ws_data = ws_config.get(selected_ws, {})
+        response_style = ws_data.get("response_style", {})
+        current_prompt = response_style.get("custom_prompt", "")
+        
+        new_prompt = st.text_area(
+            "Instructions pour l'IA (System Prompt)",
+            value=current_prompt,
+            height=250,
+            help="Laissez vide pour utiliser le prompt global par défaut du système."
+        )
+        
+        if st.button("💾 Sauvegarder le Prompt"):
+            # Initialiser si besoin
+            if selected_ws not in ws_config:
+                ws_config[selected_ws] = {}
+            if "response_style" not in ws_config[selected_ws]:
+                ws_config[selected_ws]["response_style"] = {}
+                
+            # Sauvegarder
+            if new_prompt.strip():
+                ws_config[selected_ws]["response_style"]["custom_prompt"] = new_prompt.strip()
+            else:
+                # Remove if empty
+                if "custom_prompt" in ws_config[selected_ws]["response_style"]:
+                    del ws_config[selected_ws]["response_style"]["custom_prompt"]
+                    
+            save_workspaces_config(ws_config)
+                
+            st.success(f"✅ Prompt mis à jour pour le workspace '{selected_ws}' !")
+            st.rerun()
+

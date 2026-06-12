@@ -157,7 +157,7 @@ def chat(req: ChatRequest):
         logger.info(f"Context built: {chunks_used}/{len(chunks)} chunks, ~{total_tokens} tokens")
         
         # 3. Build prompt
-        system_prompt = LLM_CHAT_SYSTEM_PROMPT
+        system_prompt = req.system_prompt if req.system_prompt else LLM_CHAT_SYSTEM_PROMPT
         user_prompt = f"""Contexte :
 {context}
 

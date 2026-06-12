@@ -61,7 +61,7 @@ class ChatService:
         workspace: str | None = None
 
         try:
-            workspace, rejected = self.router.determine_workspace(email.email_data, return_rejected=True)
+            workspace, rejected = self.router.determine_workspace(email.email_data, return_rejected=True, is_chat=True)
 
             cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")

@@ -208,6 +208,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         logger_instance=logger,
         mail_service=mail_service,
         cleaner=cleaner,
+        router=router,
     )
 
     return {
@@ -291,6 +292,10 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
     logger.info("Dernier UID connu au démarrage : %s", last_uid)
 
     while True:
+        # Reload routing config if changed
+        router: RouterService = context["router"]
+        router.reload_if_changed()
+
         try:
             messages = mail_service.fetch_new_messages(last_uid)
         except Exception as e:
@@ -337,7 +342,7 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                 elif is_chat_email(parsed_email.subject):
                     # Mode Chat : Chat: / Question:
                     chat_service.handle_chat(parsed_email)
-                elif config.enable_semantic_dispatch and dispatch_service.handle_dispatch(parsed_email):
+                elif router.semantic_dispatch_enabled and dispatch_service.handle_dispatch(parsed_email):
                     # Le Routeur Sémantique a déplacé l'email dans un sous-dossier, on s'arrête là.
                     logger.info("Email UID %s classé par le Dispatch IA. Fin du traitement.", uid)
                     pass

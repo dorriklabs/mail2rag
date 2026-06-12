@@ -21,14 +21,31 @@ class RouterService:
         self.config = config
         self.routing_file = config.routing_path
         self.rules: List[Dict[str, Any]] = []
-        self._load_rules()
+        self.semantic_dispatch_enabled = False
+        self.semantic_dispatch_mapping = {}
+        self._last_mtime = 0.0
+        self.reload_if_changed()
 
     # ------------------------------------------------------------------ #
     #  CHARGEMENT DES RÈGLES
     # ------------------------------------------------------------------ #
+    def reload_if_changed(self) -> None:
+        """Vérifie si routing.json a été modifié et le recharge si nécessaire."""
+        try:
+            if not self.routing_file.exists():
+                return
+            current_mtime = self.routing_file.stat().st_mtime
+            if current_mtime > self._last_mtime:
+                self._load_rules()
+                self._last_mtime = current_mtime
+        except Exception as e:
+            logger.error("Erreur lors de la vérification de routing.json : %s", e)
+
     def _load_rules(self) -> None:
         """Charge les règles de routage depuis le fichier JSON."""
         self.rules = []
+        self.semantic_dispatch_mapping = {}
+        self.semantic_dispatch_enabled = False
         try:
             if not self.routing_file.exists():
                 logger.warning("Fichier de routage %s absent.", self.routing_file)
@@ -46,6 +63,12 @@ class RouterService:
                 return
 
             self.rules = rules
+            
+            # Semantic Dispatch
+            sd_config = data.get("semantic_dispatch", {})
+            self.semantic_dispatch_enabled = sd_config.get("enabled", False)
+            self.semantic_dispatch_mapping = sd_config.get("mapping", {})
+
             logger.info("Chargé %d règle(s) de routage.", len(self.rules))
 
         except Exception as e:
@@ -175,7 +198,7 @@ class RouterService:
     # ------------------------------------------------------------------ #
     #  API PUBLIQUE
     # ------------------------------------------------------------------ #
-    def determine_workspace(self, email_data: Dict[str, Any], return_rejected: bool = False) -> str | tuple[str, List[str]]:
+    def determine_workspace(self, email_data: Dict[str, Any], return_rejected: bool = False, is_chat: bool = False) -> str | tuple[str, List[str]]:
         """
         Détermine le workspace cible pour un email donné.
 
@@ -250,6 +273,10 @@ class RouterService:
         # ------------------------------------------------------------------
         # 3. Validation ACL (Strict Routing) et Multi-Workspace
         # ------------------------------------------------------------------
+        if not requested_ws and is_chat:
+            requested_ws = "*"
+            logger.debug("-> Mode Chat sans workspace: recherche globale autorisée par défaut.")
+
         rejected_workspaces = []
         target_ws_list = [default_ws]
         

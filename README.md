@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.16.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.17.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -196,6 +196,12 @@ ENFORCE_STRICT_ROUTING=true
 - **Comma-separated search:** Users can search across multiple allowed workspaces by separating them with a comma (e.g., `Workspace: police, hr`). The RAG Proxy will query all of them and use the **Cross-Encoder Reranker** to fuse and keep the best absolute results regardless of their origin collection.
 - **Wildcard search (`*`):** A user can ask for `Workspace: *`. The router will automatically expand this to all workspaces they have access to. If they have the absolute `["*"]` ACL, it dynamically expands to all collections in the Qdrant database. If they don't have access to a requested workspace, the system safely ignores it and adds a warning to the final response.
 - **High-Performance Concurrency:** When querying multiple workspaces, Mail2RAG uses **Multi-Threading** to fetch vectors concurrently from Qdrant, dropping response times to mere milliseconds. A **Dynamic Top-K Limiter** automatically protects the AI Reranker from being overwhelmed when querying dozens of collections simultaneously, ensuring sub-second speeds.
+
+### 🧠 Custom AI Prompts per Workspace (NEW in v3.17.0)
+
+Define specific behaviors, tones, or business rules for each workspace individually. 
+When a user queries a specific workspace (e.g., `HR` or `Legal`), the AI adopts the corresponding system prompt (e.g., *"Answer like a lawyer, cite articles"*) instead of the global default.
+Easily configurable directly from the Streamlit Admin Dashboard.
 
 ### 🔌 LLM Provider Gateway (NEW in v3.10.0)
 
@@ -423,6 +429,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] LiteLLM Gateway (7 providers)
 - [x] Manual document upload page
 - [x] Automatic tasks scheduling manager
+- [x] Custom AI Prompts per Workspace
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -550,6 +557,12 @@ ENFORCE_STRICT_ROUTING=true
 - **Recherche Globale (`*`) :** Un utilisateur peut demander `Workspace: *`. Le routeur convertira automatiquement cette étoile en la liste de tous les dossiers auxquels il a droit. S'il possède l'ACL suprême `["*"]`, la recherche sera étendue à toutes les bases existantes dans Qdrant en temps réel. Si un utilisateur demande un accès non autorisé, la demande est ignorée de façon sécurisée et un avertissement est ajouté à la réponse.
 - **Haute Performance (Concurrency) :** Lors de la recherche sur de multiples workspaces, Mail2RAG utilise du **Multi-Threading** pour interroger toutes les bases Qdrant en parallèle, garantissant une extraction en quelques millisecondes. Une **Limite Top-K Dynamique** protège automatiquement le Reranker IA contre la surcharge si un utilisateur interroge 50 collections à la fois, assurant un temps de réponse instantané.
 
+### 🧠 Prompts IA Personnalisés par Workspace (NOUVEAU v3.17.0)
+
+Définissez des comportements, un ton de voix ou des règles métier spécifiques pour chaque espace de travail.
+Lorsqu'un utilisateur interroge un workspace ciblé (ex: `Ressources Humaines` ou `Juridique`), l'IA adopte la consigne système correspondante (ex: *"Réponds comme un avocat, cite les articles de loi"*) au lieu du prompt global par défaut.
+Configurable facilement et en temps réel depuis l'onglet "Prompts IA" du Dashboard Admin Streamlit.
+
 ---
 
 ## 🏗️ Architecture
@@ -631,6 +644,7 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] LiteLLM Gateway (7 providers)
 - [x] Page d'upload manuel de documents
 - [x] Planificateur automatique de tâches
+- [x] Personnalisation des prompts par workspace
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 

@@ -7,6 +7,7 @@ import streamlit as st
 import requests
 import os
 from datetime import datetime
+from utils import get_filtered_collections, load_workspaces_config
 
 st.set_page_config(page_title="Chat RAG", page_icon="💬", layout="wide")
 
@@ -69,20 +70,8 @@ Résumé concis :"""
         st.warning(f"Résumé historique impossible: {e}")
         return None
 
-# Récupérer les collections
-def get_collections():
-    try:
-        response = requests.get(f"{RAG_PROXY_URL}/admin/collections", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "ok":
-                return [c["name"] for c in data.get("collections", [])]
-        return []
-    except:
-        return []
-
 # Fonction de chat avec génération IA
-def chat_rag(query, collection, top_k=10, final_k=5, use_bm25=True, temperature=0.1, history=None):
+def chat_rag(query, collection, top_k=10, final_k=5, use_bm25=True, temperature=0.1, history=None, system_prompt=None):
     try:
         payload = {
             "query": query,
@@ -95,6 +84,10 @@ def chat_rag(query, collection, top_k=10, final_k=5, use_bm25=True, temperature=
         # Ajouter l'historique si fourni
         if history:
             payload["history"] = history
+        
+        # Ajouter le prompt système personnalisé si fourni
+        if system_prompt:
+            payload["system_prompt"] = system_prompt
         
         response = requests.post(
             f"{RAG_PROXY_URL}/chat",
@@ -114,17 +107,35 @@ def chat_rag(query, collection, top_k=10, final_k=5, use_bm25=True, temperature=
 with st.sidebar:
     st.header("⚙️ Configuration")
     
-    collections = get_collections()
+    collections = get_filtered_collections(RAG_PROXY_URL)
     
     if not collections:
         st.error("Aucune collection disponible")
         st.stop()
     
-    selected_collection = st.selectbox(
-        "Collection",
+    selected_collections = st.multiselect(
+        "Collections",
         options=collections,
-        help="Sélectionner la collection pour la recherche"
+        default=collections,
+        help="Sélectionner la ou les collections pour la recherche"
     )
+    
+    if not selected_collections:
+        st.warning("Veuillez sélectionner au moins une collection.")
+        st.stop()
+        
+    selected_collection = ",".join(selected_collections)
+    
+    # Option A: Si UNE SEULE collection est sélectionnée, on regarde s'il y a un prompt custom
+    custom_system_prompt = None
+    if len(selected_collections) == 1:
+        try:
+            ws_config = load_workspaces_config()
+            ws_data = ws_config.get(selected_collections[0], {})
+            response_style = ws_data.get("response_style", {})
+            custom_system_prompt = response_style.get("custom_prompt", None)
+        except Exception as e:
+            pass # Ne pas bloquer l'UI si erreur de lecture
     
     st.divider()
     
@@ -261,7 +272,8 @@ if search_button and query:
             final_k=final_k,
             use_bm25=use_bm25,
             temperature=temperature,
-            history=history_to_send
+            history=history_to_send,
+            system_prompt=custom_system_prompt
         )
         
         if result:

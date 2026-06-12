@@ -3,11 +3,7 @@
 {% block content %}
 <h2 style="color: #2c3e50;">🤖 Réponse AI</h2>
 
-{% if workspace %}
-<p style="color:#7f8c8d; font-size: 13px; margin-top: 0;">
-    Workspace utilisé : <strong>{{ workspace }}</strong>
-</p>
-{% endif %}
+
 
 <div class="content">
     {{ response_text | replace('\n', '<br>') | safe }}
@@ -73,5 +69,11 @@
     {% endfor %}
     </div>
 </details>
+{% endif %}
+
+{% if workspace %}
+<div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; color:#7f8c8d; font-size: 12px; text-align: center;">
+    🔍 Recherches effectuées dans les workspaces : <strong>{{ workspace }}</strong>
+</div>
 {% endif %}
 {% endblock %}

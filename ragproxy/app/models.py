@@ -84,6 +84,7 @@ class ChatRequest(BaseModel):
     temperature: float = 0.1
     max_tokens: int = 1000
     history: Optional[List[Dict[str, str]]] = None  # Historique de conversation
+    system_prompt: Optional[str] = None  # Custom system prompt per workspace
 
 
 class ChatResponse(BaseModel):
@@ -92,6 +93,7 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]] = []
     debug_info: Optional[Dict] = None
+
 
 # ---------------------------------------------------------------------------
 # Cron Scheduler

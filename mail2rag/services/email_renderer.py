@@ -31,6 +31,7 @@ class EmailRenderer:
         workspace: str,
         files: list,
         archive_url: str,
+        dashboard_url: str,
         email_summary: str | None = None,
     ) -> str:
         """Notification d'ingestion réussie avec résumé/aperçu de l'email."""
@@ -39,6 +40,7 @@ class EmailRenderer:
             workspace=workspace,
             files=files,
             archive_url=archive_url,
+            dashboard_url=dashboard_url,
             email_summary=email_summary,
         )
 

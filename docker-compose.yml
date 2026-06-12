@@ -143,12 +143,22 @@ services:
     volumes:
       # Accès à l'archive pour suppression de dossiers
       - mail2rag_archive:/archive
+      # Etat persistant pour les utilisateurs
+      - ./state:/state
+      # Configuration du routage dynamique
+      - ./routing.json:/etc/mail2rag/routing.json
+      # Configuration des workspaces (prompts custom)
+      - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json
     environment:
       - RAG_PROXY_URL=http://rag_proxy:8000
       - QDRANT_URL=http://qdrant:6333
       - TIKA_URL=http://tika:9998
       - LM_STUDIO_URL=http://host.docker.internal:1234
       - ARCHIVE_PATH=/archive
+      - ADMIN_NAME=${ADMIN_NAME:-Admin}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change_me_securely}
+      - COOKIE_KEY=${COOKIE_KEY:-some_random_secret_string}
     depends_on:
       rag_proxy:
         condition: service_healthy
