@@ -157,6 +157,7 @@ services:
       - TIKA_URL=http://tika:9998
       - LM_STUDIO_URL=http://host.docker.internal:1234
       - ARCHIVE_PATH=/archive
+      - ARCHIVE_BASE_URL=${ARCHIVE_BASE_URL:-http://localhost:9102}
       - ADMIN_NAME=${ADMIN_NAME:-Admin}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change_me_securely}

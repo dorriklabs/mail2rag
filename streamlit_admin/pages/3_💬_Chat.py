@@ -101,10 +101,11 @@ with st.sidebar:
         st.error("Aucune collection disponible")
         st.stop()
     
+    default_collections = [c for c in collections if c != "mail2rag_cache"]
     selected_collections = st.multiselect(
         "Collections",
         options=collections,
-        default=collections,
+        default=default_collections,
         help="Sélectionner la ou les collections pour la recherche"
     )
     
@@ -256,16 +257,20 @@ for msg_idx, message in enumerate(st.session_state.chat_history):
                             else:
                                 indicator = "[--#--]"
                             
-                            file_link = (metadata.get("link") or 
-                                        metadata.get("url") or 
-                                        metadata.get("archive_url") or
-                                        metadata.get("source_url"))
-                                        
+                            file_link = None
+                            secure_id = metadata.get("secure_id")
+                            
+                            # Priorité 1: Reconstruction dynamique (immunisé contre les changements d'IP/Port)
+                            if secure_id:
+                                archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:9102").rstrip('/')
+                                file_link = f"{archive_base}/{secure_id}/{filename}"
+                            
+                            # Priorité 2: Métadonnées stockées lors de l'ingestion
                             if not file_link:
-                                secure_id = metadata.get("secure_id")
-                                if secure_id:
-                                    archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:9102")
-                                    file_link = f"{archive_base}/{secure_id}/{filename}"
+                                file_link = (metadata.get("link") or 
+                                            metadata.get("url") or 
+                                            metadata.get("archive_url") or
+                                            metadata.get("source_url"))
                             
                             indicator_html = f'<span title="{preview}" style="cursor:help;">{indicator}</span>'
                             

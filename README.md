@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.21.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.22.1-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -132,8 +132,9 @@ Mail2RAG now features enterprise-grade observability:
 
 Turn multi-turn conversations into highly accurate RAG queries without losing context:
 - **Zero-Hallucination Query Rewriting**: Uses a strict Few-Shot prompt to transform pronoun-heavy follow-up questions ("What is it?", "How much was it?") into standalone search queries ("What is the PLUI?", "What is the Norauto invoice amount?").
+- **Full Conversational Memory**: The final AI prompt dynamically receives the conversation history, allowing it to provide highly natural, fluid, and context-aware responses without repeating previously stated definitions.
 - **Dynamic Context Safety**: Automatically calculates text chunks token size before sending them to the LLM. It guarantees the LLM will never crash due to memory overflow, strictly enforcing the `LLM_MAX_CONTEXT_TOKENS` limit.
-- **Semantic Cache Protection**: Responses are cached with exactly 1.000 similarity matching. The cache now properly stores the `collection` metadata, and the Streamlit UI visually groups citations by their source collection (Workspace) for perfect traceability.
+- **Semantic Cache Isolation**: Responses are cached with exactly 1.000 similarity matching. The cache system is now cleanly isolated from user searches to prevent recursive pollution, and the Streamlit UI visually groups citations by their source collection (Workspace).
 
 ### 🎫 Support Draft Mode (NEW in v3.9.0)
 
@@ -593,8 +594,9 @@ Configurable facilement et en temps réel depuis l'onglet "Prompts IA" du Dashbo
 
 Mail2Rag gère désormais les conversations multi-tours à la perfection :
 - **Reformulation Intelligente (Few-Shot) :** Les questions contenant des pronoms ("A quoi ça sert ?") sont analysées via l'historique et transformées en requêtes de recherche autonomes de haute précision.
+- **Mémoire Conversationnelle Fluide :** L'historique des échanges est réinjecté de manière sécurisée dans la réflexion finale de l'IA. Elle rebondit naturellement sur ses propres propos sans jamais se répéter inutilement ("Syndrome du perroquet").
 - **Sécurité Mémoire Dynamique :** Le système compte le nombre exact de "tokens" de chaque extrait de document avant de l'envoyer à l'IA. Si la limite de sécurité (ex: 6000 tokens) est atteinte, les derniers documents sont ignorés pour éviter tout crash serveur (OOM).
-- **Cache Sémantique Amélioré :** Les réponses mises en cache conservent désormais les métadonnées des collections d'origine. L'interface Streamlit regroupe visuellement les sources (citations) sous le nom de leur collection respective (ex: "Urbanisme", "Comptabilité") pour une meilleure traçabilité.
+- **Isolation du Cache Sémantique :** Les réponses mises en cache sont désormais invisibles lors des recherches manuelles pour éviter la pollution des résultats. L'interface Streamlit regroupe visuellement les vraies sources sous le nom de leur collection respective (ex: "Urbanisme") pour une traçabilité parfaite.
 
 ---
 

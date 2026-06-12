@@ -36,7 +36,9 @@ def get_filtered_collections(rag_proxy_url: str):
                     
                 return [c for c in all_cols if c in allowed]
         return []
-    except Exception:
+    except Exception as e:
+        import traceback
+        st.sidebar.error(f"Erreur get_filtered_collections: {e}\n{traceback.format_exc()}")
         return []
 
 def load_workspaces_config():

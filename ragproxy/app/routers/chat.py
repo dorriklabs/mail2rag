@@ -276,7 +276,10 @@ Instructions importantes :
         # 4. Call LLM
         messages = [{"role": "system", "content": system_prompt}]
         
-        # IMPORTANT: L'historique n'est PLUS ajouté au prompt final, car la query a été reformulée !
+        # Ajouter l'historique de conversation si présent
+        if req.history:
+            messages.extend(req.history)
+            logger.info(f"Using conversation history in final prompt: {len(req.history)} messages")
         
         # Ajouter la question actuelle (reformulée)
         messages.append({"role": "user", "content": user_prompt})
