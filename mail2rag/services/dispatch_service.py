@@ -70,9 +70,9 @@ class DispatchService:
                 archive_folder = getattr(self.config, "semantic_dispatch_archive_folder", "Dispatch-Archive")
                 self.mail_service.move_message(email.uid, archive_folder)
 
-                # 3. Notification Teams
+                # 3. Notification Teams, Slack, Google Chat
                 if self.notification_service:
-                    self.notification_service.send_teams_notification(
+                    self.notification_service.send_notification(
                         title="Nouveau courrier trié",
                         text=f"Le courrier de **{email.sender}** a été transféré au service **{matched_folder}**.\n\nSujet : *{email.subject}*",
                         facts={

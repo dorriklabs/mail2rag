@@ -194,7 +194,7 @@ class SupportDraftService:
                 )
 
                 if self.notification_service:
-                    self.notification_service.send_teams_notification(
+                    self.notification_service.send_notification(
                         title="Draft IA prêt à être validé",
                         text=f"Un brouillon a été préparé en réponse à **{email.sender}**.\n\nSujet : *{email.subject}*",
                         facts={

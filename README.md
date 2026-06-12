@@ -159,7 +159,7 @@ Automatically generate response drafts for support teams:
 | **None** (<30%) | 🟡 Yellow | Manual response |
 
 **UX Improvements & Notifications:**
-- **Teams Webhooks:** Native integration to alert support channels when an AI draft is ready or an email is semantically dispatched.
+- **Universal Webhooks (Teams, Slack, Google Chat):** Native integration to alert support channels when an AI draft is ready or an email is semantically dispatched.
 - **Safe Visual Banners:** AI drafts include a prominent dashed red banner (`⚠️ À EFFACER AVANT ENVOI`) to prevent accidental internal notes leakage.
 - **Seamless Replies:** Automatically forwards emails with the `Reply-To` header set to the original citizen, removing the need for agents to copy-paste email addresses.
 

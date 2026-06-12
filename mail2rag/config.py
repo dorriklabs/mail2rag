@@ -63,9 +63,11 @@ class Config:
         self.ms_client_secret = os.getenv("MS_CLIENT_SECRET")
 
         # ------------------------------------------------------------------
-        # NOTIFICATIONS (Teams Webhook)
+        # NOTIFICATIONS (Teams, Slack, Google Chat)
         # ------------------------------------------------------------------
         self.teams_webhook_url = os.getenv("TEAMS_WEBHOOK_URL")
+        self.slack_webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+        self.google_chat_webhook_url = os.getenv("GOOGLE_CHAT_WEBHOOK_URL")
 
 
 
