@@ -117,6 +117,16 @@ Subject: Chat: What are the Q4 highlights?
 | **Upload** | Manual document upload and ingestion |
 | **Chat** | Test RAG queries directly with sources display |
 | **Admin** | Manage collections, system monitoring |
+| **Users** | Manage access rules and passwords |
+| **Audit** | View centralized search logs and activity |
+| **My Account** | Secure user password management |
+
+### 📊 AI Observability & Audit Logs (NEW in v3.17.0)
+
+Mail2RAG now features enterprise-grade observability:
+- **Structured JSON Logging**: All backend and proxy logs are emitted in strict JSONL format (`timestamp`, `level`, `message`, `exception`). This makes debugging instantly parsable by AI maintenance agents or monitoring stacks (Datadog, Splunk).
+- **Centralized Audit Log**: Every search query (from Email or Dashboard) is recorded with its source, the user, the target workspaces, and the exact query.
+- **Admin Audit Interface**: A dedicated Streamlit page allows administrators to filter, monitor, and clear search activity in real-time.
 
 ### 🎫 Support Draft Mode (NEW in v3.9.0)
 
@@ -430,6 +440,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] Manual document upload page
 - [x] Automatic tasks scheduling manager
 - [x] Custom AI Prompts per Workspace
+- [x] Streamlit Audit Dashboard & User Password Management
+- [x] Structured JSON Logging for AI Observability
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -645,6 +657,8 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] Page d'upload manuel de documents
 - [x] Planificateur automatique de tâches
 - [x] Personnalisation des prompts par workspace
+- [x] Dashboard d'Audit Streamlit & Gestion des mots de passe
+- [x] Format de Logging JSON Structuré pour l'observabilité IA
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 

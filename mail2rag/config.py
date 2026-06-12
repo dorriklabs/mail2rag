@@ -135,6 +135,11 @@ class Config:
         self.archive_path = Path(
             os.getenv("ARCHIVE_PATH", "/var/lib/mail2rag/mail2rag_archive")
         )
+        
+        # Fichier de logs d'audit commun (partagé via Docker volume)
+        self.audit_log_path = Path(
+            os.getenv("AUDIT_LOG_PATH", "/var/lib/mail2rag/audit.jsonl")
+        )
         self.routing_path = Path(
             os.getenv("ROUTING_PATH", "/etc/mail2rag/routing.json")
         )
@@ -388,9 +393,22 @@ class Config:
             backupCount=self.log_backup_count,
             encoding="utf-8",
         )
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-        )
+        import json
+        from datetime import datetime
+
+        class JsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_record = {
+                    "timestamp": datetime.fromtimestamp(record.created).isoformat() + "Z",
+                    "level": record.levelname,
+                    "name": record.name,
+                    "message": record.getMessage()
+                }
+                if record.exc_info:
+                    log_record["exception"] = self.formatException(record.exc_info)
+                return json.dumps(log_record, ensure_ascii=False)
+
+        formatter = JsonFormatter()
         file_handler.setFormatter(formatter)
 
         stream_handler = logging.StreamHandler()

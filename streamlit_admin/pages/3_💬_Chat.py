@@ -7,7 +7,7 @@ import streamlit as st
 import requests
 import os
 from datetime import datetime
-from utils import get_filtered_collections, load_workspaces_config
+from utils import get_filtered_collections, load_workspaces_config, log_audit_event
 
 st.set_page_config(page_title="Chat RAG", page_icon="💬", layout="wide")
 
@@ -277,6 +277,14 @@ if search_button and query:
         )
         
         if result:
+            # Enregistrement dans le journal d'audit
+            log_audit_event(
+                user=st.session_state.get("username", "Unknown"),
+                source="Dashboard",
+                workspaces=selected_collection,
+                query=query
+            )
+            
             # Ajouter à l'historique
             st.session_state.chat_history.append({
                 "query": query,

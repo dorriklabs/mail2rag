@@ -82,6 +82,13 @@ class ChatService:
                 query_message, collection_to_search
             )
             
+            # Enregistrement dans le journal d'audit
+            self._log_audit_event(
+                user=email.sender,
+                query=query_content_cleaned,
+                workspaces=collection_to_search
+            )
+
             if rejected:
                 warning_msg = f"⚠️ Vous n'avez pas accès aux espaces de travail suivants : {', '.join(rejected)}.\n\n"
                 response_text = warning_msg + response_text
@@ -178,6 +185,28 @@ class ChatService:
                 e,
                 exc_info=True,
             )
+
+    def _log_audit_event(self, user: str, query: str, workspaces: str) -> None:
+        """Enregistre la requête dans le journal d'audit partagé."""
+        try:
+            import json
+            from datetime import datetime
+            
+            event = {
+                "timestamp": datetime.now().isoformat(),
+                "user": user,
+                "source": "Email",
+                "workspaces": workspaces,
+                "query": query
+            }
+            
+            # Créer le dossier parent si nécessaire
+            self.config.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with self.config.audit_log_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        except Exception as e:
+            self.logger.error("Erreur lors de l'écriture du journal d'audit: %s", e)
 
     # ------------------------------------------------------------------ #
     # RAG Proxy + LM Studio

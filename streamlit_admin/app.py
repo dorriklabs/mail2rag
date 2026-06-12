@@ -113,6 +113,9 @@ def home_page():
     st.caption("Mail2RAG Dashboard v1.0 - Powered by RAG Proxy & Streamlit")
 
 
+# Stockage de l'authenticator pour accès global (ex: Mon Compte)
+st.session_state["authenticator"] = authenticator
+
 # Login widget
 authenticator.login(location="main")
 
@@ -141,16 +144,20 @@ if st.session_state["authentication_status"]:
     p_upload = st.Page("pages/5_📤_Upload.py", title="Upload", icon="📤")
     p_taches = st.Page("pages/6_🕒_Taches_Auto.py", title="Tâches Auto", icon="🕒")
     p_users = st.Page("pages/7_👥_Utilisateurs.py", title="Utilisateurs", icon="👥")
+    p_compte = st.Page("pages/8_👤_Mon_Compte.py", title="Mon Compte", icon="👤")
+    p_audit = st.Page("pages/9_📊_Audit.py", title="Journal d'Audit", icon="📊")
 
     # Routing
     if role == "admin":
         pg = st.navigation({
             "Principal": [p_home, p_documents, p_chat, p_upload],
-            "Administration": [p_overview, p_admin, p_taches, p_users]
+            "Mon Profil": [p_compte],
+            "Administration": [p_overview, p_admin, p_taches, p_users, p_audit]
         })
     else:
         pg = st.navigation({
-            "Principal": [p_home, p_documents, p_chat, p_upload]
+            "Principal": [p_home, p_documents, p_chat, p_upload],
+            "Mon Profil": [p_compte]
         })
         
     pg.run()

@@ -42,3 +42,42 @@ def save_workspaces_config(config):
     """Sauvegarde la configuration des workspaces."""
     with open(WORKSPACES_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4, ensure_ascii=False)
+
+import yaml
+from yaml.loader import SafeLoader
+from datetime import datetime
+
+STATE_DIR = "/state"
+USERS_FILE = os.path.join(STATE_DIR, "users.yaml")
+AUDIT_FILE = os.path.join(STATE_DIR, "audit.jsonl")
+
+def load_users_config():
+    """Charge la configuration des utilisateurs."""
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as file:
+            return yaml.load(file, Loader=SafeLoader)
+    return {}
+
+def save_users_config(config):
+    """Sauvegarde la configuration des utilisateurs."""
+    with open(USERS_FILE, 'w') as file:
+        yaml.dump(config, file, default_flow_style=False)
+
+def log_audit_event(user: str, source: str, query: str, workspaces: str):
+    """Enregistre un événement dans le journal d'audit."""
+    try:
+        if not os.path.exists(STATE_DIR):
+            os.makedirs(STATE_DIR, exist_ok=True)
+            
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "user": user,
+            "source": source,
+            "workspaces": workspaces,
+            "query": query
+        }
+        
+        with open(AUDIT_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"Erreur d'écriture dans le log d'audit: {e}")

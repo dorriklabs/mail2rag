@@ -2,7 +2,7 @@ import streamlit as st
 import yaml
 import os
 import streamlit_authenticator as stauth
-from yaml.loader import SafeLoader
+from utils import load_users_config, save_users_config
 
 st.set_page_config(page_title="Gestion Utilisateurs", page_icon="👥", layout="wide")
 
@@ -10,18 +10,7 @@ if st.session_state.get("role") != "admin":
     st.error("Accès refusé. Vous devez être administrateur.")
     st.stop()
 
-STATE_DIR = "/state"
-USERS_FILE = os.path.join(STATE_DIR, "users.yaml")
-
-def load_config():
-    with open(USERS_FILE) as file:
-        return yaml.load(file, Loader=SafeLoader)
-
-def save_config(config):
-    with open(USERS_FILE, 'w') as file:
-        yaml.dump(config, file, default_flow_style=False)
-
-config = load_config()
+config = load_users_config()
 
 st.title("👥 Gestion des Utilisateurs")
 
@@ -60,7 +49,7 @@ with tab_list:
                     if new_pwd:
                         config['credentials']['usernames'][username]['password'] = stauth.Hasher([new_pwd]).generate()[0]
                     
-                    save_config(config)
+                    save_users_config(config)
                     st.success("Modifications sauvegardées !")
                     st.rerun()
             
@@ -68,7 +57,7 @@ with tab_list:
                 if username != "admin":
                     if st.button("🗑️ Supprimer", key=f"del_{username}", type="primary"):
                         del config['credentials']['usernames'][username]
-                        save_config(config)
+                        save_users_config(config)
                         st.success(f"Utilisateur {username} supprimé !")
                         st.rerun()
                 else:
@@ -99,6 +88,6 @@ with tab_create:
                     "role": new_role_val,
                     "rules": {"allowed_workspaces": []}
                 }
-                save_config(config)
+                save_users_config(config)
                 st.success(f"Utilisateur {new_username} créé avec succès !")
                 st.rerun()
