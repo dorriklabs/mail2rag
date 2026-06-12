@@ -36,7 +36,7 @@ def init_users_file():
         admin_name = os.getenv("ADMIN_NAME", "Admin")
         admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
         admin_password = os.getenv("ADMIN_PASSWORD", "change_me_securely")
-        hashed_pwd = stauth.Hasher([admin_password]).generate()[0]
+        hashed_pwd = stauth.Hasher.hash(admin_password)
         
         default_config = {
             "credentials": {
@@ -71,8 +71,7 @@ authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
-    config['cookie']['expiry_days'],
-    config['pre-authorized']
+    config['cookie']['expiry_days']
 )
 
 def home_page():

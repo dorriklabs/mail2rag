@@ -77,8 +77,17 @@ class VectorDBProvider(ABC):
             metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
             
         Returns:
-            Nombre de documents supprimés
         """
+        pass
+
+    @abstractmethod
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Cherche une réponse mise en cache pour une requête sémantiquement similaire."""
+        pass
+
+    @abstractmethod
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Sauvegarde une réponse générée dans le cache sémantique."""
         pass
 
 
@@ -330,6 +339,69 @@ class QdrantProvider(VectorDBProvider):
             logger.error(f"Failed to delete by metadata in '{collection_name}': {e}")
             return 0
 
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Recherche dans le cache Qdrant s'il existe une question très similaire."""
+        collection_name = "mail2rag_cache"
+        try:
+            # Vérifier si la collection cache existe
+            if not any(col.name == collection_name for col in self.client.get_collections().collections):
+                return None
+                
+            hits = self.client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                limit=1,
+            ).points
+            
+            if hits and hits[0].score >= threshold:
+                logger.info(f"⚡ Semantic Cache HIT! (score: {hits[0].score:.4f})")
+                return hits[0].payload
+                
+            return None
+        except Exception as e:
+            logger.error(f"Semantic cache search failed: {e}")
+            return None
+
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Ajoute une question/réponse au cache."""
+        import uuid
+        collection_name = "mail2rag_cache"
+        
+        try:
+            # Vérifier/Créer la collection si elle n'existe pas
+            if not any(col.name == collection_name for col in self.client.get_collections().collections):
+                vector_dim = len(query_vector)
+                logger.info(f"Creating semantic cache collection '{collection_name}' with dense dimension {vector_dim}")
+                self.client.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=models.VectorParams(size=vector_dim, distance=models.Distance.COSINE),
+                )
+            
+            point_id = str(uuid.uuid4())
+            payload = {
+                "query": query_text,
+                "answer": answer,
+                "sources": sources,
+            }
+            
+            point = models.PointStruct(
+                id=point_id,
+                vector=query_vector,
+                payload=payload,
+            )
+            
+            self.client.upsert(
+                collection_name=collection_name,
+                points=[point],
+            )
+            
+            logger.info("Saved response to semantic cache.")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add to semantic cache: {e}")
+            return False
+
 
 # -----------------------------------------------------------------------------
 #  FACTORY / SERVICE (Le point d'entrée unique)
@@ -359,3 +431,9 @@ class VectorDBService:
     
     def delete_by_metadata(self, collection_name: str, metadata_filter: Dict) -> int:
         return self.provider.delete_by_metadata(collection_name, metadata_filter)
+
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        return self.provider.check_semantic_cache(query_vector, threshold)
+        
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        return self.provider.add_to_semantic_cache(query_text, query_vector, answer, sources)

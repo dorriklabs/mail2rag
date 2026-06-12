@@ -128,6 +128,13 @@ Mail2RAG now features enterprise-grade observability:
 - **Centralized Audit Log**: Every search query (from Email or Dashboard) is recorded with its source, the user, the target workspaces, and the exact query.
 - **Admin Audit Interface**: A dedicated Streamlit page allows administrators to filter, monitor, and clear search activity in real-time.
 
+### 🧠 Advanced Conversational RAG & Smart Rewriting (NEW in v3.18.0)
+
+Turn multi-turn conversations into highly accurate RAG queries without losing context:
+- **Zero-Hallucination Query Rewriting**: Uses a strict Few-Shot prompt to transform pronoun-heavy follow-up questions ("What is it?", "How much was it?") into standalone search queries ("What is the PLUI?", "What is the Norauto invoice amount?").
+- **Dynamic Context Safety**: Automatically calculates text chunks token size before sending them to the LLM. It guarantees the LLM will never crash due to memory overflow, strictly enforcing the `LLM_MAX_CONTEXT_TOKENS` limit.
+- **Semantic Cache Protection**: Responses are cached with exactly 1.000 similarity matching. The cache now properly stores the `collection` metadata, and the Streamlit UI visually groups citations by their source collection (Workspace) for perfect traceability.
+
 ### 🎫 Support Draft Mode (NEW in v3.9.0)
 
 Automatically generate response drafts for support teams:
@@ -447,6 +454,8 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] Custom AI Prompts per Workspace
 - [x] Streamlit Audit Dashboard & User Password Management
 - [x] Structured JSON Logging for AI Observability
+- [x] Advanced Conversational RAG & Smart Query Rewriting
+- [x] Streamlit UI Source Grouping & Semantic Cache improvements
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -580,6 +589,13 @@ Définissez des comportements, un ton de voix ou des règles métier spécifique
 Lorsqu'un utilisateur interroge un workspace ciblé (ex: `Ressources Humaines` ou `Juridique`), l'IA adopte la consigne système correspondante (ex: *"Réponds comme un avocat, cite les articles de loi"*) au lieu du prompt global par défaut.
 Configurable facilement et en temps réel depuis l'onglet "Prompts IA" du Dashboard Admin Streamlit.
 
+### 🧠 RAG Conversationnel Avancé & Cache Sémantique (NOUVEAU v3.18.0)
+
+Mail2Rag gère désormais les conversations multi-tours à la perfection :
+- **Reformulation Intelligente (Few-Shot) :** Les questions contenant des pronoms ("A quoi ça sert ?") sont analysées via l'historique et transformées en requêtes de recherche autonomes de haute précision.
+- **Sécurité Mémoire Dynamique :** Le système compte le nombre exact de "tokens" de chaque extrait de document avant de l'envoyer à l'IA. Si la limite de sécurité (ex: 6000 tokens) est atteinte, les derniers documents sont ignorés pour éviter tout crash serveur (OOM).
+- **Cache Sémantique Amélioré :** Les réponses mises en cache conservent désormais les métadonnées des collections d'origine. L'interface Streamlit regroupe visuellement les sources (citations) sous le nom de leur collection respective (ex: "Urbanisme", "Comptabilité") pour une meilleure traçabilité.
+
 ---
 
 ## 🏗️ Architecture
@@ -664,6 +680,8 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] Personnalisation des prompts par workspace
 - [x] Dashboard d'Audit Streamlit & Gestion des mots de passe
 - [x] Format de Logging JSON Structuré pour l'observabilité IA
+- [x] RAG Conversationnel Avancé & Reformulation (Few-Shot)
+- [x] UI : Regroupement visuel des sources par collection
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 

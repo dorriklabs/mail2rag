@@ -10,7 +10,7 @@ import shutil
 import os
 from pathlib import Path
 from datetime import datetime
-from utils import get_filtered_collections
+from utils import get_filtered_collections, fix_encoding
 
 st.set_page_config(page_title="Gestion Documents", page_icon="📄", layout="wide")
 
@@ -72,7 +72,6 @@ def delete_document(doc_id, collection, delete_archive=False, secure_id=None):
     return result
 
 # Sélection de collection
-collections = get_collections()
 
 if not collections:
     st.warning("Aucune collection disponible")
@@ -175,7 +174,7 @@ for idx, doc in enumerate(filtered_docs[:50]):  # Limiter à 50 pour performance
         
         with col1:
             st.markdown(f"**Texte:**")
-            text_content = payload.get("text", "")
+            text_content = fix_encoding(payload.get("text", ""))
             st.text_area(
                 "Contenu",
                 value=text_content,

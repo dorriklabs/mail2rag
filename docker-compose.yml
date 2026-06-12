@@ -141,6 +141,8 @@ services:
     ports:
       - "9101:8501"
     volumes:
+      # Code source (dev hot-reload)
+      - ./streamlit_admin:/app
       # Accès à l'archive pour suppression de dossiers
       - mail2rag_archive:/archive
       # Etat persistant pour les utilisateurs

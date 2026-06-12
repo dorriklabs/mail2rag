@@ -5,6 +5,17 @@ import streamlit as st
 
 WORKSPACES_CONFIG_FILE = "/etc/mail2rag/workspaces_config.json"
 
+def fix_encoding(text):
+    """Corrige les problèmes de décodage (Mojibake) où l'UTF-8 a été lu comme du Latin-1."""
+    if not isinstance(text, str):
+        return text
+    try:
+        if "Ã" in text:
+            return text.encode('latin1').decode('utf-8')
+    except Exception:
+        pass
+    return text
+
 def get_filtered_collections(rag_proxy_url: str):
     """Récupère les collections depuis le backend et les filtre selon les droits de l'utilisateur (ACL)."""
     try:

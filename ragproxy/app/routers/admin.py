@@ -194,7 +194,7 @@ def list_collections():
         
         return {
             "status": "ok",
-            "multi_collection_mode": pipeline.multi_collection_mode,
+            "multi_collection_mode": True,
             "collections": collections_info
         }
     except Exception as e:

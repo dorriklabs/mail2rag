@@ -12,6 +12,7 @@ from utils import get_filtered_collections
 st.set_page_config(page_title="Upload", page_icon="📤", layout="wide")
 
 RAG_PROXY_URL = st.session_state.get("rag_proxy_url", "http://rag_proxy:8000")
+TIKA_URL = os.environ.get("TIKA_URL", "http://tika:9998")
 
 st.title("📤 Upload de Documents")
 
@@ -40,11 +41,17 @@ with col1:
         target_collection = selected_col
 
 with col2:
-    st.info("Formats supportés actuellement via l'interface web : .txt, .md, .csv")
+    st.info("Formats supportés : Bureautique, PDF, Emails, Images (OCR), Textes...")
 
 st.divider()
 
-uploaded_file = st.file_uploader("Choisissez un fichier", type=["txt", "md", "csv"])
+SUPPORTED_EXTENSIONS = [
+    "txt", "md", "csv", "pdf", "doc", "docx", "xls", "xlsx", 
+    "ppt", "pptx", "odt", "ods", "odp", "rtf", "html", "xml", 
+    "eml", "msg", "png", "jpg", "jpeg", "tiff"
+]
+
+uploaded_file = st.file_uploader("Choisissez un fichier", type=SUPPORTED_EXTENSIONS)
 
 if uploaded_file is not None:
     st.write(f"Fichier sélectionné : **{uploaded_file.name}** ({uploaded_file.size / 1024:.2f} Ko)")
@@ -57,8 +64,26 @@ if uploaded_file is not None:
     if st.button("📤 Ingérer le document", type="primary"):
         with st.spinner("Lecture et envoi au RAG Proxy..."):
             try:
-                # Lecture du texte
-                content = uploaded_file.getvalue().decode("utf-8")
+                # Détection du type de fichier et lecture du texte
+                ext = uploaded_file.name.split('.')[-1].lower()
+                
+                if ext not in ["txt", "md", "csv"]:
+                    # Extraction via Tika
+                    with st.spinner("Extraction du texte avec Tika..."):
+                        tika_response = requests.put(
+                            f"{TIKA_URL}/tika",
+                            data=uploaded_file.getvalue(),
+                            headers={"Accept": "text/plain"},
+                            timeout=60
+                        )
+                        if tika_response.status_code == 200:
+                            content = tika_response.text
+                        else:
+                            st.error(f"❌ Erreur lors de l'extraction Tika ({tika_response.status_code})")
+                            st.stop()
+                else:
+                    # Fichiers texte classiques
+                    content = uploaded_file.getvalue().decode("utf-8")
                 
                 # Préparation des métadonnées
                 metadata = {

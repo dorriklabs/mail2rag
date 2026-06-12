@@ -125,6 +125,8 @@ class RAGPipeline:
                 coll = future_to_coll[future]
                 try:
                     candidates = future.result()
+                    for candidate in candidates:
+                        candidate["metadata"]["collection"] = coll
                     merged_candidates.extend(candidates)
                 except Exception as e:
                     logger.error(f"Concurrent search failed for collection {coll}: {e}")
