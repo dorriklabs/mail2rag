@@ -94,6 +94,13 @@ def ingest_document(req: IngestRequest):
         # BM25 is now native in Qdrant via Sparse Vectors. No manual rebuild needed.
         logger.info(f"Native hybrid index automatically updated for '{req.collection}'")
         
+        # Invalidate the semantic cache when new documents are added
+        try:
+            pipeline.vdb.clear_semantic_cache()
+            logger.info("Semantic cache invalidated due to new ingestion")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate semantic cache: {e}")
+        
         return IngestResponse(
             status="ok",
             collection=req.collection,
@@ -146,6 +153,11 @@ def delete_document(doc_id: str, collection: Optional[str] = None):
                 "message": f"No documents found with id '{doc_id}'"
             }
         
+        try:
+            pipeline.vdb.clear_semantic_cache()
+        except Exception as e:
+            logger.warning(f"Failed to invalidate semantic cache: {e}")
+            
         return {
             "status": "ok",
             "deleted_count": deleted_count,
@@ -242,6 +254,11 @@ def delete_collection(name: str):
         # BM25 is native in Qdrant, deleted automatically with collection
         result["bm25_deleted"] = True
         
+        try:
+            pipeline.vdb.clear_semantic_cache()
+        except Exception as e:
+            logger.warning(f"Failed to invalidate semantic cache: {e}")
+            
         result["message"] = f"Collection '{name}' deleted"
         return result
         

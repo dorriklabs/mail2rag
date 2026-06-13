@@ -90,6 +90,11 @@ class VectorDBProvider(ABC):
         """Sauvegarde une réponse générée dans le cache sémantique."""
         pass
 
+    @abstractmethod
+    def clear_semantic_cache(self) -> bool:
+        """Vide entièrement le cache sémantique."""
+        pass
+
 
 # -----------------------------------------------------------------------------
 #  ADAPTATEUR QDRANT (Le "Driver")
@@ -402,6 +407,17 @@ class QdrantProvider(VectorDBProvider):
             logger.error(f"Failed to add to semantic cache: {e}")
             return False
 
+    def clear_semantic_cache(self) -> bool:
+        collection_name = "mail2rag_cache"
+        try:
+            if any(col.name == collection_name for col in self.client.get_collections().collections):
+                self.client.delete_collection(collection_name=collection_name)
+                logger.info(f"Deleted semantic cache collection '{collection_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to clear semantic cache: {e}")
+            return False
+
 
 # -----------------------------------------------------------------------------
 #  FACTORY / SERVICE (Le point d'entrée unique)
@@ -437,3 +453,6 @@ class VectorDBService:
         
     def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
         return self.provider.add_to_semantic_cache(query_text, query_vector, answer, sources)
+
+    def clear_semantic_cache(self) -> bool:
+        return self.provider.clear_semantic_cache()
