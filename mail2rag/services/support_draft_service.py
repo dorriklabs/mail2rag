@@ -165,8 +165,11 @@ class SupportDraftService:
                 ws_config=ws_config,
             )
             
-            # 6. Créer le brouillon
+            # 6. Créer le brouillon ou envoyer l'email combiné
             message_id = self._extract_message_id(email.email_data)
+            
+            # Récupérer l'adresse du service cible depuis le ws_config ou routing.json
+            service_email = ws_config.get("target_email") or self.router.semantic_dispatch_mapping.get(workspace)
             
             success = self.draft_service.create_draft(
                 to_email=email.sender,
@@ -175,6 +178,7 @@ class SupportDraftService:
                 in_reply_to=message_id,
                 references=message_id,
                 original_uid=email.uid,
+                service_email=service_email,
             )
             
             if success:

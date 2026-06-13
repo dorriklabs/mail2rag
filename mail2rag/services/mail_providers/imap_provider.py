@@ -89,6 +89,18 @@ class ImapSmtpProvider(BaseMailProvider):
         msg.attach(MIMEText(body, "html" if is_html else "plain", "utf-8"))
         return self._send_message_smtp(msg, "send_reply")
 
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        msg = MIMEMultipart()
+        msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
+        msg["To"] = service_email
+        msg["Reply-To"] = client_email
+        msg["Subject"] = subject
+        if original_message_id:
+            msg["In-Reply-To"] = original_message_id
+            msg["References"] = original_message_id
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+        return self._send_message_smtp(msg, "send_combined_email")
+
     def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str) -> bool:
         msg = MIMEMultipart()
         msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user

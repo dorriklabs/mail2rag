@@ -80,23 +80,50 @@ class DraftService:
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         original_uid: Optional[int] = None,
+        service_email: Optional[str] = None,
     ) -> bool:
         """
-        Crée un brouillon dans le dossier Drafts IMAP.
+        Crée un brouillon ou envoie un email combiné au service selon le provider.
         
         Args:
-            to_email: Destinataire (le client ayant posé la question)
-            subject: Sujet (Re: préfixé automatiquement si absent)
-            body_html: Corps HTML du brouillon
+            to_email: Destinataire original (le client ayant posé la question)
+            subject: Sujet de l'email
+            body_html: Corps HTML généré (Brouillon + message original)
             in_reply_to: Message-ID de l'email original
             references: Chaîne de Message-IDs pour threading
             original_uid: UID de l'email original (pour tracking)
+            service_email: Email du service cible (utilisé en mode SMTP combiné)
             
         Returns:
-            True si création réussie, False sinon
+            True si opération réussie, False sinon
         """
         try:
-            # Préparer le sujet
+            # Si on est en mode IMAP/SMTP standard, on utilise l'envoi d'email combiné
+            if getattr(self.config, "mail_provider", "imap").lower() == "imap":
+                # Fallback sur l'utilisateur SMTP si le service_email n'est pas fourni
+                target_email = service_email or getattr(self.config, "smtp_from", None) or self.config.smtp_user
+                
+                success = self.mail_service.send_combined_email(
+                    service_email=target_email,
+                    client_email=to_email,
+                    subject=subject,
+                    body_html=body_html,
+                    original_message_id=in_reply_to
+                )
+                
+                if success:
+                    self.logger.info(
+                        "📝 Email combiné envoyé à %s pour %s (sujet: %s)",
+                        target_email,
+                        to_email,
+                        subject[:50],
+                    )
+                return success
+
+            # Sinon (Microsoft Graph, etc.), on conserve la logique de brouillon/append
+            # (Note: Microsoft Graph devrait avoir son propre _append_to_drafts ou api)
+            
+            # Préparer le sujet (seulement pour la création de draft classique)
             if not subject.lower().startswith("re:"):
                 subject = f"Re: {subject}"
             

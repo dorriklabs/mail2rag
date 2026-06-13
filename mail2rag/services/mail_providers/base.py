@@ -41,6 +41,11 @@ class BaseMailProvider(ABC):
         pass
 
     @abstractmethod
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        """Envoie un email combiné au service cible avec l'adresse du client en Reply-To."""
+        pass
+
+    @abstractmethod
     def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str) -> bool:
         """Transfère un email complet."""
         pass
