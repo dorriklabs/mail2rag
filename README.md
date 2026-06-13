@@ -49,10 +49,16 @@ Mail2RAG monitors your inbox and **automatically**:
 git clone https://github.com/dorriklabs/mail2rag.git
 cd mail2rag && cp .env.example .env
 
-# 2. Edit .env with your IMAP/SMTP credentials and LM Studio URL
+# 2. Add your IMAP/SMTP credentials to .env
+nano .env
 
-# 3. Launch
-docker-compose up -d
+# 3. Local LLM Strategy (LM Studio)
+# Start LM Studio server and load models (Qwen + bge-m3) automatically:
+./start.sh
+# (This script will also run `docker compose up -d` at the end)
+
+# OR 3. Standard Docker deployment (if not using local LM Studio script)
+# docker compose up -d
 
 # 4. Access dashboard
 open http://localhost:8501
@@ -308,7 +314,7 @@ When deploying to a public environment (like a City Hall), **never connect the A
 2. **Instance 2: Public Sorter (`contact@domain.com`)**
    - **Access**: Public
    - **Features**: Semantic Dispatch (`ENABLE_SEMANTIC_DISPATCH=true`), Support Draft Mode
-   - **Role**: Silent sorter. Forwards emails to departments and prepares Drafts. **Zero risk** of sending an hallucinated email to a citizen.
+   - **Role**: Silent sorter. Forwards emails to departments based on semantic context, **injecting an AI-generated draft response** (RAG) at the top of the forwarded email to save internal agents massive amounts of time. **Zero risk** of sending an hallucinated email to a citizen.
 
 ### Services Stack
 

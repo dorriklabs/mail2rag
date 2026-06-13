@@ -221,6 +221,41 @@ class SupportDraftService:
                 exc_info=True,
             )
 
+    def generate_ai_suggestion_text(self, email: "ParsedEmail", workspace: str) -> Optional[str]:
+        """
+        Génère uniquement le texte de suggestion IA pour un e-mail donné, sans créer de brouillon IMAP.
+        Ceci est utile pour inclure la suggestion dans un e-mail transféré.
+        """
+        try:
+            ws_config = self.config.workspace_settings.get(workspace, {})
+            cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
+            query = self._build_query(email.subject, cleaned_body)
+            
+            search_results, ai_response = self._search_and_generate(
+                query=query,
+                workspace=workspace,
+                ws_config=ws_config,
+            )
+            
+            if not ai_response:
+                return None
+                
+            # Construire une réponse textuelle lisible
+            suggestion = ai_response.strip()
+            
+            # Ajouter les sources si présentes
+            if search_results:
+                suggestion += "\n\n--- Sources utilisées ---\n"
+                for res in search_results[:3]:
+                    filename = res.get("payload", {}).get("filename", "Document inconnu")
+                    suggestion += f"- {filename}\n"
+                    
+            return suggestion
+            
+        except Exception as e:
+            self.logger.error("❌ Erreur lors de la génération de la suggestion texte : %s", e)
+            return None
+
     def _build_query(self, subject: str, body: str) -> str:
         """Construit la requête de recherche à partir du sujet et du corps."""
         parts = []

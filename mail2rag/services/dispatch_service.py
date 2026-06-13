@@ -30,6 +30,7 @@ class DispatchService:
         cleaner: "CleanerService",
         router: "RouterService",
         notification_service=None,
+        support_draft_service=None,
     ):
         self.config = config
         self.logger = logger_instance
@@ -37,6 +38,7 @@ class DispatchService:
         self.cleaner = cleaner
         self.router = router
         self.notification_service = notification_service
+        self.support_draft_service = support_draft_service
 
     def handle_dispatch(self, email: "ParsedEmail") -> bool:
         """
@@ -62,8 +64,14 @@ class DispatchService:
             target_email = mapping[matched_folder]
             self.logger.info("🎯 Dispatch IA : Transfert UID %s vers %s (%s)", email.uid, matched_folder, target_email)
             
-            # 1. Transférer l'e-mail via SMTP
-            forwarded = self.mail_service.forward_parsed_email(email, target_email)
+            # 1. Générer une suggestion IA si le service est disponible
+            ai_suggestion = None
+            if self.support_draft_service:
+                self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s...", matched_folder)
+                ai_suggestion = self.support_draft_service.generate_ai_suggestion_text(email, matched_folder)
+
+            # 2. Transférer l'e-mail via SMTP avec la suggestion injectée
+            forwarded = self.mail_service.forward_parsed_email(email, target_email, prefix_text=ai_suggestion)
             
             if forwarded:
                 # 2. Archiver l'original dans IMAP pour ne plus le traiter

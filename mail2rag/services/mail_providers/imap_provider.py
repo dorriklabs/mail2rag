@@ -101,12 +101,17 @@ class ImapSmtpProvider(BaseMailProvider):
         msg.attach(MIMEText(body_html, "html", "utf-8"))
         return self._send_message_smtp(msg, "send_combined_email")
 
-    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str) -> bool:
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
         msg = MIMEMultipart()
         msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
         msg["To"] = to_email
         msg["Subject"] = f"Fwd: {parsed_email.subject}"
-        body = f"--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n{parsed_email.body}"
+        
+        body = "--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n"
+        if prefix_text:
+            body += f"=== SUGGESTION DE RÉPONSE IA ===\n{prefix_text}\n================================\n\n"
+            
+        body += parsed_email.body
         msg.attach(MIMEText(body, "plain", "utf-8"))
         if parsed_email.msg.is_multipart():
             for part in parsed_email.msg.walk():

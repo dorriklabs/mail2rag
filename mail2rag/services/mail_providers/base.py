@@ -46,8 +46,11 @@ class BaseMailProvider(ABC):
         pass
 
     @abstractmethod
-    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str) -> bool:
-        """Transfère un email complet."""
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+        """
+        Transfère un email parsé vers une nouvelle adresse.
+        Si prefix_text est fourni, il sera injecté au début du message transféré.
+        """
         pass
 
     @abstractmethod

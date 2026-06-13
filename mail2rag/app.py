@@ -226,6 +226,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         cleaner=cleaner,
         router=router,
         notification_service=notification_service,
+        support_draft_service=support_draft_service,
     )
 
     return {
