@@ -142,6 +142,7 @@ class MaintenanceService:
                         metadata = {
                             "filename": file_path.name,
                             "source": "archive_resync",
+                            "secure_id": secure_id,
                         }
                         result = self.ragproxy_client.ingest_document(
                             collection=workspace,

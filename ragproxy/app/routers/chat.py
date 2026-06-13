@@ -229,7 +229,8 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
                 logger.info(f"Context limit reached: {chunks_used} chunks used, {total_tokens} tokens")
                 break
             
-            context_parts.append(f"[Document {i+1}]")
+            filename = metadata.get("filename", "Inconnu")
+            context_parts.append(f"[Document {i+1} : {filename}]")
             context_parts.append(text)
             context_parts.append("")
             
@@ -247,7 +248,9 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
             first_chunk = chunks[0]
             max_chars = available_tokens * CHARS_PER_TOKEN
             text = first_chunk.get("text", "")[:max_chars]
-            context_parts = [f"[Document 1]", text, ""]
+            metadata = first_chunk.get("metadata", {})
+            filename = metadata.get("filename", "Inconnu")
+            context_parts = [f"[Document 1 : {filename}]", text, ""]
             sources = [{
                 "text": text,
                 "score": first_chunk.get("score", 0.0),

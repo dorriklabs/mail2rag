@@ -116,6 +116,8 @@ class ImapSmtpProvider(BaseMailProvider):
         msg["Subject"] = f"Fwd: {parsed_email.subject}"
         msg["Date"] = email.utils.formatdate(localtime=True)
         msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
+        msg["Auto-Submitted"] = "auto-generated"
+        msg["X-Auto-Response-Suppress"] = "All"
         
         body = "--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n"
         if prefix_text:
@@ -161,7 +163,12 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def _send_message_smtp(self, msg: MIMEMultipart, log_context: str) -> bool:
         try:
-            with smtplib.SMTP(self.config.smtp_server, self.config.smtp_port, timeout=self.smtp_timeout) as server:
+            with smtplib.SMTP(
+                self.config.smtp_server, 
+                self.config.smtp_port, 
+                local_hostname=self.config.smtp_server,
+                timeout=self.smtp_timeout
+            ) as server:
                 server.starttls()
                 server.login(self.config.smtp_user, self.config.smtp_password)
                 server.send_message(msg)

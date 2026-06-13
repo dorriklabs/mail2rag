@@ -246,9 +246,27 @@ class SupportDraftService:
             # Ajouter les sources si présentes
             if search_results:
                 suggestion += "\n\n--- Sources utilisées ---\n"
+                import os
+                archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:9102").rstrip('/')
+                
                 for res in search_results[:3]:
-                    filename = res.get("metadata", {}).get("filename", "Document inconnu")
-                    suggestion += f"- {filename}\n"
+                    metadata = res.get("metadata", {})
+                    filename = metadata.get("filename", "Document inconnu")
+                    secure_id = metadata.get("secure_id")
+                    
+                    file_link = None
+                    if secure_id:
+                        file_link = f"{archive_base}/{secure_id}/{filename}"
+                    else:
+                        file_link = (metadata.get("link") or 
+                                     metadata.get("url") or 
+                                     metadata.get("archive_url") or
+                                     metadata.get("source_url"))
+                    
+                    if file_link:
+                        suggestion += f"- [{filename}]({file_link})\n"
+                    else:
+                        suggestion += f"- {filename}\n"
                     
             return suggestion
             
@@ -292,7 +310,8 @@ class SupportDraftService:
             payload = {
                 "query": query,
                 "collection": workspace,
-                "top_k": 5,
+                "top_k": 20,
+                "final_k": 10,
                 "generate": True,
                 "system_prompt": system_prompt,
             }

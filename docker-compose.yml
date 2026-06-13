@@ -72,11 +72,13 @@ services:
       USE_BM25: "true"
 
       REQUEST_TIMEOUT: "20"
+      LOG_PATH: "/var/log/mail2rag/rag_proxy.log"
     volumes:
       - bm25_data:/bm25
       - mail2rag_archive:/archive
       - ./scripts:/app/scripts:ro
       - ./state:/app/state
+      - ./logs:/var/log/mail2rag
     ports:
       - "9100:8000"
     depends_on:
@@ -151,6 +153,8 @@ services:
       - ./routing.json:/etc/mail2rag/routing.json
       # Configuration des workspaces (prompts custom)
       - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json
+      # Logs unifiés
+      - ./logs:/var/log/mail2rag
     environment:
       - RAG_PROXY_URL=http://rag_proxy:8000
       - QDRANT_URL=http://qdrant:6333
@@ -162,6 +166,7 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change_me_securely}
       - COOKIE_KEY=${COOKIE_KEY:-some_random_secret_string}
+      - LOG_PATH=/var/log/mail2rag/admin.log
     depends_on:
       rag_proxy:
         condition: service_healthy

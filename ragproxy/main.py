@@ -13,29 +13,30 @@ from app.config import LOG_LEVEL, API_KEY_ENABLED
 from app.pipeline import RAGPipeline
 from app.routers import health, rag, chat, admin
 
-import json
-from datetime import datetime
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log_record = {
-            "timestamp": datetime.fromtimestamp(record.created).isoformat() + "Z",
-            "level": record.levelname,
-            "name": record.name,
-            "message": record.getMessage()
-        }
-        if record.exc_info:
-            log_record["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_record, ensure_ascii=False)
+import os
+from logging.handlers import RotatingFileHandler
 
 # Configure logging
+log_path = os.getenv("LOG_PATH", "/var/log/mail2rag/rag_proxy.log")
+os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+)
+
+file_handler = RotatingFileHandler(
+    log_path, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+)
+file_handler.setFormatter(formatter)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
+    handlers=[file_handler, stream_handler],
+    force=True
 )
-# Apply JSON formatter to all handlers
-formatter = JsonFormatter()
-for handler in logging.root.handlers:
-    handler.setFormatter(formatter)
 
 logger = logging.getLogger(__name__)
 
