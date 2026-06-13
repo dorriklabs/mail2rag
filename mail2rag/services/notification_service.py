@@ -41,16 +41,38 @@ class NotificationService:
         if not self.teams_webhook_url:
             return False
             
+        # Format Adaptive Card (requis pour les nouveaux Webhooks Teams / Power Automate)
+        facts_list = [{"title": k, "value": v} for k, v in (facts or {}).items()]
+        
         payload = {
-            "@type": "MessageCard",
-            "@context": "http://schema.org/extensions",
-            "themeColor": "0076D7",
-            "summary": title,
-            "sections": [{
-                "activityTitle": title,
-                "text": text,
-                "facts": [{"name": k, "value": v} for k, v in (facts or {}).items()]
-            }]
+            "type": "message",
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "contentUrl": None,
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.4",
+                        "body": [
+                            {
+                                "type": "TextBlock",
+                                "text": title,
+                                "weight": "Bolder",
+                                "size": "Medium"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": text,
+                                "wrap": True
+                            }
+                        ] + ([{
+                            "type": "FactSet",
+                            "facts": facts_list
+                        }] if facts_list else [])
+                    }
+                }
+            ]
         }
 
         try:
