@@ -57,6 +57,7 @@ Thumbs.db
 # ============================================
 *.backup
 *.bak
+docker-compose.override.yml
 
 # ============================================
 # TEMPORAIRES
