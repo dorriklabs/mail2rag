@@ -161,6 +161,7 @@ class RAGPipeline:
         result = {
             "deps": {
                 "qdrant": self.vdb.is_ready(),
+                "bm25": self.vdb.is_ready(), # BM25 is now native in Qdrant
             }
         }
         

@@ -8,6 +8,16 @@
         },
         {
             "type": "sender",
+            "value": "etat-civil@dsiatlantic.com",
+            "workspace": "etat-civil"
+        },
+        {
+            "type": "sender",
+            "value": "police@dsiatlantic.com",
+            "workspace": "police"
+        },
+        {
+            "type": "sender",
             "value": "boss@example.com",
             "workspace": "urgent_workspace"
         },

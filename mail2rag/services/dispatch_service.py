@@ -67,8 +67,13 @@ class DispatchService:
             # 1. Générer une suggestion IA si le service est disponible
             ai_suggestion = None
             if self.support_draft_service:
-                self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s...", matched_folder)
-                ai_suggestion = self.support_draft_service.generate_ai_suggestion_text(email, matched_folder)
+                # Résoudre le vrai nom du workspace (slug) pour le service cible
+                target_workspace = self.router.determine_workspace({"from": target_email, "subject": "", "body": ""})
+                # Prendre le premier si multiple
+                target_workspace = target_workspace.split(",")[0] if "," in target_workspace else target_workspace
+                
+                self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s (workspace: %s)...", matched_folder, target_workspace)
+                ai_suggestion = self.support_draft_service.generate_ai_suggestion_text(email, target_workspace)
 
             # 2. Transférer l'e-mail via SMTP avec la suggestion injectée
             forwarded = self.mail_service.forward_parsed_email(email, target_email, prefix_text=ai_suggestion)

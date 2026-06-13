@@ -24,6 +24,22 @@ class ImapSmtpProvider(BaseMailProvider):
         self.imap_folder = getattr(config, "imap_folder", "INBOX") or "INBOX"
         self.imap_search_criteria = (getattr(config, "imap_search_criteria", "UNSEEN") or "UNSEEN").strip()
 
+    def _safe_address(self, addr_str: str) -> str:
+        from email.utils import parseaddr, formataddr
+        from email.header import Header
+        if not addr_str: return addr_str
+        name, addr = parseaddr(addr_str)
+        if not addr: return addr_str
+        return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
+
+    def _generate_message_id(self) -> str:
+        import email.utils
+        domain = 'localhost'
+        if '.' in self.config.smtp_server:
+            parts = self.config.smtp_server.split('.')
+            domain = parts[-2] + '.' + parts[-1]
+        return email.utils.make_msgid(domain=domain)
+
     def _connect(self) -> None:
         try:
             logger.info("Connexion IMAP à %s:%s...", self.config.imap_server, self.config.imap_port)
@@ -80,20 +96,12 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
         import email.utils
-        from email.utils import parseaddr, formataddr
-        from email.header import Header
-        def safe_address(addr_str):
-            if not addr_str: return addr_str
-            name, addr = parseaddr(addr_str)
-            if not addr: return addr_str
-            return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
-
         msg = MIMEMultipart()
-        msg["From"] = safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
-        msg["To"] = safe_address(to_email)
+        msg["From"] = self._safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
+        msg["To"] = self._safe_address(to_email)
         msg["Subject"] = subject
         msg["Date"] = email.utils.formatdate(localtime=True)
-        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
+        msg["Message-ID"] = self._generate_message_id()
         if original_message_id:
             msg["In-Reply-To"] = original_message_id
             msg["References"] = original_message_id
@@ -102,21 +110,13 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
         import email.utils
-        from email.utils import parseaddr, formataddr
-        from email.header import Header
-        def safe_address(addr_str):
-            if not addr_str: return addr_str
-            name, addr = parseaddr(addr_str)
-            if not addr: return addr_str
-            return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
-
         msg = MIMEMultipart()
-        msg["From"] = safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
-        msg["To"] = safe_address(service_email)
-        msg["Reply-To"] = safe_address(client_email)
+        msg["From"] = self._safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
+        msg["To"] = self._safe_address(service_email)
+        msg["Reply-To"] = self._safe_address(client_email)
         msg["Subject"] = subject
         msg["Date"] = email.utils.formatdate(localtime=True)
-        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
+        msg["Message-ID"] = self._generate_message_id()
         if original_message_id:
             msg["In-Reply-To"] = original_message_id
             msg["References"] = original_message_id
@@ -125,21 +125,13 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
         import email.utils
-        from email.utils import parseaddr, formataddr
-        from email.header import Header
-        def safe_address(addr_str):
-            if not addr_str: return addr_str
-            name, addr = parseaddr(addr_str)
-            if not addr: return addr_str
-            return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
-
         msg = MIMEMultipart()
-        msg["From"] = safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
-        msg["To"] = safe_address(to_email)
-        msg["Reply-To"] = safe_address(parsed_email.sender)
+        msg["From"] = self._safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
+        msg["To"] = self._safe_address(to_email)
+        msg["Reply-To"] = self._safe_address(parsed_email.sender)
         msg["Subject"] = f"[Mail2RAG] Demande : {parsed_email.subject}"
         msg["Date"] = email.utils.formatdate(localtime=True)
-        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
+        msg["Message-ID"] = self._generate_message_id()
         msg["Auto-Submitted"] = "auto-generated"
         msg["X-Auto-Response-Suppress"] = "All"
         
@@ -167,7 +159,7 @@ class ImapSmtpProvider(BaseMailProvider):
         msg["To"] = to_email
         msg["Subject"] = subject
         msg["Date"] = email.utils.formatdate(localtime=True)
-        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
+        msg["Message-ID"] = self._generate_message_id()
         msg.attach(MIMEText(text_content, "plain", "utf-8"))
         if attachment_paths:
             import mimetypes

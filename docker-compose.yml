@@ -24,6 +24,10 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     networks:
       - rag_net
 
