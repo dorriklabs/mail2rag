@@ -308,7 +308,7 @@ class SupportDraftService:
             if response.ok:
                 data = response.json()
                 sources = data.get("sources", [])
-                ai_response = data.get("response", "")
+                ai_response = data.get("answer", "")
                 
                 return sources, ai_response
             else:

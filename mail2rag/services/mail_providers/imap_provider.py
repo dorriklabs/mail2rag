@@ -79,10 +79,13 @@ class ImapSmtpProvider(BaseMailProvider):
         return True
 
     def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        import email.utils
         msg = MIMEMultipart()
         msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
         msg["To"] = to_email
         msg["Subject"] = subject
+        msg["Date"] = email.utils.formatdate(localtime=True)
+        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
         if original_message_id:
             msg["In-Reply-To"] = original_message_id
             msg["References"] = original_message_id
@@ -90,11 +93,14 @@ class ImapSmtpProvider(BaseMailProvider):
         return self._send_message_smtp(msg, "send_reply")
 
     def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        import email.utils
         msg = MIMEMultipart()
         msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
         msg["To"] = service_email
         msg["Reply-To"] = client_email
         msg["Subject"] = subject
+        msg["Date"] = email.utils.formatdate(localtime=True)
+        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
         if original_message_id:
             msg["In-Reply-To"] = original_message_id
             msg["References"] = original_message_id
@@ -102,10 +108,14 @@ class ImapSmtpProvider(BaseMailProvider):
         return self._send_message_smtp(msg, "send_combined_email")
 
     def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+        import email.utils
         msg = MIMEMultipart()
         msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
         msg["To"] = to_email
+        msg["Reply-To"] = parsed_email.sender
         msg["Subject"] = f"Fwd: {parsed_email.subject}"
+        msg["Date"] = email.utils.formatdate(localtime=True)
+        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
         
         body = "--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n"
         if prefix_text:
@@ -121,10 +131,13 @@ class ImapSmtpProvider(BaseMailProvider):
         return self._send_message_smtp(msg, "forward_parsed_email")
 
     def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
+        import email.utils
         msg = MIMEMultipart()
         msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
         msg["To"] = to_email
         msg["Subject"] = subject
+        msg["Date"] = email.utils.formatdate(localtime=True)
+        msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
         msg.attach(MIMEText(text_content, "plain", "utf-8"))
         if attachment_paths:
             import mimetypes

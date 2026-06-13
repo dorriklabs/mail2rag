@@ -37,6 +37,8 @@ with col1:
     
     if selected_col == "-- Nouvelle Collection --":
         target_collection = st.text_input("Nom de la nouvelle collection", "default-workspace")
+        if target_collection and target_collection != "default-workspace":
+            target_collection = target_collection.title()
     else:
         target_collection = selected_col
 
