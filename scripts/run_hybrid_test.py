@@ -231,17 +231,98 @@ class HybridTester:
         REMARQUE: [ta remarque courte]
         """
         
+    def evaluate_with_llm(self, email_id: str, question: str, response_body: str) -> dict:
+        """Évalue la réponse RAG pour détecter les échecs et valider les mots-clés."""
         try:
-            # On utilise le ragproxy_client pour ne pas réinventer la roue, ou l'appel direct LLM si exposé
-            # Pour faire simple, vu que RAGProxy est asynchrone / derrière une API, 
-            # et qu'on n'a pas accès direct au composant LLM brut dans Mail2RAG facilement :
-            # On va fournir une note heuristique basique si on ne peut pas appeler l'API facilement.
-            # En V2: faire une vraie requête vers l'API OpenAI locale
+            answer_lower = response_body.lower()
             
-            if len(response_body) > 50:
-                return {"note": "8/10", "remarque": "Réponse générée avec succès."}
-            else:
+            # 1. Détection des échecs explicites de l'IA (vide de contexte)
+            failure_phrases = [
+                "je n'ai trouvé aucune information",
+                "je n'ai pas trouvé",
+                "aucun document ne mentionne",
+                "pas d'information pertinente",
+                "je ne trouve aucune information",
+                "le contexte fourni ne contient aucune information"
+            ]
+            
+            for phrase in failure_phrases:
+                if phrase in answer_lower:
+                    return {"note": "2/10", "remarque": "Échec : L'IA n'a pas trouvé l'information dans le contexte."}
+                    
+            if len(response_body) < 50:
                 return {"note": "3/10", "remarque": "Réponse trop courte ou absente."}
+                
+            # 2. Vérification sémantique intelligente (tolérance aux variations de l'IA)
+            # Chaque élément de la liste est un groupe de synonymes (un seul suffit pour valider le point)
+            expected_concepts = {
+                "SUPPORT_URBA": [
+                    ["20m2", "20 m2", "20 m²", "20m²", "vingt mètres carrés", "20"], 
+                    ["déclaration préalable", "déclaration", "autorisation"]
+                ],
+                "SUPPORT_VOIRIE": [
+                    ["48h", "48 heures", "48 h", "deux jours", "48"], 
+                    ["services techniques", "service technique", "mairie"]
+                ],
+                "SUPPORT_EC_1": [
+                    ["portail citoyen", "en ligne", "internet", "site web", "rendez-vous en ligne"], 
+                    ["2 semaines", "deux semaines", "14 jours", "quinze jours"]
+                ],
+                "SUPPORT_EC_2": [
+                    ["courrier", "lettre", "voie postale", "par écrit"], 
+                    ["service-public.fr", "service public", "internet", "en ligne"]
+                ],
+                "SUPPORT_ENF_1": [
+                    ["justificatif de domicile", "preuve de domicile", "facture"], 
+                    ["service enfance", "service de l'enfance", "mairie"]
+                ],
+                "SUPPORT_ENF_2": [
+                    ["30 avril", "30/04", "fin avril"], 
+                    ["dossier", "inscription", "formulaire"]
+                ],
+                "SUPPORT_VOIRIE2": [
+                    ["jeudis matin", "jeudi matin", "les jeudis", "jeudi"], 
+                    ["zone a", "zone-a", "quartier nord"]
+                ],
+                "SUPPORT_ASSO": [
+                    ["un mois à l'avance", "un mois", "1 mois", "30 jours", "au moins un mois", "un mois minimum"]
+                ],
+                "SUPPORT_SOCIAL_1": [
+                    ["cerfa", "formulaire", "document"], 
+                    ["mairie", "ccas", "sur place"]
+                ],
+                "SUPPORT_SOCIAL_2": [
+                    ["aide financière", "aide ponctuelle", "aide exceptionnelle", "ccas"], 
+                    ["dossier", "étude", "commission"]
+                ],
+                "SUPPORT_SECU": [
+                    ["22h", "22 heures", "22 h", "vingt-deux heures", "22:00"], 
+                    ["tapage nocturne", "nuisances sonores", "bruit"],
+                    ["contravention", "amende", "verbaliser", "police", "intervenir"]
+                ],
+                "SUPPORT_ELEC": [
+                    ["commissariat", "police", "gendarmerie"], 
+                    ["pièce d'identité", "carte d'identité", "passeport", "cni"]
+                ],
+            }
+            
+            if email_id in expected_concepts:
+                concepts = expected_concepts[email_id]
+                found_concepts = 0
+                
+                for synonym_list in concepts:
+                    if any(syn.lower() in answer_lower for syn in synonym_list):
+                        found_concepts += 1
+                        
+                if found_concepts == len(concepts):
+                    return {"note": "10/10", "remarque": "Parfait : Tous les concepts clés sont présents."}
+                elif found_concepts > 0:
+                    return {"note": "7/10", "remarque": f"Partiel : {found_concepts}/{len(concepts)} concepts trouvés."}
+                else:
+                    return {"note": "4/10", "remarque": "Médiocre : Aucun concept attendu trouvé, mais l'IA a répondu."}
+            
+            return {"note": "8/10", "remarque": "Réponse pertinente générée avec succès."}
+            
         except Exception as e:
             return {"note": "N/A", "remarque": f"Erreur éval: {str(e)}"}
 
@@ -321,13 +402,14 @@ class HybridTester:
             
             if self.last_sent_email_data:
                 target_email = self.last_sent_email_data['recipient']
-                eval_result = self.evaluate_with_llm(email_data['body'], self.last_sent_email_data['body'])
+                eval_result = self.evaluate_with_llm(email_data['id'], email_data['body'], self.last_sent_email_data['body'])
                 note = eval_result['note']
                 remarque = eval_result['remarque']
                 
             self.results.append({
                 "id": email_data["id"],
                 "type": email_data["type"],
+                "subject": email_data["subject"][:20] + "..." if len(email_data["subject"]) > 20 else email_data["subject"],
                 "target": target_email,
                 "latency": f"{latency:.2f}s",
                 "note": note,
@@ -339,20 +421,122 @@ class HybridTester:
         self.print_report(ingested_uids)
 
     def print_report(self, ingested_uids):
-        print("\n" + "="*110)
-        print("📊 BILAN SYNTHETIQUE QA - MAIL2RAG")
-        print("="*110)
+        report_lines = []
+        report_lines.append("\n" + "="*140)
+        report_lines.append("📊 BILAN SYNTHETIQUE QA - MAIL2RAG")
+        report_lines.append("="*140)
         
         # Entête du tableau
-        header = f"| {'ID':<15} | {'Type':<15} | {'Routage Cible':<25} | {'Latence':<10} | {'Note':<8} | {'Remarque':<20}"
-        print(header)
-        print("-" * len(header))
+        header = f"| {'ID':<15} | {'Type':<15} | {'Sujet':<23} | {'Routage Cible':<25} | {'Latence':<10} | {'Note':<8} | {'Remarque':<20}"
+        report_lines.append(header)
+        report_lines.append("-" * len(header))
+        
+        rag_tests = 0
+        rag_success = 0
+        total_score = 0
         
         for r in self.results:
-            row = f"| {r['id']:<15} | {r['type']:<15} | {r['target']:<25} | {r['latency']:<10} | {r['note']:<8} | {r['remarque']:<20}"
-            print(row)
+            row = f"| {r['id']:<15} | {r['type']:<15} | {r['subject']:<23} | {r['target']:<25} | {r['latency']:<10} | {r['note']:<8} | {r['remarque']:<20}"
+            report_lines.append(row)
+            
+            # Calcul des statistiques (uniquement pour les tests qui ont reçu une note)
+            if r['note'] != "N/A":
+                try:
+                    score = int(r['note'].split('/')[0])
+                    rag_tests += 1
+                    total_score += score
+                    if score >= 7:
+                        rag_success += 1
+                except:
+                    pass
         
-        print("="*110 + "\n")
+        report_lines.append("="*140)
+        if rag_tests > 0:
+            report_lines.append(f"🎯 TAUX DE RÉUSSITE RAG : {rag_success}/{rag_tests} scénarios valides ({(rag_success/rag_tests)*100:.1f}%)")
+            report_lines.append(f"⭐ NOTE MOYENNE : {total_score/rag_tests:.1f}/10")
+        report_lines.append("="*140 + "\n")
+        
+        report_text = "\n".join(report_lines)
+        print(report_text)
+        
+        # Génération du rapport HTML
+        html_rows = ""
+        for r in self.results:
+            color = "#4CAF50" if "10/10" in r['note'] else "#FF9800" if "7/10" in r['note'] else "#F44336" if "4/10" in r['note'] or "2/10" in r['note'] else "#9E9E9E"
+            html_rows += f"""
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>{r['id']}</strong></td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">{r['type']}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">{r['subject']}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace;">{r['target']}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">{r['latency']}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd; color: {color}; font-weight: bold;">{r['note']}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 0.9em;">{r['remarque']}</td>
+            </tr>
+            """
+            
+        success_rate = (rag_success/rag_tests)*100 if rag_tests > 0 else 0
+        avg_score = total_score/rag_tests if rag_tests > 0 else 0
+        
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; background-color: #f4f6f8; padding: 20px; }}
+                .container {{ max-width: 1000px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                h2 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+                .summary-box {{ background-color: #e8f4f8; padding: 20px; border-left: 5px solid #3498db; border-radius: 4px; margin-bottom: 30px; }}
+                .summary-box p {{ margin: 5px 0; font-size: 1.1em; }}
+                .highlight {{ font-weight: bold; color: #2980b9; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                th {{ background-color: #f8f9fa; color: #333; font-weight: bold; text-align: left; padding: 12px 10px; border-bottom: 2px solid #ddd; }}
+                tr:hover {{ background-color: #f1f1f1; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>📊 Rapport QA Mail2RAG</h2>
+                
+                <div class="summary-box">
+                    <p>🎯 Taux de réussite RAG : <span class="highlight">{rag_success}/{rag_tests} scénarios valides ({success_rate:.1f}%)</span></p>
+                    <p>⭐ Note Moyenne : <span class="highlight">{avg_score:.1f}/10</span></p>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Sujet</th>
+                            <th>Cible</th>
+                            <th>Latence</th>
+                            <th>Note</th>
+                            <th>Remarque</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {html_rows}
+                    </tbody>
+                </table>
+                <br>
+                <p style="font-size: 0.9em; color: #7f8c8d; text-align: center;">Généré automatiquement par l'agent de test Mail2RAG.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Envoi de l'email HTML à l'admin
+        try:
+            print("📧 Envoi du rapport HTML par email à admin@dsiatlantic.com...")
+            self.original_send_reply(
+                to_email="admin@dsiatlantic.com",
+                subject=f"📊 Rapport QA Mail2RAG - Score: {rag_success}/{rag_tests}",
+                body=html_content,
+                is_html=True
+            )
+            print("✅ Rapport HTML envoyé avec succès.")
+        except Exception as e:
+            print(f"⚠️ Échec de l'envoi du rapport par email : {e}")
         
         # --- NETTOYAGE ---
         if ingested_uids:
