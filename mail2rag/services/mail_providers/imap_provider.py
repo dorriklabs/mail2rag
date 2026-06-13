@@ -80,9 +80,17 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
         import email.utils
+        from email.utils import parseaddr, formataddr
+        from email.header import Header
+        def safe_address(addr_str):
+            if not addr_str: return addr_str
+            name, addr = parseaddr(addr_str)
+            if not addr: return addr_str
+            return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
+
         msg = MIMEMultipart()
-        msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
-        msg["To"] = to_email
+        msg["From"] = safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
+        msg["To"] = safe_address(to_email)
         msg["Subject"] = subject
         msg["Date"] = email.utils.formatdate(localtime=True)
         msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
@@ -94,10 +102,18 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
         import email.utils
+        from email.utils import parseaddr, formataddr
+        from email.header import Header
+        def safe_address(addr_str):
+            if not addr_str: return addr_str
+            name, addr = parseaddr(addr_str)
+            if not addr: return addr_str
+            return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
+
         msg = MIMEMultipart()
-        msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
-        msg["To"] = service_email
-        msg["Reply-To"] = client_email
+        msg["From"] = safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
+        msg["To"] = safe_address(service_email)
+        msg["Reply-To"] = safe_address(client_email)
         msg["Subject"] = subject
         msg["Date"] = email.utils.formatdate(localtime=True)
         msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
@@ -109,20 +125,32 @@ class ImapSmtpProvider(BaseMailProvider):
 
     def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
         import email.utils
+        from email.utils import parseaddr, formataddr
+        from email.header import Header
+        def safe_address(addr_str):
+            if not addr_str: return addr_str
+            name, addr = parseaddr(addr_str)
+            if not addr: return addr_str
+            return formataddr((str(Header(name, 'utf-8')) if name else False, addr))
+
         msg = MIMEMultipart()
-        msg["From"] = getattr(self.config, "smtp_from", None) or self.config.smtp_user
-        msg["To"] = to_email
-        msg["Reply-To"] = parsed_email.sender
-        msg["Subject"] = f"Fwd: {parsed_email.subject}"
+        msg["From"] = safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
+        msg["To"] = safe_address(to_email)
+        msg["Reply-To"] = safe_address(parsed_email.sender)
+        msg["Subject"] = f"[Mail2RAG] Demande : {parsed_email.subject}"
         msg["Date"] = email.utils.formatdate(localtime=True)
         msg["Message-ID"] = email.utils.make_msgid(domain=self.config.smtp_server.split('.')[-2] + '.' + self.config.smtp_server.split('.')[-1] if '.' in self.config.smtp_server else 'localhost')
         msg["Auto-Submitted"] = "auto-generated"
         msg["X-Auto-Response-Suppress"] = "All"
         
-        body = "--- Cet email a été transféré automatiquement par l'IA Mail2RAG ---\n\n"
+        body = "--- NOUVELLE DEMANDE (Triée par Mail2RAG) ---\n\n"
+        body += f"Expéditeur : {parsed_email.sender}\n"
+        body += f"Sujet original : {parsed_email.subject}\n\n"
+
         if prefix_text:
             body += f"=== SUGGESTION DE RÉPONSE IA ===\n{prefix_text}\n================================\n\n"
             
+        body += "--- MESSAGE ORIGINAL ---\n"
         body += parsed_email.body
         msg.attach(MIMEText(body, "plain", "utf-8"))
         if parsed_email.msg.is_multipart():

@@ -275,13 +275,15 @@ class SupportDraftService:
             return None
 
     def _build_query(self, subject: str, body: str) -> str:
-        """Construit la requête de recherche à partir du sujet et du corps."""
-        parts = []
-        if subject:
-            parts.append(f"Sujet: {subject}")
-        if body:
-            parts.append(f"Question: {body}")
-        return "\n\n".join(parts) if parts else "Question non spécifiée"
+        # Utiliser uniquement le corps de l'email pour éviter de polluer 
+        # le vecteur sémantique avec des mots clés génériques du sujet (ex: "permis de construire")
+        if body and len(body.strip()) > 10:
+            final_query = body.strip()
+        else:
+            final_query = subject.strip() if subject else "Demande non spécifiée"
+            
+        self.logger.info("🛠️ Query construite pour RAG: [%s]", final_query)
+        return final_query
 
     def _search_and_generate(
         self,
@@ -421,14 +423,15 @@ STYLE DE RÉPONSE :
 
 STRUCTURE :
 1. {{greeting}}
-2. Réponse claire et détaillée
+2. Réponse claire et détaillée (fournis toutes les informations pertinentes trouvées dans le contexte, même partielles)
 3. Proposition d'aide complémentaire
 4. {{signature}}
 
 RÈGLES :
-- Ne jamais inventer d'information
-- Répondre uniquement en {{language}}
-- Si incertain, proposer de vérifier avec un expert""",
+- Si le contexte ne donne qu'une partie de la réponse (ex: une hauteur maximale mais pas minimale), donne l'information disponible.
+- Ne jamais inventer d'information.
+- Répondre uniquement en {{language}}.
+- Si le contexte ne contient VRAIMENT aucune information utile, propose de vérifier avec un expert.""",
 
             "friendly": """Tu es un assistant de support technique accessible et sympathique.
 

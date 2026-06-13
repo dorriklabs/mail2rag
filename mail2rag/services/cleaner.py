@@ -50,6 +50,10 @@ class CleanerService:
         # Lignes citées ("> ...")
         self.regex_quoted_lines = re.compile(r'^\s*>')
 
+        # Formules de politesse (Bonjour, Merci, etc.)
+        self.regex_greetings = re.compile(r'^\s*(bonjour|bonsoir|salut|hello|hi)[a-z à-ÿ,.-]*\n+', re.IGNORECASE)
+        self.regex_closings = re.compile(r'(?i)\n+\s*(merci|merci d\'avance|bien à vous|cordialement|dans l\'attente|sincères salutations).*\Z', re.DOTALL)
+
         # Réponses / historiques : patterns de headers de reply
         self.reply_header_patterns = [
             # FR
@@ -158,6 +162,10 @@ class CleanerService:
         if not is_forward:
             text = self._remove_quoted_lines(text)
 
+        # 5.5 Supprimer les formules de politesse pour améliorer la recherche sémantique
+        text = self.regex_greetings.sub("", text)
+        text = self.regex_closings.sub("", text)
+
         # 6. Trim et réduction des multiples lignes vides
         text = text.strip()
 
@@ -175,10 +183,11 @@ class CleanerService:
 
         text = "\n".join(cleaned_lines).strip()
 
-        logger.debug(
-            "Nettoyage Body: %s -> %s chars conservés",
+        logger.info(
+            "Nettoyage Body: %s -> %s chars conservés. BODY: [%s]",
             original_len,
             len(text),
+            text
         )
         return text
 
