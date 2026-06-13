@@ -167,6 +167,11 @@ class Config:
         # SECURITY & ROUTING
         # ------------------------------------------------------------------
         self.enforce_strict_routing = self._get_bool("ENFORCE_STRICT_ROUTING", False)
+        
+        allowed_domains_str = os.getenv("ALLOWED_DOMAINS", "")
+        self.allowed_domains: Set[str] = {
+            d.strip().lower() for d in allowed_domains_str.split(",") if d.strip()
+        }
 
         # ------------------------------------------------------------------
         # WORKERS

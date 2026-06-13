@@ -82,6 +82,19 @@ def is_support_draft_mode(
     return sender != support_email
 
 
+def is_sender_allowed(sender: str, allowed_domains: set) -> bool:
+    """Retourne True si l'expéditeur appartient à l'un des domaines autorisés."""
+    if not allowed_domains:
+        return True
+    if not sender:
+        return False
+    match = re.search(r"[\w\.-]+@([\w\.-]+)", sender)
+    if not match:
+        return False
+    domain = match.group(1).lower()
+    return domain in allowed_domains
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -338,6 +351,16 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
             router: RouterService = context["router"]
             support_draft_service: SupportDraftService = context.get("support_draft_service")
             dispatch_service: DispatchService = context.get("dispatch_service")
+
+            if not is_sender_allowed(parsed_email.sender, config.allowed_domains):
+                logger.warning(
+                    "Bloqué: Expéditeur '%s' non autorisé par ALLOWED_DOMAINS. Email ignoré.",
+                    parsed_email.sender
+                )
+                last_uid = max(last_uid, uid)
+                state["last_uid"] = last_uid
+                state_manager.save_state(state)
+                continue
 
             try:
                 if is_diagnostic_email(parsed_email.subject):

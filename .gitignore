@@ -2,8 +2,7 @@
 # FICHIERS SENSIBLES (NE JAMAIS COMMIT)
 # ============================================
 .env
-.env.local
-.env.production
+.env.*
 *.key
 *.pem
 *.crt

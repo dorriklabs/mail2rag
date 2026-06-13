@@ -205,6 +205,12 @@ Enforce strict security boundaries between workspaces. When enabled, users canno
 ENFORCE_STRICT_ROUTING=true
 ```
 
+**Bloquer les expéditeurs externes (`ALLOWED_DOMAINS`) :**
+Si vous n'avez pas le contrôle sur votre serveur de messagerie pour bloquer les e-mails entrants, vous pouvez restreindre l'utilisation de Mail2RAG (Ingestion et Chat) aux seuls expéditeurs de votre organisation. Tout autre expéditeur sera silencieusement ignoré.
+```env
+ALLOWED_DOMAINS=mairie.fr, dsialantic.com
+```
+
 **ACL Definition (`routing.json`):**
 ```json
 {
@@ -567,6 +573,12 @@ Garantissez le cloisonnement strict de vos données. Une fois activé, les utili
 **Configuration :** Activer dans le `.env` :
 ```env
 ENFORCE_STRICT_ROUTING=true
+```
+
+**Bloquer les expéditeurs externes (`ALLOWED_DOMAINS`) :**
+Si vous ne maîtrisez pas les règles de votre serveur de messagerie, vous pouvez interdire l'accès à Mail2RAG aux expéditeurs externes directement au niveau applicatif. Leurs e-mails seront silencieusement ignorés, protégeant la base de données.
+```env
+ALLOWED_DOMAINS=mairie.fr, dsialantic.com
 ```
 
 **Définition des ACL (`routing.json`) :**

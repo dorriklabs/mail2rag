@@ -52,7 +52,7 @@ services:
     image: mail2rag-rag_proxy:latest
     container_name: rag_proxy
     env_file:
-      - ./.env
+      - ./.env.common
     environment:
       TZ: Europe/Paris
 
@@ -94,30 +94,58 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # 3. MAIL2RAG (Application Python)
-  mail2rag:
+  # 3.A MAIL2RAG - TRIEUR PUBLIC (Accueil)
+  mail2rag_accueil:
     build:
       context: ./mail2rag
       dockerfile: Dockerfile
-    container_name: mail2rag
+    container_name: mail2rag_accueil
     env_file:
-      - ./.env
+      - ./.env.common
+      - ./.env.accueil
     environment:
       TZ: Europe/Paris
     volumes:
-      # Code source (dev hot-reload)
       - ./mail2rag:/app
-      # Routing configuration
       - ./routing.json:/etc/mail2rag/routing.json:ro
-      # Workspaces configuration
       - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json:ro
-      # Prompts directory
       - ./mail2rag/prompts:/etc/mail2rag/prompts:ro
-      # Logs
       - ./logs:/var/log/mail2rag
-      # State
       - ./state:/var/lib/mail2rag
-      # Archive (volume nommé)
+      - mail2rag_archive:/var/lib/mail2rag/mail2rag_archive
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+      rag_proxy:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - rag_net
+
+  # 3.B MAIL2RAG - ASSISTANT INTERNE (RAG)
+  mail2rag_assistant:
+    build:
+      context: ./mail2rag
+      dockerfile: Dockerfile
+    container_name: mail2rag_assistant
+    env_file:
+      - ./.env.common
+      - ./.env.rag
+    environment:
+      TZ: Europe/Paris
+    volumes:
+      - ./mail2rag:/app
+      - ./routing.json:/etc/mail2rag/routing.json:ro
+      - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json:ro
+      - ./mail2rag/prompts:/etc/mail2rag/prompts:ro
+      - ./logs:/var/log/mail2rag
+      - ./state:/var/lib/mail2rag
       - mail2rag_archive:/var/lib/mail2rag/mail2rag_archive
     depends_on:
       qdrant:
@@ -185,7 +213,8 @@ services:
       # Archive en lecture seule
       - mail2rag_archive:/usr/share/nginx/html:ro
     depends_on:
-      - mail2rag
+      - mail2rag_accueil
+      - mail2rag_assistant
     restart: unless-stopped
     networks:
       - rag_net
