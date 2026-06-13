@@ -247,7 +247,7 @@ class SupportDraftService:
             if search_results:
                 suggestion += "\n\n--- Sources utilisées ---\n"
                 for res in search_results[:3]:
-                    filename = res.get("payload", {}).get("filename", "Document inconnu")
+                    filename = res.get("metadata", {}).get("filename", "Document inconnu")
                     suggestion += f"- {filename}\n"
                     
             return suggestion
