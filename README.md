@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.22.1-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.26.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -469,6 +469,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] Structured JSON Logging for AI Observability
 - [x] Advanced Conversational RAG & Smart Query Rewriting
 - [x] Streamlit UI Source Grouping & Semantic Cache improvements
+- [x] End-to-End Hybrid Test Suite with Auto-Cleanup
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -702,6 +703,7 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] Format de Logging JSON Structuré pour l'observabilité IA
 - [x] RAG Conversationnel Avancé & Reformulation (Few-Shot)
 - [x] UI : Regroupement visuel des sources par collection
+- [x] Suite de tests E2E Hybride avec auto-nettoyage Qdrant
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 
