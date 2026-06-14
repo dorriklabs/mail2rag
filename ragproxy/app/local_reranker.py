@@ -14,14 +14,14 @@ class LocalReranker:
     Alternative au RerankerService (LM Studio) qui ne supporte pas /v1/rerank.
     """
 
-    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
+    def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
         """
         Initialise le cross-encoder pour le reranking.
         
         Args:
             model_name: Nom du modèle HuggingFace à utiliser.
-                        Par défaut: cross-encoder/ms-marco-MiniLM-L-6-v2 (rapide et efficace)
-                        Alternative: cross-encoder/ms-marco-MiniLM-L-12-v2 (plus précis mais plus lent)
+                        Par défaut: BAAI/bge-reranker-v2-m3 (Multilingue, excellent pour le français)
+                        Alternative: cross-encoder/ms-marco-MiniLM-L-12-v2
         """
         self.model_name = model_name
         logger.info(f"Chargement du modèle de reranking local: {model_name}...")
