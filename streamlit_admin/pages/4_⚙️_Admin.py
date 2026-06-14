@@ -48,7 +48,7 @@ def rebuild_all_bm25():
         return None
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔨 Index BM25", "📜 Logs Système", "🔧 Configuration", "🔀 Routage Sémantique", "🧠 Prompts IA"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔨 Index BM25", "📜 Logs Système", "🔧 Configuration", "🔀 Routage Sémantique", "🧠 Prompts IA", "🔒 Règles d'Accès (ACL)"])
 
 # =====================================
 # TAB 1 : Index BM25
@@ -434,5 +434,133 @@ with tab5:
             save_workspaces_config(ws_config)
                 
             st.success(f"✅ Prompt mis à jour pour le workspace '{selected_ws}' !")
+            st.rerun()
+
+# =====================================
+# TAB 6 : Règles d'Accès (ACL)
+# =====================================
+with tab6:
+    st.header("🔒 Règles d'Accès (ACL)")
+    import json
+    import os
+    import pandas as pd
+    
+    routing_file = "/etc/mail2rag/routing.json"
+    
+    if not os.path.exists(routing_file):
+        st.error(f"Fichier de routage introuvable : {routing_file}")
+    else:
+        with open(routing_file, "r", encoding="utf-8") as f:
+            routing_data = json.load(f)
+            
+        rules_data = routing_data.get("rules", [])
+        
+        st.markdown("Configurez ici les règles d'accès et de transfert prioritaires pour les emails reçus.")
+        
+        with st.expander("📖 Guide d'utilisation des règles ACL", expanded=False):
+            st.markdown("""
+            **Types de règles disponibles :**
+            - `sender` : Adresse email exacte (ex: *facturation@fournisseur.com*)
+            - `sender_domain` : Domaine de l'expéditeur (ex: *fournisseur.com*)
+            - `subject` : Sujet exact de l'email
+            - `subject_regex` : Expression régulière pour filtrer le sujet
+            - `body_contains` : Mot-clé ou phrase spécifique dans le corps du message
+            
+            **Configuration des cibles :**
+            - **Workspace Cible** : Force le transfert exclusif vers ce workspace (contourne le routage IA).
+            - **Workspaces Autorisés** : Restreint l'accès à une liste définie (séparez les noms par des virgules).
+            """)
+            
+        st.divider()
+        st.caption(f"📊 **{len(rules_data)}** règle(s) configurée(s) actuellement dans le système.")
+        
+        # Préparer les données pour le dataframe
+        df_data = []
+        for rule in rules_data:
+            allowed_ws = rule.get("allowed_workspaces", [])
+            df_data.append({
+                "Type": rule.get("type", ""),
+                "Valeur": rule.get("value", ""),
+                "Workspace Cible": rule.get("target_workspace", ""),
+                "Workspaces Autorisés": ", ".join(allowed_ws) if isinstance(allowed_ws, list) else str(allowed_ws)
+            })
+            
+        df = pd.DataFrame(df_data, columns=["Type", "Valeur", "Workspace Cible", "Workspaces Autorisés"])
+        
+        # Configuration des colonnes pour le data editor
+        column_config = {
+            "Type": st.column_config.SelectboxColumn(
+                "Type",
+                help="Critère de déclenchement",
+                width="medium",
+                options=["sender", "sender_domain", "subject", "subject_regex", "body_contains"],
+                required=True
+            ),
+            "Valeur": st.column_config.TextColumn(
+                "Valeur", 
+                help="Valeur à faire correspondre (ex: domaine.com)",
+                required=True,
+                width="large"
+            ),
+            "Workspace Cible": st.column_config.TextColumn(
+                "Workspace Cible",
+                help="Workspace de destination forcée"
+            ),
+            "Workspaces Autorisés": st.column_config.TextColumn(
+                "Workspaces Autorisés", 
+                help="Noms des workspaces autorisés séparés par des virgules (ex: ws_finance, ws_direction)",
+                width="large"
+            )
+        }
+        
+        edited_df = st.data_editor(
+            df,
+            num_rows="dynamic",
+            column_config=column_config,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        st.write("") # Espace visuel
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            save_btn = st.button("💾 Sauvegarder les règles ACL", type="primary", use_container_width=True)
+            
+        if save_btn:
+            new_rules = []
+            for _, row in edited_df.iterrows():
+                r_type = str(row["Type"]).strip()
+                r_val = str(row["Valeur"]).strip()
+                r_target = str(row["Workspace Cible"]).strip() if pd.notna(row["Workspace Cible"]) else ""
+                r_allowed_str = str(row["Workspaces Autorisés"]).strip() if pd.notna(row["Workspaces Autorisés"]) else ""
+                
+                # Ignorer les lignes incomplètes (None, nan, vides)
+                if r_type and r_type != "None" and r_type != "nan" and r_val and r_val != "None" and r_val != "nan":
+                    # Traiter les workspaces autorisés
+                    if r_allowed_str and r_allowed_str != "None" and r_allowed_str != "nan":
+                        r_allowed = [ws.strip() for ws in r_allowed_str.split(",") if ws.strip()]
+                    else:
+                        r_allowed = []
+                        
+                    rule_obj = {
+                        "type": r_type,
+                        "value": r_val,
+                        "allowed_workspaces": r_allowed
+                    }
+                    if r_target and r_target != "None" and r_target != "nan":
+                        rule_obj["target_workspace"] = r_target
+                        
+                    new_rules.append(rule_obj)
+                    
+            # Recharger le fichier pour éviter d'écraser des modifs concurrentes sur semantic_dispatch
+            with open(routing_file, "r", encoding="utf-8") as f:
+                current_data = json.load(f)
+                
+            current_data["rules"] = new_rules
+            
+            with open(routing_file, "w", encoding="utf-8") as f:
+                json.dump(current_data, f, indent=4, ensure_ascii=False)
+                
+            st.success("✅ Règles ACL sauvegardées avec succès !")
             st.rerun()
 
