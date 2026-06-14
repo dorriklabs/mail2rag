@@ -46,10 +46,11 @@ class BaseMailProvider(ABC):
         pass
 
     @abstractmethod
-    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None, prefix_html: str = None) -> bool:
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None, prefix_html: str = None, dynamic_attachments: List[tuple] = None) -> bool:
         """
         Transfère un email parsé vers une nouvelle adresse.
         Si prefix_text ou prefix_html est fourni, il sera injecté au début du message transféré.
+        dynamic_attachments permet d'ajouter des PJ générées à la volée (ex: sources PDF).
         """
         pass
 

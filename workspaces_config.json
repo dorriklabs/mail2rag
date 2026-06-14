@@ -26,5 +26,23 @@
         "temperature": 0.0,
         "refusal_response": "Je ne peux pas confirmer ce point à partir des factures disponibles.",
         "type": "finance"
+    },
+    "urba": {
+        "temperature": 0.1,
+        "refusal_response": "Je ne peux pas répondre précisément à cette question sur la base des informations d'urbanisme disponibles.",
+        "type": "support",
+        "qa_rewrite": true,
+        "support_draft": true,
+        "target_email": "urba@dsiatlantic.com",
+        "response_style": {
+            "tone": "professional",
+            "language": "fr",
+            "greeting": "Bonjour,",
+            "signature": "Cordialement,\nLe Service Urbanisme",
+            "custom_prompt_file": null
+        },
+        "draft_settings": {
+            "processed_folder": "En cours"
+        }
     }
 }

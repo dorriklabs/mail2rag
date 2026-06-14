@@ -221,29 +221,29 @@ class SupportDraftService:
                 exc_info=True,
             )
 
-    def generate_ai_suggestion_html(self, email: "ParsedEmail", workspace: str) -> tuple[Optional[str], Optional[str]]:
+    def generate_ai_suggestion_html(self, email: "ParsedEmail", workspace: str) -> tuple[Optional[str], Optional[str], Optional[bytes]]:
         """
         Génère un encart HTML stylisé contenant la suggestion IA pour un e-mail donné.
-        Retourne un tuple: (html_content, ai_response_text).
+        Retourne un tuple: (html_content, ai_response_text, sources_html_bytes).
         Ceci est utile pour inclure la suggestion dans le corps d'un e-mail transféré.
         """
         try:
             ws_config = self.config.workspace_settings.get(workspace, {})
             cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query = self._build_query(email.subject, cleaned_body)
-            
+
             search_results, ai_response = self._search_and_generate(
                 query=query,
                 workspace=workspace,
                 ws_config=ws_config,
             )
-            
+
             if not ai_response:
-                return None, None
-                
+                return None, None, None
+
             import html
             import os
-            
+
             # Construire l'encart HTML avec CSS inline
             html_content = f"""
             <div style="font-family: Arial, sans-serif; background-color: #f8f9fa; border: 1px solid #0d6efd; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
@@ -252,29 +252,50 @@ class SupportDraftService:
                     {html.escape(ai_response.strip()).replace(chr(10), '<br>')}
                 </div>
             """
-            
-            # Ajouter les sources si présentes
+
+            sources_bytes = None
+
+            # Ajouter les sources si présentes sous forme de fichier HTML séparé
             if search_results:
-                html_content += f"""
-                <div style="border-top: 1px dashed #ced4da; padding-top: 15px;">
-                    <h4 style="color: #495057; margin-top: 0; margin-bottom: 10px; font-size: 13px;">📚 Sources utilisées :</h4>
-                    <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #6c757d;">
-                """
-                
+                sources_html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Sources utilisées par l'IA</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+        h2 { color: #0d6efd; border-bottom: 1px solid #dee2e6; padding-bottom: 5px; }
+        .source-list { list-style: none; padding: 0; }
+        .source-item { margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #0d6efd; }
+        .source-title { font-weight: bold; font-size: 15px; color: #0d6efd; text-decoration: none; }
+        .score { background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 10px; color: #495057; }
+        .excerpt { color: #555; font-style: italic; margin-top: 10px; font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h2>📚 Sources utilisées par l'IA</h2>
+    <ul class="source-list">
+"""
+
                 archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:9102").rstrip('/')
-                
+
                 for res in search_results[:3]:
                     metadata = res.get("metadata", {})
                     filename = metadata.get("filename", "Document inconnu")
                     secure_id = metadata.get("secure_id")
-                    
-                    # Score et chunk
-                    score_percent = int(res.get("score", 0) * 100)
+
+                    # Nettoyer l'en-tête technique s'il est présent
                     chunk_text = res.get("text", "")
                     if not chunk_text and "payload" in res:
                         chunk_text = res["payload"].get("text", "")
-                    chunk_excerpt = html.escape(chunk_text[:150] + "..." if len(chunk_text) > 150 else chunk_text)
-                    
+
+                    if "Résumé :" in chunk_text and "IMAP_UID :" in chunk_text:
+                        parts = chunk_text.split("\n\n", 1)
+                        if len(parts) > 1:
+                            chunk_text = parts[1].strip()
+
+                    chunk_excerpt = html.escape(chunk_text[:300] + "..." if len(chunk_text) > 300 else chunk_text)
+
                     file_link = None
                     if secure_id:
                         file_link = f"{archive_base}/{secure_id}/{filename}"
@@ -283,23 +304,40 @@ class SupportDraftService:
                                      metadata.get("url") or 
                                      metadata.get("archive_url") or
                                      metadata.get("source_url"))
-                    
-                    html_content += f"<li style='margin-bottom: 8px;'>"
-                    
+
+                    sources_html += "<li class='source-item'>"
+
                     if file_link:
-                        html_content += f"<a href='{file_link}' style='color: #0d6efd; font-weight: bold; text-decoration: none;'>{html.escape(filename)}</a> "
+                        sources_html += f"<a href='{file_link}' class='source-title' target='_blank'>{html.escape(filename)}</a>"
                     else:
-                        html_content += f"<strong style='color: #495057;'>{html.escape(filename)}</strong> "
-                        
-                    html_content += f"<span style='background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-left: 5px;'>Score: {score_percent}%</span>"
-                    html_content += f"<br><i style='color: #868e96;'>\"{chunk_excerpt}\"</i>"
-                    html_content += "</li>"
-                    
+                        sources_html += f"<span class='source-title'>{html.escape(filename)}</span>"
+
+                    score_val = res.get("score", 0)
+                    if isinstance(score_val, (float, int)):
+                        if -1 <= score_val <= 1:
+                            score_str = f"{int(score_val * 100)}%"
+                        else:
+                            score_str = f"{score_val:.2f}"
+                    else:
+                        score_str = str(score_val)
+
+                    sources_html += f"<span class='score'>Score: {score_str}</span>"
+                    sources_html += f"<div class='excerpt'>\"{chunk_excerpt}\"</div>"
+                    sources_html += "</li>"
+
+                sources_html += """
+    </ul>
+</body>
+</html>
+"""
+                sources_bytes = sources_html.encode("utf-8")
+                
                 html_content += """
-                    </ul>
+                <div style="border-top: 1px dashed #ced4da; padding-top: 15px; font-size: 13px;">
+                    📚 <em>Les sources utilisées pour formuler cette réponse sont disponibles dans la pièce jointe <strong>sources_ia.html</strong>.</em>
                 </div>
                 """
-            
+
             html_content += """
                 <div style="margin-top: 15px; font-size: 13px; color: #198754; background-color: #d1e7dd; padding: 10px; border-radius: 5px; text-align: center;">
                     💡 <strong>Astuce :</strong> Double-cliquez sur la pièce jointe <strong>reponse_ia.eml</strong> pour ouvrir un brouillon propre et prêt à envoyer.
@@ -307,7 +345,7 @@ class SupportDraftService:
             """
                 
             html_content += "</div>"
-            return html_content, ai_response
+            return html_content, ai_response, sources_bytes
             
         except Exception as e:
             self.logger.error("❌ Erreur lors de la génération de la suggestion HTML : %s", e)

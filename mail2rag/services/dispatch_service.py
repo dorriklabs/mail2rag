@@ -74,16 +74,21 @@ class DispatchService:
                 target_workspace = target_workspace.split(",")[0] if "," in target_workspace else target_workspace
                 
                 self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s (workspace: %s)...", matched_folder, target_workspace)
-                ai_suggestion_html, ai_text = self.support_draft_service.generate_ai_suggestion_html(email, target_workspace)
-                
+                ai_suggestion_html, ai_text, sources_bytes = self.support_draft_service.generate_ai_suggestion_html(email, target_workspace)
+
+                dynamic_attachments = []
+
+                if sources_bytes:
+                    dynamic_attachments.append(("sources_ia.html", sources_bytes, "text/html"))
+
                 if ai_text:
                     from email.message import EmailMessage
                     eml = EmailMessage()
                     eml["Subject"] = f"Re: {email.subject}"
                     eml["To"] = email.sender
                     
-                    import email.utils
-                    date_str = email.date or email.utils.formatdate(localtime=True)
+                    from email.utils import formatdate
+                    date_str = email.date or formatdate(localtime=True)
                     draft_body = f"{ai_text.strip()}\n\n"
                     draft_body += f"Le {date_str}, {email.sender} a écrit :\n"
                     
@@ -92,10 +97,17 @@ class DispatchService:
                         draft_body += f"{quoted_body}\n"
                         
                     eml.set_content(draft_body)
-                    dynamic_attachments = [("reponse_ia.eml", eml.as_bytes(), "message/rfc822")]
+                    dynamic_attachments.append(("reponse_ia.eml", eml.as_bytes(), "message/rfc822"))
 
-            # 2. Transférer l'e-mail via SMTP avec la suggestion injectée en HTML et potentiellement la PJ dynamique
-            forwarded = self.mail_service.forward_parsed_email(email, target_email, prefix_html=ai_suggestion_html, dynamic_attachments=dynamic_attachments)
+                plain_text_prefix = f"{ai_text}\n\ncliquez sur reponse_ia.eml pour repondre avec le message généré par IA"
+
+            # 2. Transférer l'e-mail via SMTP avec la suggestion injectée en texte brut et la PJ dynamique
+            forwarded = self.mail_service.forward_parsed_email(
+                email, 
+                target_email, 
+                prefix_text=plain_text_prefix if ai_text else None, 
+                dynamic_attachments=dynamic_attachments
+            )
             
             if forwarded:
                 # 3. Archiver l'original dans IMAP pour ne plus le traiter
@@ -129,7 +141,8 @@ class DispatchService:
         prompt = (
             "Tu es un assistant de tri strict et précis.\n"
             f"Ton rôle est de classer le mail suivant dans l'un de ces dossiers : {', '.join(folders)}, ou INBOX s'il ne correspond à aucun d'entre eux.\n"
-            "Tu dois répondre UNIQUEMENT avec le nom exact du dossier, sans guillemets, sans politesse et sans ponctuation.\n\n"
+            "Tu dois répondre UNIQUEMENT avec le nom exact du dossier, sans guillemets, sans politesse et sans ponctuation.\n"
+            "(Indice: Les demandes liées aux élections et procurations vont dans Etat-Civil).\n\n"
             f"Sujet : {subject}\n"
             f"Message : {body[:1500]}"
         )

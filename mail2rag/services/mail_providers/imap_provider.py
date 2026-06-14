@@ -143,19 +143,25 @@ class ImapSmtpProvider(BaseMailProvider):
             html_body += f"<pre style='font-family: Arial, sans-serif; white-space: pre-wrap;'>{html.escape(parsed_email.body)}</pre>"
             msg.attach(MIMEText(html_body, "html", "utf-8"))
         else:
-            body = "--- NOUVELLE DEMANDE (Triée par Mail2RAG) ---\n\n"
-            body += f"Expéditeur : {parsed_email.sender}\n"
-            body += f"Sujet original : {parsed_email.subject}\n\n"
+            body = ""
             if prefix_text:
-                body += f"=== SUGGESTION DE RÉPONSE IA ===\n{prefix_text}\n================================\n\n"
+                body += f"Réponse proposée par Mail2Rag :\n{prefix_text}\n\n"
             body += "--- MESSAGE ORIGINAL ---\n"
             body += parsed_email.body
             msg.attach(MIMEText(body, "plain", "utf-8"))
             
         if dynamic_attachments:
             from email.mime.application import MIMEApplication
+            from email.mime.message import MIMEMessage
+            import email
             for filename, content, mime_type in dynamic_attachments:
-                part = MIMEApplication(content)
+                if mime_type == "message/rfc822":
+                    attached_msg = email.message_from_bytes(content)
+                    part = MIMEMessage(attached_msg)
+                elif mime_type == "text/html":
+                    part = MIMEText(content.decode("utf-8"), "html", "utf-8")
+                else:
+                    part = MIMEApplication(content)
                 part.add_header("Content-Disposition", f"attachment; filename={filename}")
                 msg.attach(part)
                 
