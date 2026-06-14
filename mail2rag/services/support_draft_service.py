@@ -221,10 +221,10 @@ class SupportDraftService:
                 exc_info=True,
             )
 
-    def generate_ai_suggestion_html(self, email: "ParsedEmail", workspace: str) -> tuple[Optional[str], Optional[str], Optional[bytes]]:
+    def generate_ai_suggestion_html(self, email: "ParsedEmail", workspace: str) -> tuple[Optional[str], Optional[str], Optional[bytes], Optional[str]]:
         """
         Génère un encart HTML stylisé contenant la suggestion IA pour un e-mail donné.
-        Retourne un tuple: (html_content, ai_response_text, sources_html_bytes).
+        Retourne un tuple: (html_content, ai_response_text, sources_html_bytes, confidence_label).
         Ceci est utile pour inclure la suggestion dans le corps d'un e-mail transféré.
         """
         try:
@@ -239,7 +239,25 @@ class SupportDraftService:
             )
 
             if not ai_response:
-                return None, None, None
+                return None, None, None, None
+
+            confidence_score, confidence_level = self._calculate_confidence(
+                search_results,
+                ws_config.get("confidence_thresholds", DEFAULT_CONFIDENCE_THRESHOLDS),
+            )
+            
+            # Si l'IA n'est pas sûre, on s'efface pour ne pas polluer l'agent
+            if confidence_level in ("none", "low"):
+                self.logger.info("🔇 Confiance %s : Annulation de la suggestion IA pour ne pas polluer l'agent.", confidence_level)
+                return None, None, None, None
+            
+            confidence_labels = {
+                "none": "Faible",
+                "low": "Faible",
+                "medium": "Moy",
+                "high": "Bon",
+            }
+            confidence_label = confidence_labels.get(confidence_level, "Moy")
 
             import html
             import os
@@ -247,7 +265,7 @@ class SupportDraftService:
             # Construire l'encart HTML avec CSS inline
             html_content = f"""
             <div style="font-family: Arial, sans-serif; background-color: #f8f9fa; border: 1px solid #0d6efd; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                <h3 style="color: #0d6efd; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">🤖 Suggestion de réponse IA</h3>
+                <h3 style="color: #0d6efd; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">🤖 Suggestion de réponse IA ({confidence_label})</h3>
                 <div style="font-size: 14px; line-height: 1.5; color: #333; margin-bottom: 20px;">
                     {html.escape(ai_response.strip()).replace(chr(10), '<br>')}
                 </div>
@@ -345,11 +363,11 @@ class SupportDraftService:
             """
                 
             html_content += "</div>"
-            return html_content, ai_response, sources_bytes
+            return html_content, ai_response, sources_bytes, confidence_label
             
         except Exception as e:
             self.logger.error("❌ Erreur lors de la génération de la suggestion HTML : %s", e)
-            return None, None
+            return None, None, None, None
 
     def _build_query(self, subject: str, body: str) -> str:
         # Utiliser uniquement le corps de l'email pour éviter de polluer 

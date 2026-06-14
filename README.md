@@ -165,12 +165,11 @@ Automatically generate response drafts for support teams:
                                         └─────────────┘
 ```
 
-| Confidence | Template | Action |
+| Confidence | Label | Action |
 |------------|----------|--------|
-| **High** (>70%) | 🟢 Green | Ready to send |
-| **Medium** (50-70%) | 🔵 Blue | Review suggested |
-| **Low** (30-50%) | 🟡 Yellow | Needs completion |
-| **None** (<30%) | 🟡 Yellow | Manual response |
+| **High** (>70%) | 🟢 `(Bon)` | Full Draft + HTML snippet generated |
+| **Medium** (50-70%) | 🔵 `(Moy)` | Full Draft + HTML snippet generated |
+| **Low / None** (<50%) | 🔇 Muted | No draft generated. Clean forward with a discreet AI-routing badge |
 
 **UX Improvements & Notifications:**
 - **Universal Webhooks (Teams, Slack, Google Chat):** Native integration to alert support channels when an AI draft is ready or an email is semantically dispatched.
@@ -567,8 +566,9 @@ Sujet: Chat: Quels sont les points clés du T4 ?
 Génère automatiquement des brouillons de réponse pour les équipes support.
 
 - L'IA analyse la question du citoyen et rédige une réponse complète basée sur la base de connaissances.
-- **Zéro Friction (.eml natif) :** L'agent reçoit le mail transféré contenant un magnifique encart HTML avec la réponse et les sources utilisées (scores de pertinence inclus). S'il valide la réponse, il lui suffit de double-cliquer sur la pièce jointe `reponse_ia.eml`.
+- **Zéro Friction (.eml natif) :** L'agent reçoit le mail transféré contenant un magnifique encart HTML avec la réponse et les sources utilisées (avec des indices de confiance lisibles : `(Bon)` ou `(Moy)`). S'il valide la réponse, il lui suffit de double-cliquer sur la pièce jointe `reponse_ia.eml`.
 - Son client mail (Outlook, Thunderbird) s'ouvre avec un brouillon **parfaitement propre**, adressé au citoyen, sans aucune balise `> ` à nettoyer, et contenant l'historique complet des échanges en bas de page. Un gain de temps absolu !
+- **Effacement intelligent (Muting) :** Si l'IA estime que l'indice de confiance est faible (aucune source pertinente trouvée), le système masque automatiquement le brouillon et l'encart HTML. L'agent reçoit le mail intact avec un discret bandeau l'informant que la question nécessite une expertise humaine.
 
 ### 🧠 Routeur Sémantique / Dispatch IA (NOUVEAU v3.15.0)
 

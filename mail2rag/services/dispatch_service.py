@@ -74,7 +74,7 @@ class DispatchService:
                 target_workspace = target_workspace.split(",")[0] if "," in target_workspace else target_workspace
                 
                 self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s (workspace: %s)...", matched_folder, target_workspace)
-                ai_suggestion_html, ai_text, sources_bytes = self.support_draft_service.generate_ai_suggestion_html(email, target_workspace)
+                ai_suggestion_html, ai_text, sources_bytes, confidence_label = self.support_draft_service.generate_ai_suggestion_html(email, target_workspace)
 
                 dynamic_attachments = []
 
@@ -99,13 +99,18 @@ class DispatchService:
                     eml.set_content(draft_body)
                     dynamic_attachments.append(("reponse_ia.eml", eml.as_bytes(), "message/rfc822"))
 
-                plain_text_prefix = f"{ai_text}\n\ncliquez sur reponse_ia.eml pour repondre avec le message généré par IA"
+                if ai_text:
+                    confidence_str = f" ({confidence_label})" if confidence_label else ""
+                    plain_text_prefix = f"Réponse proposée par Mail2Rag{confidence_str} :\n{ai_text}\n\ncliquez sur reponse_ia.eml pour repondre avec le message généré par IA"
+                else:
+                    plain_text_prefix = "🤖 Cet e-mail a été transféré automatiquement par Mail2Rag.\n(Aucun brouillon n'a été généré car la question nécessite une expertise humaine)."
 
             # 2. Transférer l'e-mail via SMTP avec la suggestion injectée en texte brut et la PJ dynamique
             forwarded = self.mail_service.forward_parsed_email(
                 email, 
                 target_email, 
-                prefix_text=plain_text_prefix if ai_text else None, 
+                prefix_text=plain_text_prefix, 
+                prefix_html=ai_suggestion_html,
                 dynamic_attachments=dynamic_attachments
             )
             

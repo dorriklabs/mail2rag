@@ -218,7 +218,7 @@ class MicrosoftGraphProvider(BaseMailProvider):
         msg = MIMEMultipart()
         msg["From"] = self.user_email
         msg["To"] = to_email
-        msg["Subject"] = f"Fwd: {parsed_email.subject}"
+        msg["Subject"] = parsed_email.subject
         
         body = prefix_html if prefix_html else (prefix_text if prefix_text else "")
         body += f"\n<br><hr><br><b>De:</b> {parsed_email.sender}<br><b>Sujet:</b> {parsed_email.subject}<br><br>{parsed_email.body}"

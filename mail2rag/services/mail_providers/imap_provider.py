@@ -129,7 +129,7 @@ class ImapSmtpProvider(BaseMailProvider):
         msg["From"] = self._safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
         msg["To"] = self._safe_address(to_email)
         msg["Reply-To"] = self._safe_address(parsed_email.sender)
-        msg["Subject"] = f"[Mail2RAG] Demande : {parsed_email.subject}"
+        msg["Subject"] = parsed_email.subject
         msg["Date"] = email.utils.formatdate(localtime=True)
         msg["Message-ID"] = self._generate_message_id()
         msg["Auto-Submitted"] = "auto-generated"
@@ -145,7 +145,7 @@ class ImapSmtpProvider(BaseMailProvider):
         else:
             body = ""
             if prefix_text:
-                body += f"Réponse proposée par Mail2Rag :\n{prefix_text}\n\n"
+                body += f"{prefix_text}\n\n"
             body += "--- MESSAGE ORIGINAL ---\n"
             body += parsed_email.body
             msg.attach(MIMEText(body, "plain", "utf-8"))
