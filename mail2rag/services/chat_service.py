@@ -231,8 +231,8 @@ class ChatService:
         rag_url = f"{self.config.rag_proxy_url}/rag"
         payload = {
             "query": query,
-            "top_k": 20,
-            "final_k": 5,
+            "top_k": self.config.rag_top_k,
+            "final_k": self.config.rag_final_k,
             "use_bm25": True,
         }
         
@@ -388,7 +388,7 @@ class ChatService:
                 content = self.llm_client.chat(
                     messages=messages,
                     temperature=self.config.default_llm_temperature,
-                    max_tokens=1000,
+                    max_tokens=self.config.llm_max_tokens,
                     timeout=self.config.llm_timeout,
                 )
                 
@@ -403,7 +403,7 @@ class ChatService:
                 "model": self.config.ai_model_name,
                 "messages": messages,
                 "temperature": self.config.default_llm_temperature,
-                "max_tokens": 1000,
+                "max_tokens": self.config.llm_max_tokens,
             }
 
             self.logger.debug("Appel LLM Generation: %s", self.config.llm_api_url)

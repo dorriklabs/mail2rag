@@ -137,6 +137,9 @@ class Config:
         
         # Limite de tokens pour le contexte RAG (évite les dépassements de context window)
         self.llm_max_context_tokens = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "6000"))
+        
+        # Limite de tokens pour la génération de la réponse RAG
+        self.llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "1000"))
 
         # ------------------------------------------------------------------
         # SYSTÈME / CHEMINS
@@ -251,6 +254,10 @@ class Config:
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "800"))
         self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
         self.chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive")
+        
+        # Paramètres de recherche RAG
+        self.rag_top_k = int(os.getenv("RAG_TOP_K", "30"))
+        self.rag_final_k = int(os.getenv("RAG_FINAL_K", "10"))
         
         # SMART INGESTION FILTER
         # ------------------------------------------------------------------

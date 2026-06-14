@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.27.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.33.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -360,6 +360,8 @@ EMBED_MODEL=text-embedding-bge-m3
 | `USE_LOCAL_RERANKER` | `true` | Enable cross-encoder reranking |
 | `LOCAL_RERANKER_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranker model |
 | `MULTI_COLLECTION_MODE` | `true` | Auto-detect workspaces |
+| `RAG_TOP_K` | `30` | Documents retrieved before reranking |
+| `RAG_FINAL_K` | `10` | Documents sent to LLM |
 | **Document Analysis** |||
 | `TIKA_ENABLE` | `true` | Enable Apache Tika |
 | `VISION_ENABLE_IMAGES` | `true` | Enable Vision AI for images |
@@ -367,6 +369,7 @@ EMBED_MODEL=text-embedding-bge-m3
 | **LLM** |||
 | `LLM_CHAT_MODEL` | `qwen/qwen3-vl-8b` | Model for RAG chat |
 | `LLM_MAX_CONTEXT_TOKENS` | `6000` | Max context tokens (75% of LM Studio setting) |
+| `LLM_MAX_TOKENS` | `1000` | Max generated tokens for answers |
 
 > 📄 See [`.env.example`](.env.example) for all 60+ configuration options.
 
@@ -680,10 +683,13 @@ EMBED_MODEL=text-embedding-bge-m3
 |----------|--------|-------------|
 | `USE_RAG_PROXY_FOR_SEARCH` | `true` | Recherche hybride via RAG Proxy |
 | `CHUNK_SIZE` | `800` | Taille des chunks (caractères) |
+| `RAG_TOP_K` | `30` | Documents extraits avant reranking |
+| `RAG_FINAL_K` | `10` | Documents envoyés au LLM |
 | `USE_LOCAL_RERANKER` | `true` | Activer le reranker cross-encoder |
 | `TIKA_ENABLE` | `true` | Activer Apache Tika |
 | `VISION_ENABLE_IMAGES` | `true` | Activer Vision AI pour images |
 | `LLM_MAX_CONTEXT_TOKENS` | `6000` | Limite tokens contexte LLM |
+| `LLM_MAX_TOKENS` | `1000` | Limite tokens réponse générée |
 
 > 📄 Voir [`.env.example`](.env.example) pour les 60+ options de configuration.
 

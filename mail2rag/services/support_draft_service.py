@@ -407,8 +407,9 @@ class SupportDraftService:
             payload = {
                 "query": query,
                 "collection": workspace,
-                "top_k": 30,
-                "final_k": 10,
+                "top_k": self.config.rag_top_k,
+                "final_k": self.config.rag_final_k,
+                "max_tokens": self.config.llm_max_tokens,
                 "generate": True,
                 "system_prompt": system_prompt,
             }
