@@ -65,7 +65,8 @@ class DispatchService:
             self.logger.info("🎯 Dispatch IA : Transfert UID %s vers %s (%s)", email.uid, matched_folder, target_email)
             
             # 1. Générer une suggestion IA si le service est disponible
-            ai_suggestion = None
+            ai_suggestion_html = None
+            dynamic_attachments = None
             if self.support_draft_service:
                 # Résoudre le vrai nom du workspace (slug) pour le service cible
                 target_workspace = self.router.determine_workspace({"from": target_email, "subject": "", "body": ""})
@@ -73,13 +74,31 @@ class DispatchService:
                 target_workspace = target_workspace.split(",")[0] if "," in target_workspace else target_workspace
                 
                 self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s (workspace: %s)...", matched_folder, target_workspace)
-                ai_suggestion = self.support_draft_service.generate_ai_suggestion_text(email, target_workspace)
+                ai_suggestion_html, ai_text = self.support_draft_service.generate_ai_suggestion_html(email, target_workspace)
+                
+                if ai_text:
+                    from email.message import EmailMessage
+                    eml = EmailMessage()
+                    eml["Subject"] = f"Re: {email.subject}"
+                    eml["To"] = email.sender
+                    
+                    import email.utils
+                    date_str = email.date or email.utils.formatdate(localtime=True)
+                    draft_body = f"{ai_text.strip()}\n\n"
+                    draft_body += f"Le {date_str}, {email.sender} a écrit :\n"
+                    
+                    if email.body:
+                        quoted_body = "\n".join(f"> {line}" for line in email.body.split("\n"))
+                        draft_body += f"{quoted_body}\n"
+                        
+                    eml.set_content(draft_body)
+                    dynamic_attachments = [("reponse_ia.eml", eml.as_bytes(), "message/rfc822")]
 
-            # 2. Transférer l'e-mail via SMTP avec la suggestion injectée
-            forwarded = self.mail_service.forward_parsed_email(email, target_email, prefix_text=ai_suggestion)
+            # 2. Transférer l'e-mail via SMTP avec la suggestion injectée en HTML et potentiellement la PJ dynamique
+            forwarded = self.mail_service.forward_parsed_email(email, target_email, prefix_html=ai_suggestion_html, dynamic_attachments=dynamic_attachments)
             
             if forwarded:
-                # 2. Archiver l'original dans IMAP pour ne plus le traiter
+                # 3. Archiver l'original dans IMAP pour ne plus le traiter
                 archive_folder = getattr(self.config, "semantic_dispatch_archive_folder", "Dispatch-Archive")
                 self.mail_service.move_message(email.uid, archive_folder)
 

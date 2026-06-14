@@ -123,7 +123,7 @@ class ImapSmtpProvider(BaseMailProvider):
         msg.attach(MIMEText(body_html, "html", "utf-8"))
         return self._send_message_smtp(msg, "send_combined_email")
 
-    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None, prefix_html: str = None, dynamic_attachments: List[tuple] = None) -> bool:
         import email.utils
         msg = MIMEMultipart()
         msg["From"] = self._safe_address(getattr(self.config, "smtp_from", None) or self.config.smtp_user)
@@ -135,16 +135,30 @@ class ImapSmtpProvider(BaseMailProvider):
         msg["Auto-Submitted"] = "auto-generated"
         msg["X-Auto-Response-Suppress"] = "All"
         
-        body = "--- NOUVELLE DEMANDE (Triée par Mail2RAG) ---\n\n"
-        body += f"Expéditeur : {parsed_email.sender}\n"
-        body += f"Sujet original : {parsed_email.subject}\n\n"
-
-        if prefix_text:
-            body += f"=== SUGGESTION DE RÉPONSE IA ===\n{prefix_text}\n================================\n\n"
+        if prefix_html:
+            import html
+            html_body = prefix_html
+            html_body += "<br><hr style='border: 1px dashed #ccc;'><br>"
+            html_body += f"<h4>📩 Question du client (De: {html.escape(parsed_email.sender)}) :</h4>"
+            html_body += f"<pre style='font-family: Arial, sans-serif; white-space: pre-wrap;'>{html.escape(parsed_email.body)}</pre>"
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+        else:
+            body = "--- NOUVELLE DEMANDE (Triée par Mail2RAG) ---\n\n"
+            body += f"Expéditeur : {parsed_email.sender}\n"
+            body += f"Sujet original : {parsed_email.subject}\n\n"
+            if prefix_text:
+                body += f"=== SUGGESTION DE RÉPONSE IA ===\n{prefix_text}\n================================\n\n"
+            body += "--- MESSAGE ORIGINAL ---\n"
+            body += parsed_email.body
+            msg.attach(MIMEText(body, "plain", "utf-8"))
             
-        body += "--- MESSAGE ORIGINAL ---\n"
-        body += parsed_email.body
-        msg.attach(MIMEText(body, "plain", "utf-8"))
+        if dynamic_attachments:
+            from email.mime.application import MIMEApplication
+            for filename, content, mime_type in dynamic_attachments:
+                part = MIMEApplication(content)
+                part.add_header("Content-Disposition", f"attachment; filename={filename}")
+                msg.attach(part)
+                
         if parsed_email.msg.is_multipart():
             for part in parsed_email.msg.walk():
                 if part.get_content_maintype() == "multipart" or part.get("Content-Disposition") is None:

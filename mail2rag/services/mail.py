@@ -46,8 +46,11 @@ class MailService:
     def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
         return self.provider.send_reply(to_email, subject, body, is_html, original_message_id)
 
-    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
-        return self.provider.forward_parsed_email(parsed_email, to_email, prefix_text=prefix_text)
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        return self.provider.send_combined_email(service_email, client_email, subject, body_html, original_message_id)
+
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None, prefix_html: str = None, dynamic_attachments: List[tuple] = None) -> bool:
+        return self.provider.forward_parsed_email(parsed_email, to_email, prefix_text=prefix_text, prefix_html=prefix_html, dynamic_attachments=dynamic_attachments)
 
     def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
         return self.provider.send_synthetic_email(to_email, subject, text_content, attachment_paths)

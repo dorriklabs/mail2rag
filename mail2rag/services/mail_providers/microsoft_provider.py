@@ -94,7 +94,7 @@ class MicrosoftGraphProvider(BaseMailProvider):
         logger.debug("MicrosoftGraphProvider.send_reply(%s) (STUB)", to_email)
         return True
 
-    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None, prefix_html: str = None) -> bool:
         logger.debug("MicrosoftGraphProvider.forward_parsed_email(%s) (STUB)", to_email)
         return True
 

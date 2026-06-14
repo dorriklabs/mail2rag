@@ -23,41 +23,204 @@ from models import ParsedEmail
 
 # Données de test (15 scénarios complets)
 TEST_EMAILS = [
+    # ==========================================
+    # COLLECTION 1 : URBANISME (Abri de jardin)
+    # ==========================================
     {
-        "id": "INGEST_1",
+        "id": "INGEST_URBA_CIBLE",
         "type": "Ingestion",
-        "subject": "Nouvelle directive d'urbanisme 2026",
+        "subject": "Extrait du Plan Local d'Urbanisme - Annexes",
         "sender": "urba@dsiatlantic.com",
-        "body": "Veuillez trouver ci-joint les règles de ramassage des encombrants : le ramassage se fait tous les jeudis matin pour la zone A. Pour un abri de jardin, les règles du PLU imposent une surface inférieure à 20m2 sans permis, mais une déclaration préalable est obligatoire. La salle polyvalente est disponible à la réservation pour les associations sous réserve d'une demande au moins un mois à l'avance. Enfin, pour les demandes de logement social (HLM), le formulaire cerfa est à retirer en mairie.",
+        "body": "Conformément aux directives de la commune, l'édification de petites structures extérieures est réglementée. Pour un abri de jardin, les règles du PLU imposent une surface inférieure à 20m2 sans permis de construire. Toutefois, une déclaration préalable de travaux est obligatoirement requise avant tout commencement d'exécution.",
     },
     {
-        "id": "INGEST_2",
+        "id": "INGEST_URBA_DISTRACTEUR_1",
         "type": "Ingestion",
-        "subject": "Entretien de la Voirie",
+        "subject": "Note de synthèse - Abris en zone inondable",
         "sender": "urba@dsiatlantic.com",
-        "body": "En cas de nid de poule ou de dégradation de la chaussée, les services techniques interviennent sous 48h après signalement en mairie.",
+        "body": "Il est strictement interdit de procéder à l'installation d'un abri de jardin dans les zones classées inondables par le PPRI, et ce même pour les structures démontables d'une surface inférieure à 20m2. Aucune déclaration préalable ne sera acceptée pour ces zones.",
     },
     {
-        "id": "INGEST_3",
+        "id": "INGEST_URBA_DISTRACTEUR_2",
         "type": "Ingestion",
-        "subject": "Procédures Etat-Civil",
+        "subject": "Règlementation des piscines privées",
+        "sender": "urba@dsiatlantic.com",
+        "body": "Toute construction de piscine dont le bassin excède 20m2 de superficie nécessite le dépôt d'un permis de construire. Pour les bassins de taille inférieure, la procédure de déclaration préalable reste de rigueur au service urbanisme.",
+    },
+    {
+        "id": "INGEST_URBA_DISTRACTEUR_3",
+        "type": "Ingestion",
+        "subject": "Aménagement des abris bus de la métropole",
+        "sender": "urba@dsiatlantic.com",
+        "body": "L'implantation et la maintenance des abris bus relèvent exclusivement de la compétence de la communauté d'agglomération. Toute demande d'installation d'un nouvel abri doit faire l'objet d'une instruction technique.",
+    },
+    {
+        "id": "INGEST_URBA_DISTRACTEUR_4",
+        "type": "Ingestion",
+        "subject": "Procès-verbal du conseil municipal",
+        "sender": "urba@dsiatlantic.com",
+        "body": "Le conseil a débattu des normes esthétiques régissant l'implantation de tout abri de jardin visible depuis la voie publique. La couleur des façades devra obligatoirement s'intégrer au paysage environnant. Le vote définitif est repoussé.",
+    },
+
+    # ==========================================
+    # COLLECTION 2 : VOIRIE & PROPRETÉ (Nid de poule, Encombrants)
+    # ==========================================
+    {
+        "id": "INGEST_VOIRIE_CIBLE_1",
+        "type": "Ingestion",
+        "subject": "Charte de propreté et gestion des déchets",
+        "sender": "voirie@dsiatlantic.com",
+        "body": "La municipalité assure un service de collecte des déchets volumineux. Concernant le ramassage des encombrants, l'intervention des équipes se fait tous les jeudis matin pour la zone A de la commune. Les dépôts sauvages restent passibles d'une amende.",
+    },
+    {
+        "id": "INGEST_VOIRIE_CIBLE_2",
+        "type": "Ingestion",
+        "subject": "Guide d'intervention rapide voirie",
+        "sender": "voirie@dsiatlantic.com",
+        "body": "La sécurité des usagers de la route est une priorité. En cas d'apparition d'un nid de poule ou de dégradation majeure de la chaussée, les services techniques s'engagent à intervenir sous 48h après signalement officiel en mairie.",
+    },
+    {
+        "id": "INGEST_VOIRIE_DISTRACTEUR_1",
+        "type": "Ingestion",
+        "subject": "Nouveau calendrier des ordures ménagères",
+        "sender": "voirie@dsiatlantic.com",
+        "body": "Le ramassage des ordures ménagères classiques (bacs gris) a été réorganisé. Désormais, le camion de collecte passera le mardi matin pour la zone A et le vendredi pour la zone B. Ce calendrier annule et remplace le précédent.",
+    },
+    {
+        "id": "INGEST_VOIRIE_DISTRACTEUR_2",
+        "type": "Ingestion",
+        "subject": "Arrêté de circulation - Rue de la République",
+        "sender": "voirie@dsiatlantic.com",
+        "body": "Considérant les travaux d'enfouissement des réseaux, la circulation routière est temporairement interdite sur toute la longueur de la rue de la République. Cet arrêté ne concerne pas les réparations ponctuelles de type nid de poule.",
+    },
+    {
+        "id": "INGEST_VOIRIE_DISTRACTEUR_3",
+        "type": "Ingestion",
+        "subject": "Renouvellement du parc automobile",
+        "sender": "voirie@dsiatlantic.com",
+        "body": "Les services techniques de la ville vont faire l'acquisition de deux nouveaux véhicules utilitaires légers. Une procédure de marché public sera lancée sous 48h par le service des achats.",
+    },
+
+    # ==========================================
+    # COLLECTION 3 : ETAT-CIVIL & ELECTIONS
+    # ==========================================
+    {
+        "id": "INGEST_EC_CIBLE_1",
+        "type": "Ingestion",
+        "subject": "Manuel des procédures du guichet unique",
         "sender": "etat-civil@dsiatlantic.com",
-        "body": "Pour un renouvellement de passeport urgent, la prise de rendez-vous se fait en ligne sur le portail citoyen, délai moyen 2 semaines. Pour une copie intégrale d'acte de naissance en vue d'un mariage, la demande est à faire par courrier ou sur service-public.fr. Pour une demande de place en crèche municipale, le dossier est à déposer avant le 30 avril. Pour donner procuration lors d'un scrutin électoral, il faut se rendre au commissariat avec sa pièce d'identité.",
+        "body": "Pour toute demande de renouvellement de passeport urgent, la prise de rendez-vous s'effectue exclusivement en ligne sur le portail citoyen, avec un délai moyen de traitement estimé à 2 semaines. Par ailleurs, pour obtenir une copie intégrale d'acte de naissance nécessaire à un mariage, la requête est à soumettre soit par courrier, soit directement via service-public.fr.",
     },
     {
-        "id": "INGEST_4",
+        "id": "INGEST_EC_CIBLE_2",
         "type": "Ingestion",
-        "subject": "Règlement Police Municipale",
+        "subject": "Circulaire d'organisation des élections locales",
+        "sender": "etat-civil@dsiatlantic.com",
+        "body": "En vue des prochaines échéances, les électeurs dans l'incapacité de se déplacer sont invités à mandater un tiers. Pour donner procuration lors d'un scrutin électoral, l'électeur mandant doit se rendre physiquement au commissariat de police nationale muni de sa pièce d'identité.",
+    },
+    {
+        "id": "INGEST_EC_DISTRACTEUR_1",
+        "type": "Ingestion",
+        "subject": "Avis - Renouvellement de passeport diplomatique",
+        "sender": "etat-civil@dsiatlantic.com",
+        "body": "Les fonctionnaires habilités nécessitant un passeport spécifique pour leurs missions doivent adresser leur dossier directement à la préfecture. Le portail citoyen de la ville ne traite pas ces requêtes. Le délai de délivrance incompressible est de 2 semaines.",
+    },
+    {
+        "id": "INGEST_EC_DISTRACTEUR_2",
+        "type": "Ingestion",
+        "subject": "Bilan de la dernière campagne de scrutin",
+        "sender": "etat-civil@dsiatlantic.com",
+        "body": "Lors du dernier scrutin électoral, le taux de participation s'est élevé à 56%. Le commissariat a signalé une diminution des pertes de pièce d'identité le jour du vote. Aucune anomalie n'a été constatée lors du dépouillement.",
+    },
+    {
+        "id": "INGEST_EC_DISTRACTEUR_3",
+        "type": "Ingestion",
+        "subject": "Célébration des mariages en mairie",
+        "sender": "etat-civil@dsiatlantic.com",
+        "body": "Les cérémonies de mariage civil sont célébrées les samedis matin par l'officier d'état civil. Les futurs époux doivent avoir déposé leur dossier complet, incluant l'acte de naissance de chacun, au moins deux mois avant la date prévue de la cérémonie.",
+    },
+
+    # ==========================================
+    # COLLECTION 4 : SOCIAL, ENFANCE & ASSOCIATIONS
+    # ==========================================
+    {
+        "id": "INGEST_SOCIAL_CIBLE_1",
+        "type": "Ingestion",
+        "subject": "Guide de la petite enfance et du scolaire",
+        "sender": "social@dsiatlantic.com",
+        "body": "Concernant la scolarité, l'inscription à la cantine scolaire s'effectue auprès du service enfance, sur présentation obligatoire d'un justificatif de domicile récent. D'autre part, toute demande de place en crèche municipale requiert qu'un dossier complet soit déposé au secrétariat avant le 30 avril de l'année en cours.",
+    },
+    {
+        "id": "INGEST_SOCIAL_CIBLE_2",
+        "type": "Ingestion",
+        "subject": "Interventions du CCAS et Logement",
+        "sender": "social@dsiatlantic.com",
+        "body": "Pour les personnes sollicitant un logement social (HLM), le formulaire cerfa réglementaire est à retirer directement en mairie. De plus, face aux difficultés de paiement de facture d'électricité, le CCAS a la possibilité d'accorder une aide financière ponctuelle, mais uniquement sur étude approfondie du dossier du demandeur.",
+    },
+    {
+        "id": "INGEST_SOCIAL_CIBLE_3",
+        "type": "Ingestion",
+        "subject": "Règlement d'utilisation des infrastructures",
+        "sender": "social@dsiatlantic.com",
+        "body": "La municipalité met ses locaux à disposition du tissu associatif local. En particulier, la salle polyvalente est disponible à la réservation pour les associations déclarées, sous réserve expresse de soumettre la demande écrite au moins un mois à l'avance.",
+    },
+    {
+        "id": "INGEST_SOCIAL_DISTRACTEUR_1",
+        "type": "Ingestion",
+        "subject": "Menus de la cantine scolaire - Période printanière",
+        "sender": "social@dsiatlantic.com",
+        "body": "La commission des menus a validé les repas jusqu'au 30 avril. Pour les enfants n'ayant pas d'inscription régulière à la cantine scolaire, une réservation exceptionnelle doit être adressée par mail au directeur de l'établissement avec un délai de 48h.",
+    },
+    {
+        "id": "INGEST_SOCIAL_DISTRACTEUR_2",
+        "type": "Ingestion",
+        "subject": "Subventions aux associations caritatives",
+        "sender": "social@dsiatlantic.com",
+        "body": "Le CCAS a décidé de revaloriser l'enveloppe allouée aux associations oeuvrant pour le relogement. Cette aide financière permettra de soutenir la création de nouveaux hébergements temporaires, soulageant ainsi la pression sur les demandes de logement social classiques (HLM).",
+    },
+
+    # ==========================================
+    # COLLECTION 5 : POLICE & SÉCURITÉ
+    # ==========================================
+    {
+        "id": "INGEST_SECU_CIBLE_1",
+        "type": "Ingestion",
+        "subject": "Arrêté relatif à la tranquillité publique",
         "sender": "police@dsiatlantic.com",
-        "body": "Concernant les nuisances sonores, la musique à fond après 22h est considérée comme du tapage nocturne. La police municipale peut intervenir pour faire cesser le trouble et dresser une contravention.",
+        "body": "Afin de préserver le repos des résidents, des règles strictes s'appliquent sur le territoire communal. Concernant les nuisances sonores, diffuser de la musique à fond après 22h est formellement qualifié de tapage nocturne. Dans une telle situation, la police municipale est habilitée à intervenir pour faire cesser l'infraction et dresser une contravention.",
     },
     {
-        "id": "INGEST_5",
+        "id": "INGEST_SECU_DISTRACTEUR_1",
         "type": "Ingestion",
-        "subject": "Informations CCAS et Scolaire",
-        "sender": "admin@dsiatlantic.com",
-        "body": "L'inscription à la cantine scolaire pour les nouveaux arrivants se fait au service enfance sur présentation d'un justificatif de domicile. En cas de difficulté financière pour payer une facture d'électricité, le CCAS peut accorder une aide financière ponctuelle sur étude du dossier.",
+        "subject": "Règlementation des terrasses commerciales",
+        "sender": "police@dsiatlantic.com",
+        "body": "Les établissements recevant du public, notamment les bars et restaurants, doivent impérativement cesser l'exploitation de leur terrasse extérieure après 22h. Toute infraction constatée entraînera une amende administrative, indépendamment des questions de musique ou de nuisances sonores internes.",
     },
+    {
+        "id": "INGEST_SECU_DISTRACTEUR_2",
+        "type": "Ingestion",
+        "subject": "Contrôles routiers et vitesse",
+        "sender": "police@dsiatlantic.com",
+        "body": "La police municipale renforce ses contrôles aux abords des établissements scolaires. Tout dépassement de la limitation à 30km/h fera l'objet d'une contravention immédiate, même en l'absence de nuisances sonores liées au régime moteur des véhicules.",
+    },
+    {
+        "id": "INGEST_SECU_DISTRACTEUR_3",
+        "type": "Ingestion",
+        "subject": "Arrêté de lutte contre les nuisances de chantier",
+        "sender": "police@dsiatlantic.com",
+        "body": "Les travaux bruyants occasionnant des nuisances sonores sont prohibés les dimanches et jours fériés. Tout artisan pris en défaut d'application de cet arrêté se verra signifier l'arrêt du chantier par la police municipale et s'expose au paiement d'une contravention de 5ème classe.",
+    },
+    {
+        "id": "INGEST_SECU_DISTRACTEUR_4",
+        "type": "Ingestion",
+        "subject": "Dérogation exceptionnelle - Fête de la Musique",
+        "sender": "police@dsiatlantic.com",
+        "body": "À l'occasion du 21 juin, la notion de tapage nocturne est assouplie. Les riverains sont autorisés à jouer de la musique à fond sur l'espace public après 22h. Les effectifs de police se concentreront uniquement sur la sécurisation des rassemblements majeurs.",
+    },
+
+    # ==========================================
+    # REQUÊTES DE DIAGNOSTIC ET CHAT
+    # ==========================================
     {
         "id": "DIAG_1",
         "type": "Diagnostic",
@@ -72,6 +235,10 @@ TEST_EMAILS = [
         "sender": "user@gmail.com",
         "body": "Pouvez-vous me dire à quelle heure ouvre l'accueil de la mairie demain ?",
     },
+
+    # ==========================================
+    # REQUÊTES DE SUPPORT (RAG)
+    # ==========================================
     {
         "id": "SUPPORT_URBA",
         "type": "Support (RAG)",
@@ -178,6 +345,7 @@ class HybridTester:
         self.original_send_reply = self.context["mail_service"].send_reply
         self.original_forward_parsed_email = self.context["mail_service"].forward_parsed_email
         self.original_send_synthetic_email = self.context["mail_service"].send_synthetic_email
+        self.original_send_combined_email = self.context["mail_service"].send_combined_email
         self.last_sent_email_data = None
         
         # Remplacement dynamique (Mock partiel)
@@ -189,13 +357,13 @@ class HybridTester:
             }
             return self.original_send_reply(to_email, subject, body, is_html, original_message_id)
             
-        def intercepted_forward_parsed_email(parsed_email, to_email, prefix_text=None):
+        def intercepted_forward_parsed_email(parsed_email, to_email, prefix_text=None, prefix_html=None, dynamic_attachments=None):
             self.last_sent_email_data = {
                 "recipient": to_email,
                 "subject": parsed_email.subject,
-                "body": f"Forwarded email with prefix: {prefix_text}"
+                "body": f"Forwarded email with prefix: {prefix_text} / {prefix_html}"
             }
-            return self.original_forward_parsed_email(parsed_email, to_email, prefix_text)
+            return self.original_forward_parsed_email(parsed_email, to_email, prefix_text=prefix_text, prefix_html=prefix_html, dynamic_attachments=dynamic_attachments)
 
         def intercepted_send_synthetic_email(to_email, subject, text_content, attachment_paths=None):
             self.last_sent_email_data = {
@@ -204,10 +372,19 @@ class HybridTester:
                 "body": text_content
             }
             return self.original_send_synthetic_email(to_email, subject, text_content, attachment_paths)
+
+        def intercepted_send_combined_email(service_email, client_email, subject, body_html, original_message_id=None):
+            self.last_sent_email_data = {
+                "recipient": service_email,
+                "subject": subject,
+                "body": body_html
+            }
+            return self.original_send_combined_email(service_email, client_email, subject, body_html, original_message_id)
             
         self.context["mail_service"].send_reply = intercepted_send_reply
         self.context["mail_service"].forward_parsed_email = intercepted_forward_parsed_email
         self.context["mail_service"].send_synthetic_email = intercepted_send_synthetic_email
+        self.context["mail_service"].send_combined_email = intercepted_send_combined_email
         
     def evaluate_with_llm(self, query: str, response_body: str) -> dict:
         """

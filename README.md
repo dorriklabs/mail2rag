@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.26.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.27.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -174,8 +174,8 @@ Automatically generate response drafts for support teams:
 
 **UX Improvements & Notifications:**
 - **Universal Webhooks (Teams, Slack, Google Chat):** Native integration to alert support channels when an AI draft is ready or an email is semantically dispatched.
-- **Safe Visual Banners:** AI drafts include a prominent dashed red banner (`⚠️ À EFFACER AVANT ENVOI`) to prevent accidental internal notes leakage.
-- **Seamless Replies (IMAP Combined Email):** Instead of fragile IMAP draft creation, the system forwards a combined email (AI Draft + Original Email) to the support team. It automatically injects the `Reply-To` header and `Message-ID` so agents can simply click "Reply" and target the citizen natively, perfectly preserving the thread.
+- **Safe Visual Banners:** AI drafts include a prominent HTML block to safely display the suggested response and its sources (with confidence scores and clickable links).
+- **Zero-Friction Replies (.eml Attachments):** To completely eliminate manual text cleanup for support agents, Mail2RAG generates a native `reponse_ia.eml` file attached directly to the forwarded email. Agents simply double-click the attachment to open a clean, pre-filled response window in Outlook/Thunderbird. No `>` quotes to delete, and the citizen's original history is perfectly preserved at the bottom of the new draft.
 
 **Configuration:** Enable in `workspaces_config.json`:
 ```json
@@ -561,6 +561,14 @@ Envoyez `Chat: votre question` par email :
 Sujet: Chat: Quels sont les points clés du T4 ?
 ```
 → Recevez une réponse IA avec citations des sources
+
+### 🎫 Mode Brouillon Support (NOUVEAU v3.9.0)
+
+Génère automatiquement des brouillons de réponse pour les équipes support.
+
+- L'IA analyse la question du citoyen et rédige une réponse complète basée sur la base de connaissances.
+- **Zéro Friction (.eml natif) :** L'agent reçoit le mail transféré contenant un magnifique encart HTML avec la réponse et les sources utilisées (scores de pertinence inclus). S'il valide la réponse, il lui suffit de double-cliquer sur la pièce jointe `reponse_ia.eml`.
+- Son client mail (Outlook, Thunderbird) s'ouvre avec un brouillon **parfaitement propre**, adressé au citoyen, sans aucune balise `> ` à nettoyer, et contenant l'historique complet des échanges en bas de page. Un gain de temps absolu !
 
 ### 🧠 Routeur Sémantique / Dispatch IA (NOUVEAU v3.15.0)
 

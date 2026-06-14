@@ -221,10 +221,11 @@ class SupportDraftService:
                 exc_info=True,
             )
 
-    def generate_ai_suggestion_text(self, email: "ParsedEmail", workspace: str) -> Optional[str]:
+    def generate_ai_suggestion_html(self, email: "ParsedEmail", workspace: str) -> tuple[Optional[str], Optional[str]]:
         """
-        Génère uniquement le texte de suggestion IA pour un e-mail donné, sans créer de brouillon IMAP.
-        Ceci est utile pour inclure la suggestion dans un e-mail transféré.
+        Génère un encart HTML stylisé contenant la suggestion IA pour un e-mail donné.
+        Retourne un tuple: (html_content, ai_response_text).
+        Ceci est utile pour inclure la suggestion dans le corps d'un e-mail transféré.
         """
         try:
             ws_config = self.config.workspace_settings.get(workspace, {})
@@ -238,21 +239,41 @@ class SupportDraftService:
             )
             
             if not ai_response:
-                return None
+                return None, None
                 
-            # Construire une réponse textuelle lisible
-            suggestion = ai_response.strip()
+            import html
+            import os
+            
+            # Construire l'encart HTML avec CSS inline
+            html_content = f"""
+            <div style="font-family: Arial, sans-serif; background-color: #f8f9fa; border: 1px solid #0d6efd; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <h3 style="color: #0d6efd; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">🤖 Suggestion de réponse IA</h3>
+                <div style="font-size: 14px; line-height: 1.5; color: #333; margin-bottom: 20px;">
+                    {html.escape(ai_response.strip()).replace(chr(10), '<br>')}
+                </div>
+            """
             
             # Ajouter les sources si présentes
             if search_results:
-                suggestion += "\n\n--- Sources utilisées ---\n"
-                import os
+                html_content += f"""
+                <div style="border-top: 1px dashed #ced4da; padding-top: 15px;">
+                    <h4 style="color: #495057; margin-top: 0; margin-bottom: 10px; font-size: 13px;">📚 Sources utilisées :</h4>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #6c757d;">
+                """
+                
                 archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:9102").rstrip('/')
                 
                 for res in search_results[:3]:
                     metadata = res.get("metadata", {})
                     filename = metadata.get("filename", "Document inconnu")
                     secure_id = metadata.get("secure_id")
+                    
+                    # Score et chunk
+                    score_percent = int(res.get("score", 0) * 100)
+                    chunk_text = res.get("text", "")
+                    if not chunk_text and "payload" in res:
+                        chunk_text = res["payload"].get("text", "")
+                    chunk_excerpt = html.escape(chunk_text[:150] + "..." if len(chunk_text) > 150 else chunk_text)
                     
                     file_link = None
                     if secure_id:
@@ -263,16 +284,34 @@ class SupportDraftService:
                                      metadata.get("archive_url") or
                                      metadata.get("source_url"))
                     
-                    if file_link:
-                        suggestion += f"- [{filename}]({file_link})\n"
-                    else:
-                        suggestion += f"- {filename}\n"
+                    html_content += f"<li style='margin-bottom: 8px;'>"
                     
-            return suggestion
+                    if file_link:
+                        html_content += f"<a href='{file_link}' style='color: #0d6efd; font-weight: bold; text-decoration: none;'>{html.escape(filename)}</a> "
+                    else:
+                        html_content += f"<strong style='color: #495057;'>{html.escape(filename)}</strong> "
+                        
+                    html_content += f"<span style='background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-left: 5px;'>Score: {score_percent}%</span>"
+                    html_content += f"<br><i style='color: #868e96;'>\"{chunk_excerpt}\"</i>"
+                    html_content += "</li>"
+                    
+                html_content += """
+                    </ul>
+                </div>
+                """
+            
+            html_content += """
+                <div style="margin-top: 15px; font-size: 13px; color: #198754; background-color: #d1e7dd; padding: 10px; border-radius: 5px; text-align: center;">
+                    💡 <strong>Astuce :</strong> Double-cliquez sur la pièce jointe <strong>reponse_ia.eml</strong> pour ouvrir un brouillon propre et prêt à envoyer.
+                </div>
+            """
+                
+            html_content += "</div>"
+            return html_content, ai_response
             
         except Exception as e:
-            self.logger.error("❌ Erreur lors de la génération de la suggestion texte : %s", e)
-            return None
+            self.logger.error("❌ Erreur lors de la génération de la suggestion HTML : %s", e)
+            return None, None
 
     def _build_query(self, subject: str, body: str) -> str:
         # Utiliser uniquement le corps de l'email pour éviter de polluer 
