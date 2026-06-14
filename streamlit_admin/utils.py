@@ -41,6 +41,23 @@ def get_filtered_collections(rag_proxy_url: str):
         st.sidebar.error(f"Erreur get_filtered_collections: {e}\n{traceback.format_exc()}")
         return []
 
+ROUTING_CONFIG_FILE = "/etc/mail2rag/routing.json"
+
+def load_routing_config():
+    """Charge la configuration de routage (semantic_dispatch, rules)."""
+    if os.path.exists(ROUTING_CONFIG_FILE):
+        try:
+            with open(ROUTING_CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"semantic_dispatch": {"enabled": False, "mapping": {}}, "rules": []}
+
+def save_routing_config(config):
+    """Sauvegarde la configuration de routage."""
+    with open(ROUTING_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+
 def load_workspaces_config():
     """Charge la configuration des workspaces depuis le fichier JSON."""
     if os.path.exists(WORKSPACES_CONFIG_FILE):

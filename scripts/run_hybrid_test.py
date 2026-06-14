@@ -53,8 +53,27 @@ class HybridTester:
         
         uid_counter = 1000
         ingested_uids = {}
+        ingestion_phase = True
         
         for email_data in TEST_EMAILS:
+            if ingestion_phase and email_data["type"] != "Ingestion":
+                ingestion_phase = False
+                print("\n" + "="*80)
+                print("🔄 RECONSTRUCTION GLOBALE BM25 (Synchronisation)")
+                print("="*80)
+                try:
+                    import requests
+                    rag_url = self.config.rag_proxy_url.rstrip("/")
+                    print(f"Appel de l'API : {rag_url}/admin/rebuild-all-bm25...")
+                    resp = requests.post(f"{rag_url}/admin/rebuild-all-bm25", timeout=120)
+                    if resp.status_code == 200:
+                        print(f"✅ BM25 rebuild OK : {resp.json()}")
+                    else:
+                        print(f"⚠️ Erreur BM25 rebuild : {resp.status_code} - {resp.text}")
+                except Exception as e:
+                    print(f"❌ Exception lors du rebuild BM25 : {e}")
+                print("="*80 + "\n")
+                
             uid_counter += 1
             self.interceptor.reset()
             

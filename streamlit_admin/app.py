@@ -40,6 +40,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Injection CSS globale pour réduire l'espace perdu
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 2rem !important;
+            padding-bottom: 2rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # Configuration des URLs depuis variables d'environnement
 RAG_PROXY_URL = os.getenv("RAG_PROXY_URL", "http://rag_proxy:8000")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")

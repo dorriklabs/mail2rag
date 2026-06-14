@@ -1,11 +1,15 @@
+import os
+import json
+import requests
+
 class Evaluator:
     @staticmethod
     def evaluate_with_llm(email_id: str, question: str, response_body: str) -> dict:
-        """Évalue la réponse RAG pour détecter les échecs et valider les mots-clés."""
+        """Évalue la réponse générée en l'envoyant au LLM pour agir comme juge."""
         try:
             answer_lower = response_body.lower()
             
-            # 1. Détection des échecs explicites de l'IA (vide de contexte)
+            # 1. Détection rapide des échecs évidents (garde-fou)
             failure_phrases = [
                 "je n'ai trouvé aucune information",
                 "je n'ai pas trouvé",
@@ -22,75 +26,89 @@ class Evaluator:
             if len(response_body) < 50:
                 return {"note": "3/10", "remarque": "Réponse trop courte ou absente."}
                 
-            # 2. Vérification sémantique intelligente (tolérance aux variations de l'IA)
-            # Chaque élément de la liste est un groupe de synonymes (un seul suffit pour valider le point)
+            # 2. Critères attendus (déclaratif)
             expected_concepts = {
-                "SUPPORT_URBA": [
-                    ["20m2", "20 m2", "20 m²", "20m²", "vingt mètres carrés", "20"], 
-                    ["déclaration préalable", "déclaration", "autorisation"]
-                ],
-                "SUPPORT_VOIRIE": [
-                    ["48h", "48 heures", "48 h", "deux jours", "48"], 
-                    ["services techniques", "service technique", "mairie"]
-                ],
-                "SUPPORT_EC_1": [
-                    ["portail citoyen", "en ligne", "internet", "site web", "rendez-vous en ligne"], 
-                    ["2 semaines", "deux semaines", "14 jours", "quinze jours"]
-                ],
-                "SUPPORT_EC_2": [
-                    ["courrier", "lettre", "voie postale", "par écrit"], 
-                    ["service-public.fr", "service public", "internet", "en ligne"]
-                ],
-                "SUPPORT_ENF_1": [
-                    ["justificatif de domicile", "preuve de domicile", "facture"], 
-                    ["service enfance", "service de l'enfance", "mairie"]
-                ],
-                "SUPPORT_ENF_2": [
-                    ["30 avril", "30/04", "fin avril"], 
-                    ["dossier", "inscription", "formulaire"]
-                ],
-                "SUPPORT_VOIRIE2": [
-                    ["jeudis matin", "jeudi matin", "les jeudis", "jeudi"], 
-                    ["zone a", "zone-a", "quartier nord"]
-                ],
-                "SUPPORT_ASSO": [
-                    ["un mois à l'avance", "un mois", "1 mois", "30 jours", "au moins un mois", "un mois minimum"]
-                ],
-                "SUPPORT_SOCIAL_1": [
-                    ["cerfa", "formulaire", "document"], 
-                    ["mairie", "ccas", "sur place"]
-                ],
-                "SUPPORT_SOCIAL_2": [
-                    ["aide financière", "aide ponctuelle", "aide exceptionnelle", "ccas"], 
-                    ["dossier", "étude", "commission"]
-                ],
-                "SUPPORT_SECU": [
-                    ["22h", "22 heures", "22 h", "vingt-deux heures", "22:00"], 
-                    ["tapage nocturne", "nuisances sonores", "bruit"],
-                    ["contravention", "amende", "verbaliser", "police", "intervenir"]
-                ],
-                "SUPPORT_ELEC": [
-                    ["commissariat", "police", "gendarmerie"], 
-                    ["pièce d'identité", "carte d'identité", "passeport", "cni"]
-                ],
+                "SUPPORT_URBA": "La réponse doit mentionner une limite de surface de 20m2 (ou équivalent) et la nécessité d'une déclaration préalable.",
+                "SUPPORT_VOIRIE": "La réponse doit mentionner un délai de 48h (ou 2 jours) et l'intervention des services techniques.",
+                "SUPPORT_EC_1": "La réponse doit indiquer que la démarche se fait sur le portail citoyen (ou en ligne) avec un délai de 2 semaines.",
+                "SUPPORT_EC_2": "La réponse doit indiquer que la demande se fait par courrier et rediriger vers service-public.fr.",
+                "SUPPORT_ENF_1": "La réponse doit mentionner l'obligation de fournir un justificatif de domicile et contacter le service enfance.",
+                "SUPPORT_ENF_2": "La réponse doit mentionner la date butoir du 30 avril et la nécessité de remplir un dossier/formulaire.",
+                "SUPPORT_VOIRIE2": "La réponse doit préciser que le ramassage se fait le jeudi matin pour la zone concernée (zone nord).",
+                "SUPPORT_ASSO": "La réponse doit indiquer qu'il faut faire la demande un mois à l'avance.",
+                "SUPPORT_SOCIAL_1": "La réponse doit mentionner de remplir un formulaire/cerfa et de s'adresser à la mairie ou au CCAS.",
+                "SUPPORT_SOCIAL_2": "La réponse doit proposer une aide financière/ponctuelle du CCAS et suggérer un rendez-vous avec une assistante sociale.",
+                "SUPPORT_SECU": "La réponse doit mentionner la limite de 22h, caractériser la situation de tapage nocturne/nuisances, et avertir d'une contravention/verbalisation de la police.",
+                "SUPPORT_ELEC": "La réponse doit rediriger vers le commissariat/police/gendarmerie avec une pièce d'identité."
             }
             
-            if email_id in expected_concepts:
-                concepts = expected_concepts[email_id]
-                found_concepts = 0
-                
-                for synonym_list in concepts:
-                    if any(syn.lower() in answer_lower for syn in synonym_list):
-                        found_concepts += 1
-                        
-                if found_concepts == len(concepts):
-                    return {"note": "10/10", "remarque": "Parfait : Tous les concepts clés sont présents."}
-                elif found_concepts > 0:
-                    return {"note": "7/10", "remarque": f"Partiel : {found_concepts}/{len(concepts)} concepts trouvés."}
-                else:
-                    return {"note": "4/10", "remarque": "Médiocre : Aucun concept attendu trouvé, mais l'IA a répondu."}
+            if email_id not in expected_concepts:
+                return {"note": "8/10", "remarque": "Réponse pertinente générée (Pas de critères stricts)."}
+
+            criteria = expected_concepts[email_id]
             
-            return {"note": "8/10", "remarque": "Réponse pertinente générée avec succès."}
+            # 3. Appel au LLM-as-a-judge
+            lm_studio_url = os.getenv("LM_STUDIO_URL", "http://host.docker.internal:1234").rstrip("/")
+            url = f"{lm_studio_url}/v1/chat/completions"
+            
+            system_prompt = (
+                "Tu es un évaluateur qualité intransigeant spécialisé dans le contrôle de réponses de support technique. "
+                "Tu dois vérifier si la réponse fournie respecte les critères exigés. "
+                "Tu DOIS retourner UNIQUEMENT un objet JSON valide, sans bloc de code markdown, avec cette structure exacte : "
+                '{"note": "X/10", "remarque": "Ton explication concise"}. '
+                "Pour la note : Mets 10/10 si TOUS les critères sont présents (même formulés différemment). "
+                "Mets 7/10 s'il manque un critère. Mets 4/10 ou moins si les critères principaux sont absents."
+            )
+            
+            user_prompt = (
+                f"Question de l'utilisateur : {question}\n\n"
+                f"Réponse générée à évaluer : {response_body}\n\n"
+                f"Critères obligatoires : {criteria}\n\n"
+                "Rappel : Renvoie uniquement le JSON valide."
+            )
+            
+            payload = {
+                "model": "qwen2.5-7b-instruct", # Utilisé de manière générique, LM Studio l'ignore souvent
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.0,
+                "max_tokens": 150
+            }
+            
+            try:
+                # Timeout de 30s pour ne pas bloquer les tests indéfiniment
+                resp = requests.post(url, json=payload, timeout=30)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                    
+                    # Nettoyage d'éventuels blocs de code markdown (ex: ```json ... ```)
+                    if content.startswith("```json"):
+                        content = content.replace("```json", "", 1)
+                    if content.startswith("```"):
+                        content = content.replace("```", "", 1)
+                    if content.endswith("```"):
+                        content = content[:content.rfind("```")]
+                    content = content.strip()
+                    
+                    result_dict = json.loads(content)
+                    
+                    # Validation du format
+                    note = result_dict.get("note", "N/A")
+                    remarque = result_dict.get("remarque", "Pas de remarque.")
+                    
+                    if "/10" not in str(note):
+                        note = f"{note}/10"
+                        
+                    return {"note": note, "remarque": remarque}
+                else:
+                    return {"note": "N/A", "remarque": f"Erreur API Juge: HTTP {resp.status_code}"}
+            except requests.exceptions.RequestException as e:
+                return {"note": "N/A", "remarque": f"Erreur connexion Juge: {str(e)}"}
+            except json.JSONDecodeError:
+                return {"note": "N/A", "remarque": "Erreur Juge: Le format JSON renvoyé est invalide."}
             
         except Exception as e:
-            return {"note": "N/A", "remarque": f"Erreur éval: {str(e)}"}
+            return {"note": "N/A", "remarque": f"Erreur interne éval: {str(e)}"}

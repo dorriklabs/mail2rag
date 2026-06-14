@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 
 # Seuils de confiance par défaut
 DEFAULT_CONFIDENCE_THRESHOLDS = {
-    "none": 0.3,
-    "low": 0.5,
-    "medium": 0.7,
+    "none": 0.2,
+    "low": 0.4,
+    "medium": 0.6,
 }
 
 # Templates de style par défaut
@@ -587,25 +587,26 @@ STRUCTURE :
         if not search_results:
             return 0.0, "none"
         
-        # Score moyen des top résultats
-        scores = [r.get("score", 0) for r in search_results[:3]]
-        avg_score = sum(scores) / len(scores) if scores else 0
+        # Le score de confiance global du RAG doit être basé sur le MEILLEUR document trouvé,
+        # et non la moyenne. Si un document a 0.99 et les autres 0.01, l'IA a la réponse.
+        scores = [r.get("score", 0) for r in search_results]
+        best_score = max(scores) if scores else 0.0
         
         # Déterminer le niveau
         none_threshold = thresholds.get("none", 0.3)
         low_threshold = thresholds.get("low", 0.5)
         medium_threshold = thresholds.get("medium", 0.7)
         
-        if avg_score < none_threshold:
+        if best_score < none_threshold:
             level = "none"
-        elif avg_score < low_threshold:
+        elif best_score < low_threshold:
             level = "low"
-        elif avg_score < medium_threshold:
+        elif best_score < medium_threshold:
             level = "medium"
         else:
             level = "high"
         
-        return avg_score, level
+        return best_score, level
 
     def _build_draft_content(
         self,

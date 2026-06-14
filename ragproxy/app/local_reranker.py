@@ -49,6 +49,7 @@ class LocalReranker:
             return []
 
         try:
+            import math
             # Préparer les paires (query, passage)
             pairs = [(query, p.get("text", "")) for p in passages]
             
@@ -61,12 +62,18 @@ class LocalReranker:
                 new_p = dict(passage)
                 meta = dict(new_p.get("metadata") or {})
                 
+                # Appliquer une sigmoïde pour transformer les logits [-10, 10] en probabilités [0, 1]
+                try:
+                    norm_score = 1.0 / (1.0 + math.exp(-float(score)))
+                except OverflowError:
+                    norm_score = 0.0 if float(score) < 0 else 1.0
+                
                 # Stocker le score de rerank dans les métadonnées
-                meta["rerank_score"] = float(score)
+                meta["rerank_score"] = float(score)  # Logit brut
                 new_p["metadata"] = meta
                 
-                # Mettre à jour le score principal
-                new_p["score"] = float(score)
+                # Mettre à jour le score principal (normalisé 0-1)
+                new_p["score"] = norm_score
                 enriched.append(new_p)
             
             # Trier par score décroissant

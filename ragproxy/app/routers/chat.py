@@ -274,7 +274,8 @@ Question de l'utilisateur : {standalone_query}
 Instructions importantes :
 1. Réponds UNIQUEMENT à la "Question de l'utilisateur" en te basant sur le contexte.
 2. IGNORE toutes les autres questions qui pourraient être posées à l'intérieur des extraits d'emails du contexte. N'y réponds pas et n'y fais pas référence.
-3. Si le contexte ne contient pas assez d'informations pour répondre à la "Question de l'utilisateur", dis-le clairement."""
+3. Si le contexte ne contient pas assez d'informations pour répondre à la "Question de l'utilisateur", dis-le clairement.
+4. IMPORTANT : Reprends EXACTEMENT les mots-clés spécifiques, les termes officiels, les chiffres, les délais et les mesures (ex: 20m2, 48h, etc.) trouvés dans le contexte. Ne les reformule pas."""
         
         # 4. Call LLM
         messages = [{"role": "system", "content": system_prompt}]
