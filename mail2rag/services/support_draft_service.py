@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 
 # Seuils de confiance par défaut
 DEFAULT_CONFIDENCE_THRESHOLDS = {
-    "none": 0.3,
-    "low": 0.5,
-    "medium": 0.7,
+    "none": 0.2,
+    "low": 0.4,
+    "medium": 0.6,
 }
 
 # Templates de style par défaut
@@ -67,6 +67,7 @@ class SupportDraftService:
         cleaner: "CleanerService",
         email_renderer: "EmailRenderer",
         usage_tracker: Optional["UsageTracker"] = None,
+        notification_service: Optional["NotificationService"] = None,
     ):
         """
         Initialise le service Support Draft.
@@ -89,6 +90,7 @@ class SupportDraftService:
         self.cleaner = cleaner
         self.email_renderer = email_renderer
         self.usage_tracker = usage_tracker
+        self.notification_service = notification_service
         
         # Chemin des prompts de style
         self.prompts_dir = Path(config.prompts_dir) / "response_prompts"
@@ -130,7 +132,7 @@ class SupportDraftService:
             )
             
             # 2. Extraire et nettoyer la question
-            cleaned_body = self.cleaner.clean_body(email.body)
+            cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query = self._build_query(email.subject, cleaned_body)
             
             # 3. Rechercher dans la KB
@@ -163,8 +165,11 @@ class SupportDraftService:
                 ws_config=ws_config,
             )
             
-            # 6. Créer le brouillon
+            # 6. Créer le brouillon ou envoyer l'email combiné
             message_id = self._extract_message_id(email.email_data)
+            
+            # Récupérer l'adresse du service cible depuis le ws_config ou routing.json
+            service_email = ws_config.get("target_email") or self.router.semantic_dispatch_mapping.get(workspace)
             
             success = self.draft_service.create_draft(
                 to_email=email.sender,
@@ -173,6 +178,7 @@ class SupportDraftService:
                 in_reply_to=message_id,
                 references=message_id,
                 original_uid=email.uid,
+                service_email=service_email,
             )
             
             if success:
@@ -190,6 +196,17 @@ class SupportDraftService:
                     "✅ [Support Draft] Brouillon créé pour UID %s",
                     email.uid,
                 )
+
+                if self.notification_service:
+                    self.notification_service.send_notification(
+                        title="Draft IA prêt à être validé",
+                        text=f"Un brouillon a été préparé en réponse à **{email.sender}**.\n\nSujet : *{email.subject}*",
+                        facts={
+                            "Expéditeur": email.sender,
+                            "Sujet": email.subject,
+                            "Workspace": workspace
+                        }
+                    )
             else:
                 self.logger.error(
                     "❌ [Support Draft] Échec création brouillon UID %s",
@@ -204,14 +221,164 @@ class SupportDraftService:
                 exc_info=True,
             )
 
+    def generate_ai_suggestion_html(self, email: "ParsedEmail", workspace: str) -> tuple[Optional[str], Optional[str], Optional[bytes], Optional[str]]:
+        """
+        Génère un encart HTML stylisé contenant la suggestion IA pour un e-mail donné.
+        Retourne un tuple: (html_content, ai_response_text, sources_html_bytes, confidence_label).
+        Ceci est utile pour inclure la suggestion dans le corps d'un e-mail transféré.
+        """
+        try:
+            ws_config = self.config.workspace_settings.get(workspace, {})
+            cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
+            query = self._build_query(email.subject, cleaned_body)
+
+            search_results, ai_response = self._search_and_generate(
+                query=query,
+                workspace=workspace,
+                ws_config=ws_config,
+            )
+
+            if not ai_response:
+                return None, None, None, None
+
+            confidence_score, confidence_level = self._calculate_confidence(
+                search_results,
+                ws_config.get("confidence_thresholds", DEFAULT_CONFIDENCE_THRESHOLDS),
+            )
+            
+            # Si l'IA n'est pas sûre, on s'efface pour ne pas polluer l'agent
+            if confidence_level in ("none", "low"):
+                self.logger.info("🔇 Confiance %s : Annulation de la suggestion IA pour ne pas polluer l'agent.", confidence_level)
+                return None, None, None, None
+            
+            confidence_labels = {
+                "none": "Faible",
+                "low": "Faible",
+                "medium": "Moy",
+                "high": "Bon",
+            }
+            confidence_label = confidence_labels.get(confidence_level, "Moy")
+
+            import html
+            import os
+
+            # Construire l'encart HTML avec CSS inline
+            html_content = f"""
+            <div style="font-family: Arial, sans-serif; background-color: #f8f9fa; border: 1px solid #0d6efd; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <h3 style="color: #0d6efd; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">🤖 Suggestion de réponse IA ({confidence_label})</h3>
+                <div style="font-size: 14px; line-height: 1.5; color: #333; margin-bottom: 20px;">
+                    {html.escape(ai_response.strip()).replace(chr(10), '<br>')}
+                </div>
+            """
+
+            sources_bytes = None
+
+            # Ajouter les sources si présentes sous forme de fichier HTML séparé
+            if search_results:
+                sources_html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Sources utilisées par l'IA</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+        h2 { color: #0d6efd; border-bottom: 1px solid #dee2e6; padding-bottom: 5px; }
+        .source-list { list-style: none; padding: 0; }
+        .source-item { margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #0d6efd; }
+        .source-title { font-weight: bold; font-size: 15px; color: #0d6efd; text-decoration: none; }
+        .score { background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 10px; color: #495057; }
+        .excerpt { color: #555; font-style: italic; margin-top: 10px; font-size: 14px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h2>📚 Sources utilisées par l'IA</h2>
+    <ul class="source-list">
+"""
+
+                archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:9102").rstrip('/')
+
+                for res in search_results[:3]:
+                    metadata = res.get("metadata", {})
+                    filename = metadata.get("filename", "Document inconnu")
+                    secure_id = metadata.get("secure_id")
+
+                    # Nettoyer l'en-tête technique s'il est présent
+                    chunk_text = res.get("text", "")
+                    if not chunk_text and "payload" in res:
+                        chunk_text = res["payload"].get("text", "")
+
+                    if "Résumé :" in chunk_text and "IMAP_UID :" in chunk_text:
+                        parts = chunk_text.split("\n\n", 1)
+                        if len(parts) > 1:
+                            chunk_text = parts[1].strip()
+
+                    chunk_excerpt = html.escape(chunk_text[:300] + "..." if len(chunk_text) > 300 else chunk_text)
+
+                    file_link = None
+                    if secure_id:
+                        file_link = f"{archive_base}/{secure_id}/{filename}"
+                    else:
+                        file_link = (metadata.get("link") or 
+                                     metadata.get("url") or 
+                                     metadata.get("archive_url") or
+                                     metadata.get("source_url"))
+
+                    sources_html += "<li class='source-item'>"
+
+                    if file_link:
+                        sources_html += f"<a href='{file_link}' class='source-title' target='_blank'>{html.escape(filename)}</a>"
+                    else:
+                        sources_html += f"<span class='source-title'>{html.escape(filename)}</span>"
+
+                    score_val = res.get("score", 0)
+                    if isinstance(score_val, (float, int)):
+                        if -1 <= score_val <= 1:
+                            score_str = f"{int(score_val * 100)}%"
+                        else:
+                            score_str = f"{score_val:.2f}"
+                    else:
+                        score_str = str(score_val)
+
+                    sources_html += f"<span class='score'>Score: {score_str}</span>"
+                    sources_html += f"<div class='excerpt'>\"{chunk_excerpt}\"</div>"
+                    sources_html += "</li>"
+
+                sources_html += """
+    </ul>
+</body>
+</html>
+"""
+                sources_bytes = sources_html.encode("utf-8")
+                
+                html_content += """
+                <div style="border-top: 1px dashed #ced4da; padding-top: 15px; font-size: 13px;">
+                    📚 <em>Les sources utilisées pour formuler cette réponse sont disponibles dans la pièce jointe <strong>sources_ia.html</strong>.</em>
+                </div>
+                """
+
+            html_content += """
+                <div style="margin-top: 15px; font-size: 13px; color: #198754; background-color: #d1e7dd; padding: 10px; border-radius: 5px; text-align: center;">
+                    💡 <strong>Astuce :</strong> Double-cliquez sur la pièce jointe <strong>reponse_ia.eml</strong> pour ouvrir un brouillon propre et prêt à envoyer.
+                </div>
+            """
+                
+            html_content += "</div>"
+            return html_content, ai_response, sources_bytes, confidence_label
+            
+        except Exception as e:
+            self.logger.error("❌ Erreur lors de la génération de la suggestion HTML : %s", e)
+            return None, None, None, None
+
     def _build_query(self, subject: str, body: str) -> str:
-        """Construit la requête de recherche à partir du sujet et du corps."""
-        parts = []
-        if subject:
-            parts.append(f"Sujet: {subject}")
-        if body:
-            parts.append(f"Question: {body}")
-        return "\n\n".join(parts) if parts else "Question non spécifiée"
+        # Utiliser uniquement le corps de l'email pour éviter de polluer 
+        # le vecteur sémantique avec des mots clés génériques du sujet (ex: "permis de construire")
+        if body and len(body.strip()) > 10:
+            final_query = body.strip()
+        else:
+            final_query = subject.strip() if subject else "Demande non spécifiée"
+            
+        self.logger.info("🛠️ Query construite pour RAG: [%s]", final_query)
+        return final_query
 
     def _search_and_generate(
         self,
@@ -240,7 +407,9 @@ class SupportDraftService:
             payload = {
                 "query": query,
                 "collection": workspace,
-                "top_k": 5,
+                "top_k": self.config.rag_top_k,
+                "final_k": self.config.rag_final_k,
+                "max_tokens": self.config.llm_max_tokens,
                 "generate": True,
                 "system_prompt": system_prompt,
             }
@@ -256,7 +425,7 @@ class SupportDraftService:
             if response.ok:
                 data = response.json()
                 sources = data.get("sources", [])
-                ai_response = data.get("response", "")
+                ai_response = data.get("answer", "")
                 
                 return sources, ai_response
             else:
@@ -341,23 +510,24 @@ class SupportDraftService:
     def _default_style_prompt(self, tone: str) -> str:
         """Retourne un prompt de style par défaut."""
         prompts = {
-            "professional": """Tu es un assistant de support technique professionnel.
+            "professional": """Tu es un assistant de support technique expert et rigoureux pour une administration.
 
 STYLE DE RÉPONSE :
-- Vouvoiement systématique
-- Ton formel et courtois
-- Phrases structurées et claires
+- Vouvoiement systématique et ton formel.
+- Tu DOIS extraire toutes les conditions administratives sans exception.
 
-STRUCTURE :
+STRUCTURE OBLIGATOIRE DE TA RÉPONSE :
 1. {{greeting}}
-2. Réponse claire et détaillée
-3. Proposition d'aide complémentaire
-4. {{signature}}
+2. **Réponse principale** : (Réponse directe à la question posée).
+3. **Démarches & Lieux** : (Où aller, quel portail utiliser, ex: Espace Citoyen, Mairie, CCAS. Si non mentionné, ignore).
+4. **Délais & Dates** : (Mentionne explicitement tout délai de traitement, date butoir ou validité. Si non mentionné, ignore).
+5. **Pièces Justificatives obligatoires** : (Liste à puces de TOUS les documents requis. Si non mentionné, ignore).
+6. {{signature}}
 
-RÈGLES :
-- Ne jamais inventer d'information
-- Répondre uniquement en {{language}}
-- Si incertain, proposer de vérifier avec un expert""",
+RÈGLES STRICTES :
+- Ne jamais inventer d'information. Base-toi UNIQUEMENT sur le contexte fourni.
+- Répondre uniquement en {{language}}.
+- Si le contexte ne donne qu'une partie de la réponse, fournis l'information disponible et précise que le dossier devra être évalué.""",
 
             "friendly": """Tu es un assistant de support technique accessible et sympathique.
 
@@ -418,25 +588,26 @@ STRUCTURE :
         if not search_results:
             return 0.0, "none"
         
-        # Score moyen des top résultats
-        scores = [r.get("score", 0) for r in search_results[:3]]
-        avg_score = sum(scores) / len(scores) if scores else 0
+        # Le score de confiance global du RAG doit être basé sur le MEILLEUR document trouvé,
+        # et non la moyenne. Si un document a 0.99 et les autres 0.01, l'IA a la réponse.
+        scores = [r.get("score", 0) for r in search_results]
+        best_score = max(scores) if scores else 0.0
         
         # Déterminer le niveau
         none_threshold = thresholds.get("none", 0.3)
         low_threshold = thresholds.get("low", 0.5)
         medium_threshold = thresholds.get("medium", 0.7)
         
-        if avg_score < none_threshold:
+        if best_score < none_threshold:
             level = "none"
-        elif avg_score < low_threshold:
+        elif best_score < low_threshold:
             level = "low"
-        elif avg_score < medium_threshold:
+        elif best_score < medium_threshold:
             level = "medium"
         else:
             level = "high"
         
-        return avg_score, level
+        return best_score, level
 
     def _build_draft_content(
         self,
@@ -542,8 +713,11 @@ STRUCTURE :
 <html>
 <head><meta charset="utf-8"></head>
 <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
-    <div style="background: {color}; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+    <div style="background: {color}; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #dc3545;">
         <h3 style="margin: 0;">{icon} {text}</h3>
+        <p style="color: #dc3545; font-weight: bold; margin-top: 10px; margin-bottom: 0; font-size: 14px;">
+            (⚠️ NOTE INTERNE IA : Cliquez sur ce bandeau et effacez-le avant d'envoyer votre réponse)
+        </p>
     </div>
     
     <div style="margin-bottom: 20px;">

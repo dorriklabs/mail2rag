@@ -50,6 +50,10 @@ class CleanerService:
         # Lignes citées ("> ...")
         self.regex_quoted_lines = re.compile(r'^\s*>')
 
+        # Formules de politesse (Bonjour, Merci, etc.)
+        self.regex_greetings = re.compile(r'^\s*(bonjour|bonsoir|salut|hello|hi)[a-z à-ÿ,.-]*\n+', re.IGNORECASE)
+        self.regex_closings = re.compile(r'(?i)\n+\s*(merci|merci d\'avance|bien à vous|cordialement|dans l\'attente|sincères salutations).*\Z', re.DOTALL)
+
         # Réponses / historiques : patterns de headers de reply
         self.reply_header_patterns = [
             # FR
@@ -126,17 +130,24 @@ class CleanerService:
 
         return "\n".join(cleaned_lines)
 
-    def clean_body(self, text: str) -> str:
+    def clean_body(self, text: str, subject: str = "") -> str:
         """Nettoie le corps du mail (reply chain, signatures, disclaimers, quotes)."""
         if not text:
             return ""
+
+        is_forward = False
+        if subject:
+            subj_lower = subject.lower().strip()
+            if subj_lower.startswith(("fwd:", "fw:", "tr:", "transféré :", "[fwd:", "[tr:", "tr :")):
+                is_forward = True
 
         # Normalisation des retours à la ligne
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         original_len = len(text)
 
-        # 1. Couper l'historique (Reply) via détection de headers
-        text = self._strip_reply_history(text)
+        # 1. Couper l'historique (Reply) via détection de headers, SAUF si forward
+        if not is_forward:
+            text = self._strip_reply_history(text)
 
         # 2. Retirer les signatures (Cordialement, Best regards, etc.)
         text = self.regex_signatures.sub("", text)
@@ -147,8 +158,13 @@ class CleanerService:
         # 4. Nettoyage des footers mobiles (envoyé depuis mon iPhone / Android ...)
         text = self.regex_mobile_footers.sub("", text)
 
-        # 5. Supprimer les lignes citées (commençant par ">")
-        text = self._remove_quoted_lines(text)
+        # 5. Supprimer les lignes citées (commençant par ">"), SAUF si forward
+        if not is_forward:
+            text = self._remove_quoted_lines(text)
+
+        # 5.5 Supprimer les formules de politesse pour améliorer la recherche sémantique
+        text = self.regex_greetings.sub("", text)
+        text = self.regex_closings.sub("", text)
 
         # 6. Trim et réduction des multiples lignes vides
         text = text.strip()
@@ -167,10 +183,11 @@ class CleanerService:
 
         text = "\n".join(cleaned_lines).strip()
 
-        logger.debug(
-            "Nettoyage Body: %s -> %s chars conservés",
+        logger.info(
+            "Nettoyage Body: %s -> %s chars conservés. BODY: [%s]",
             original_len,
             len(text),
+            text
         )
         return text
 

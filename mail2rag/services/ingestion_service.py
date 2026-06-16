@@ -1,9 +1,10 @@
 import time
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Any, Dict
+import json
 
 from config import Config
-from models import ParsedEmail
+from models import ParsedEmail, ExtractedDocument
 from services.ragproxy_client import RAGProxyClient
 from services.mail import MailService
 from services.router import RouterService
@@ -12,6 +13,7 @@ from services.cleaner import CleanerService
 from services.email_renderer import EmailRenderer
 from services.support_qa import SupportQAService
 from services.utils import sanitize_filename, decode_email_header
+from services.cache_service import CacheService
 
 
 class IngestionService:
@@ -49,6 +51,12 @@ class IngestionService:
             timeout=config.rag_proxy_timeout,
         )
         self.logger.info("✅ RAG Proxy ingestion enabled")
+        
+        # Cache Service
+        self.cache_service = CacheService(
+            state_dir=config.state_path.parent,
+            enabled=getattr(config, "ingestion_cache", True)
+        )
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -56,6 +64,24 @@ class IngestionService:
     def ingest_email(self, email: ParsedEmail) -> None:
         """Pipeline complet d'ingestion RAG pour un email non-CHAT."""
         try:
+            # --- SMART INGESTION FILTER ---
+            if getattr(self.config, "enable_smart_ingestion_filter", False):
+                has_attachments = False
+                if email.msg.is_multipart():
+                    for part in email.msg.walk():
+                        if part.get("Content-Disposition"):
+                            has_attachments = True
+                            break
+                            
+                if not has_attachments:
+                    if not self._is_knowledge_worthy(email.subject, email.body):
+                        self.logger.info("♻️ Filtre IA : Email ignoré (sans valeur documentaire). UID %s", email.uid)
+                        # Archiver l'email ignoré
+                        archive_folder = getattr(self.config, "smart_filter_archive_folder", "Archive-Filtre")
+                        self.mail_service.move_message(email.uid, archive_folder)
+                        return
+            # ------------------------------
+            
             workspace = self.router.determine_workspace(email.email_data)
 
             safe_subject = sanitize_filename(
@@ -130,7 +156,7 @@ class IngestionService:
         use_qa_rewrite = bool(ws_cfg.get("qa_rewrite", False))
 
         if not use_qa_rewrite:
-            return self.cleaner.clean_body(email.body)
+            return self.cleaner.clean_body(email.body, subject=email.subject)
 
         self.logger.info(
             "🧠 Réécriture Q/R support activée pour UID %s dans workspace '%s'",
@@ -151,7 +177,7 @@ class IngestionService:
                 e,
                 exc_info=True,
             )
-            return self.cleaner.clean_body(email.body)
+            return self.cleaner.clean_body(email.body, subject=email.subject)
 
     def _build_email_summary(
         self,
@@ -193,6 +219,49 @@ class IngestionService:
         if len(preview) > max_chars:
             preview = preview[:max_chars].rstrip() + "..."
         return preview
+
+    def _is_knowledge_worthy(self, subject: str, body: str) -> bool:
+        """
+        Demande au LLM si l'email contient une connaissance utile à archiver.
+        Retourne True par défaut en cas de doute ou d'erreur.
+        """
+        import requests
+        if not self.config.ai_api_url:
+            return True
+            
+        prompt = (
+            "Tu es un bibliothécaire IA responsable d'une base de connaissances d'entreprise. "
+            "Ton rôle est de filtrer les e-mails entrants.\n\n"
+            f"Sujet de l'e-mail: {subject}\n"
+            f"Corps de l'e-mail:\n{body}\n\n"
+            "Question : Cet e-mail contient-il des informations utiles, des procédures, des règles "
+            "ou des connaissances factuelles qui méritent d'être indexées et archivées ? "
+            "Réponds UNIQUEMENT par le mot 'OUI' ou 'NON'. "
+            "Au moindre doute ou s'il s'agit d'une demande métier claire, réponds 'OUI'. "
+            "Si c'est juste un e-mail de politesse ('merci', 'ok', 'bonne journée'), une newsletter inutile ou un spam, réponds 'NON'."
+        )
+        
+        try:
+            resp = requests.post(
+                self.config.ai_api_url,
+                json={
+                    "model": self.config.ai_model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                    "max_tokens": 10
+                },
+                timeout=30
+            )
+            resp.raise_for_status()
+            answer = resp.json()["choices"][0]["message"]["content"].strip().upper()
+            
+            # Au moindre doute, on indexe (True)
+            if "NON" in answer and "OUI" not in answer:
+                return False
+            return True
+        except Exception as e:
+            self.logger.warning("⚠️ Échec du Smart Filter IA, ingestion forcée par sécurité : %s", e)
+            return True
 
     # ------------------------------------------------------------------ #
     # Fichier principal d'email
@@ -290,20 +359,59 @@ class IngestionService:
             ext = Path(filename).suffix.lower()
 
             if ext in {".png", ".jpg", ".jpeg", ".pdf"}:
-                analysis_text = self.processor.analyze_document(str(filepath))
-                if analysis_text:
-                    analysis_path = secure_folder / f"{safe_pj_name}_analysis.txt"
-                    with analysis_path.open("w", encoding="utf-8") as f:
-                        f.write(f"Source Document (Lien) : {public_link}\n")
-                        f.write(
-                            f"Email Parent (Sujet) : {email.subject}\n"
+                analysis_text = None
+                
+                # Extraction des paramètres influençant le résultat
+                extraction_params = {
+                    "vision_mode": self.config.vision_pdf_mode,
+                    "dpi": self.config.vision_pdf_dpi,
+                    "max_pages": self.config.vision_pdf_max_pages,
+                    "model": self.config.ai_model_name,
+                    "force_tables": self.config.vision_force_on_tables,
+                    "scorer_version": "1.0", # Version du scorer actuel
+                }
+                if self.config.structured_ingestion_enabled:
+                    extraction_params["schema_version"] = "1.0"
+                
+                # Vérification du cache avec clé composite
+                cache_key = self.cache_service.get_cache_key(filepath, extraction_params)
+                cached_data = self.cache_service.get_cached_extraction(cache_key)
+                
+                if cached_data and ("extracted_text" in cached_data or isinstance(cached_data, ExtractedDocument)):
+                    self.logger.info("♻️ Réutilisation de l'extraction en cache pour %s", filename)
+                    analysis_result = cached_data.get("extracted_text") if isinstance(cached_data, dict) else cached_data
+                else:
+                    # Extraction normale
+                    analysis_result = self.processor.analyze_document(str(filepath), return_structured=self.config.structured_ingestion_enabled)
+                    if analysis_result:
+                        cache_payload = analysis_result if isinstance(analysis_result, ExtractedDocument) else {
+                            "extracted_text": analysis_result, 
+                            "filename": filename,
+                            "params": extraction_params
+                        }
+                        self.cache_service.set_cached_extraction(
+                            cache_key, 
+                            cache_payload
                         )
-                        real_date = email.date or time.strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
-                        f.write(f"Date Email : {real_date}\n")
-                        f.write("-" * 30 + "\n")
-                        f.write(analysis_text)
+
+                if analysis_result:
+                    if isinstance(analysis_result, ExtractedDocument):
+                        analysis_path = secure_folder / f"{safe_pj_name}_analysis.json"
+                        with analysis_path.open("w", encoding="utf-8") as f:
+                            json.dump(analysis_result.model_dump(), f, ensure_ascii=False)
+                    else:
+                        analysis_path = secure_folder / f"{safe_pj_name}_analysis.txt"
+                        with analysis_path.open("w", encoding="utf-8") as f:
+                            f.write(f"Source Document (Lien) : {public_link}\n")
+                            f.write(
+                                f"Email Parent (Sujet) : {email.subject}\n"
+                            )
+                            real_date = email.date or time.strftime(
+                                "%Y-%m-%d %H:%M"
+                            )
+                            f.write(f"Date Email : {real_date}\n")
+                            f.write("-" * 30 + "\n")
+                            f.write(analysis_result)
 
                     files_to_upload.append(str(analysis_path))
                     self.logger.info(
@@ -378,6 +486,7 @@ class IngestionService:
             workspace=workspace,
             files=files_list,
             archive_url=f"{self.config.archive_base_url}/{secure_id}/",
+            dashboard_url=self.config.dashboard_url,
             email_summary=email_summary,
         )
         notif_subject = f"Ingestion réussie - {email.subject}"
@@ -424,7 +533,32 @@ class IngestionService:
         
         for file_path in files_to_upload:
             try:
-                # Extraction du texte depuis le fichier
+                if file_path.endswith("_analysis.json"):
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        doc_data = json.load(f)
+                    
+                    doc = ExtractedDocument(**doc_data)
+                    result = self.ragproxy_client.ingest_structured_document(
+                        collection=workspace,
+                        document=doc,
+                        chunk_size=self.config.chunk_size,
+                        chunk_overlap=self.config.chunk_overlap,
+                    )
+                    
+                    if result.get("status") == "ok":
+                        chunks_count = result.get("chunks_created", 0)
+                        total_chunks += chunks_count
+                        self.logger.info(
+                            f"Document structuré ingéré ({doc.filename}) → {chunks_count} chunks"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Erreur proxy pour {file_path}: {result.get('message')}"
+                        )
+                        errors += 1
+                    continue
+                    
+                # Extraction du texte depuis le fichier pour l'ancien flux textuel
                 text_content = self._extract_text_from_file(file_path)
                 
                 if not text_content or not text_content.strip():
@@ -439,6 +573,8 @@ class IngestionService:
                     "sender": email.sender,
                     "date": email.date or time.strftime("%Y-%m-%d %H:%M"),
                     "filename": filename,
+                    "workspace": workspace,
+                    "acl": [workspace],  # Par défaut, accès restreint au workspace
                 }
                 
                 # Ajouter le lien d'archive si disponible
@@ -453,26 +589,73 @@ class IngestionService:
                 if email.message_id:
                     metadata["message_id"] = email.message_id
                 
-                # Ingestion via RAG Proxy
-                result = self.ragproxy_client.ingest_document(
-                    collection=workspace,
-                    text=text_content,
-                    metadata=metadata,
-                    chunk_size=self.config.chunk_size,
-                    chunk_overlap=self.config.chunk_overlap,
-                )
+                # Ingestion page par page si balises détectées
+                import re
+                # Pattern: [Page 1/5 | Qualité : 0.85 | Méthode : mixed]
+                page_pattern = r'\n\[Page (\d+)/\d+ \| Qualité : ([\d\.]+) \| Méthode : (\w+)\]\n'
+                parts = re.split(page_pattern, text_content)
                 
-                if result.get("status") == "ok":
-                    chunks_count = result.get("chunks_created", 0)
-                    total_chunks += chunks_count
-                    self.logger.info(
-                        f"Document ingéré : {Path(file_path).name} → {chunks_count} chunks"
-                    )
+                if len(parts) > 1:
+                    # On a des pages
+                    # parts[0] est l'entête
+                    header = parts[0]
+                    for i in range(1, len(parts), 4):
+                        page_num = int(parts[i])
+                        quality_score = float(parts[i+1])
+                        method = parts[i+2]
+                        page_text = parts[i+3].strip()
+                        
+                        if not page_text:
+                            continue
+                            
+                        page_metadata = metadata.copy()
+                        page_metadata["page"] = page_num
+                        page_metadata["quality_score"] = quality_score
+                        page_metadata["extraction_method"] = method
+                        page_metadata["vision_used"] = (method == "mixed")
+                        # Hash file direct sans paramètres pour les métadonnées (recherche)
+                        page_metadata["file_hash"] = self.cache_service.get_cache_key(file_path).split('_')[0]
+                        
+                        result = self.ragproxy_client.ingest_document(
+                            collection=workspace,
+                            text=f"{header}\n{page_text}",
+                            metadata=page_metadata,
+                            chunk_size=self.config.chunk_size,
+                            chunk_overlap=self.config.chunk_overlap,
+                        )
+                        
+                        if result.get("status") == "ok":
+                            chunks_count = result.get("chunks_created", 0)
+                            total_chunks += chunks_count
+                            self.logger.info(
+                                f"Page {page_num} ingérée ({filename}) → {chunks_count} chunks (Score: {quality_score})"
+                            )
+                        else:
+                            self.logger.error(
+                                f"Échec ingestion de {filename} (Page {page_num}) : {result.get('message')}"
+                            )
+                            errors += 1
                 else:
-                    self.logger.error(
-                        f"Échec ingestion de {Path(file_path).name} : {result.get('message')}"
+                    # Ingestion classique (fichier entier)
+                    result = self.ragproxy_client.ingest_document(
+                        collection=workspace,
+                        text=text_content,
+                        metadata=metadata,
+                        chunk_size=self.config.chunk_size,
+                        chunk_overlap=self.config.chunk_overlap,
                     )
-                    errors += 1
+                    
+                    if result.get("status") == "ok":
+                        chunks_count = result.get("chunks_created", 0)
+                        total_chunks += chunks_count
+                        self.logger.info(
+                            f"Document ingéré : {filename} → {chunks_count} chunks"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Échec ingestion de {filename} : {result.get('message')}"
+                        )
+                        errors += 1
                     
             except Exception as e:
                 self.logger.error(

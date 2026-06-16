@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter
 
 from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
-from app.models import IngestRequest, IngestResponse
+from app.models import IngestRequest, IngestResponse, CronConfigRequest, CronConfigResponse
 from app.pipeline import RAGPipeline
 from app.chunker import TextChunker
 from app.vectordb import QdrantProvider
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 # Pipeline instance (will be set by main.py)
-pipeline: RAGPipeline = None
+pipeline: RAGPipeline = None # type: ignore
 
 
 def set_pipeline(p: RAGPipeline):
@@ -91,20 +91,15 @@ def ingest_document(req: IngestRequest):
         
         logger.info(f"Successfully indexed {len(chunks)} chunks in Qdrant")
         
-        # 4. Rebuild BM25 (auto)
-        if pipeline.multi_collection_mode and pipeline.bm25_multi:
-            try:
-                temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, req.collection)
-                all_docs = temp_provider.get_all_documents()
-                
-                docs = [d.get("text", "") for d in all_docs if d.get("text")]
-                meta = [d.get("metadata", {}) for d in all_docs]
-                
-                if docs:
-                    pipeline.bm25_multi.build_index(req.collection, docs, meta)
-                    logger.info(f"BM25 index rebuilt for '{req.collection}'")
-            except Exception as e:
-                logger.warning(f"Failed to rebuild BM25 for '{req.collection}': {e}")
+        # BM25 is now native in Qdrant via Sparse Vectors. No manual rebuild needed.
+        logger.info(f"Native hybrid index automatically updated for '{req.collection}'")
+        
+        # Invalidate the semantic cache when new documents are added
+        try:
+            pipeline.vdb.clear_semantic_cache()
+            logger.info("Semantic cache invalidated due to new ingestion")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate semantic cache: {e}")
         
         return IngestResponse(
             status="ok",
@@ -140,9 +135,8 @@ def delete_document(doc_id: str, collection: Optional[str] = None):
         for key in ["uid", "doc_id", "message_id"]:
             try:
                 count = pipeline.vdb.delete_by_metadata(
-                    key=key,
-                    value=doc_id,
                     collection_name=target_collection,
+                    metadata_filter={key: doc_id},
                 )
                 deleted_count += count
                 if count > 0:
@@ -159,6 +153,11 @@ def delete_document(doc_id: str, collection: Optional[str] = None):
                 "message": f"No documents found with id '{doc_id}'"
             }
         
+        try:
+            pipeline.vdb.clear_semantic_cache()
+        except Exception as e:
+            logger.warning(f"Failed to invalidate semantic cache: {e}")
+            
         return {
             "status": "ok",
             "deleted_count": deleted_count,
@@ -185,13 +184,9 @@ def list_collections():
                 temp_provider = QdrantProvider(VECTOR_DB_HOST, VECTOR_DB_PORT, col_name)
                 doc_count = temp_provider.count_documents()
                 
-                bm25_ready = False
-                bm25_count = 0
-                if pipeline.multi_collection_mode and pipeline.bm25_multi:
-                    bm25_ready = pipeline.bm25_multi.is_ready(col_name)
-                    if bm25_ready:
-                        stats = pipeline.bm25_multi.get_collection_stats(col_name)
-                        bm25_count = stats.get("docs_count", 0)
+                # BM25 native in Qdrant
+                bm25_ready = True
+                bm25_count = doc_count
                 
                 collections_info.append({
                     "name": col_name,
@@ -211,7 +206,7 @@ def list_collections():
         
         return {
             "status": "ok",
-            "multi_collection_mode": pipeline.multi_collection_mode,
+            "multi_collection_mode": True,
             "collections": collections_info
         }
     except Exception as e:
@@ -256,17 +251,14 @@ def delete_collection(name: str):
             logger.error(f"Failed to delete Qdrant collection '{name}': {e}")
             result["qdrant_error"] = str(e)
         
-        # 2. Delete BM25 index if exists
-        if pipeline.multi_collection_mode and pipeline.bm25_multi:
-            try:
-                if pipeline.bm25_multi.is_ready(name):
-                    pipeline.bm25_multi.delete_index(name)
-                    result["bm25_deleted"] = True
-                    logger.info(f"Deleted BM25 index for '{name}'")
-            except Exception as e:
-                logger.warning(f"Failed to delete BM25 for '{name}': {e}")
-                result["bm25_error"] = str(e)
+        # BM25 is native in Qdrant, deleted automatically with collection
+        result["bm25_deleted"] = True
         
+        try:
+            pipeline.vdb.clear_semantic_cache()
+        except Exception as e:
+            logger.warning(f"Failed to invalidate semantic cache: {e}")
+            
         result["message"] = f"Collection '{name}' deleted"
         return result
         
@@ -277,3 +269,27 @@ def delete_collection(name: str):
             "collection": name,
             "message": str(e)
         }
+
+@router.get("/cron", response_model=CronConfigResponse)
+def get_cron_config():
+    """Get the current cron configuration."""
+    from app.scheduler_manager import scheduler_manager
+    config = scheduler_manager.get_config()
+    return CronConfigResponse(status="ok", config=config)
+
+@router.post("/cron", response_model=CronConfigResponse)
+def update_cron_config(req: CronConfigRequest):
+    """Update cron configuration."""
+    from app.scheduler_manager import scheduler_manager
+    config = scheduler_manager.update_config(req.task_name, req.active, req.hour, req.minute)
+    return CronConfigResponse(status="ok", config={req.task_name: config})
+
+@router.post("/cron/{task_name}/run")
+async def run_cron_task(task_name: str):
+    """Run a specific cron task immediately."""
+    from app.scheduler_manager import scheduler_manager
+    if task_name == "rgpd_purge":
+        import asyncio
+        asyncio.create_task(scheduler_manager.run_rgpd_purge())
+        return {"status": "ok", "message": "Task 'rgpd_purge' started in background."}
+    return {"status": "error", "message": f"Unknown task: {task_name}"}

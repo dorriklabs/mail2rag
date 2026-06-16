@@ -27,8 +27,10 @@ class Config:
         self.log_backup_count = int(os.getenv("LOG_BACKUP_COUNT", "5"))
 
         # ------------------------------------------------------------------
-        # EMAIL (IMAP / SMTP)
+        # EMAIL (IMAP / SMTP / MICROSOFT GRAPH)
         # ------------------------------------------------------------------
+        self.mail_provider = os.getenv("MAIL_PROVIDER", "imap").lower()
+
         self.imap_server = os.getenv("IMAP_SERVER")
         self.imap_port = int(os.getenv("IMAP_PORT", "993"))
         self.imap_user = os.getenv("IMAP_USER")
@@ -55,6 +57,20 @@ class Config:
         self.imap_timeout = int(os.getenv("IMAP_TIMEOUT", "30"))
         self.smtp_timeout = int(os.getenv("SMTP_TIMEOUT", "30"))
 
+        # Microsoft Graph Credentials (if mail_provider == "msgraph")
+        self.ms_tenant_id = os.getenv("MS_TENANT_ID")
+        self.ms_client_id = os.getenv("MS_CLIENT_ID")
+        self.ms_client_secret = os.getenv("MS_CLIENT_SECRET")
+
+        # ------------------------------------------------------------------
+        # NOTIFICATIONS (Teams, Slack, Google Chat)
+        # ------------------------------------------------------------------
+        self.teams_webhook_url = os.getenv("TEAMS_WEBHOOK_URL")
+        self.slack_webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+        self.google_chat_webhook_url = os.getenv("GOOGLE_CHAT_WEBHOOK_URL")
+
+
+
         # ------------------------------------------------------------------
         # SUPPORT DRAFT MODE
         # ------------------------------------------------------------------
@@ -64,6 +80,19 @@ class Config:
         self.imap_processed_folder = os.getenv("IMAP_PROCESSED_FOLDER", "En cours")
         # Timeout avant notification (heures)
         self.draft_timeout_hours = int(os.getenv("DRAFT_TIMEOUT_HOURS", "24"))
+
+        # ------------------------------------------------------------------
+        # SEMANTIC DISPATCH (Dispatch IA)
+        # ------------------------------------------------------------------
+        self.enable_semantic_dispatch = self._get_bool("ENABLE_SEMANTIC_DISPATCH", False)
+        mapping_str = os.getenv(
+            "SEMANTIC_DISPATCH_MAPPING", "Urbanisme:urba@mairie.fr,Etat-Civil:etat-civil@mairie.fr"
+        )
+        self.semantic_dispatch_mapping = {}
+        for pair in mapping_str.split(","):
+            parts = pair.split(":")
+            if len(parts) == 2:
+                self.semantic_dispatch_mapping[parts[0].strip()] = parts[1].strip()
 
         # ------------------------------------------------------------------
         # SAAS-READY (Multi-tenant preparation)
@@ -85,6 +114,11 @@ class Config:
         # Activation Vision séparée pour images et PDFs
         self.vision_enable_images = self._get_bool("VISION_ENABLE_IMAGES", True)
         self.vision_enable_pdf = self._get_bool("VISION_ENABLE_PDF", True)
+        self.vision_pdf_mode = os.getenv("VISION_PDF_MODE", "low_quality_pages")
+        self.vision_pdf_max_pages = int(os.getenv("VISION_PDF_MAX_PAGES", "5"))
+        self.vision_pdf_dpi = int(os.getenv("VISION_PDF_DPI", "150"))
+        self.vision_force_on_tables = self._get_bool("VISION_FORCE_ON_TABLES", False)
+        self.vision_max_concurrent_calls = int(os.getenv("VISION_MAX_CONCURRENT_CALLS", "1"))
 
         self.vision_temperature = float(os.getenv("VISION_TEMPERATURE", "0.0"))
         self.vision_max_tokens = int(os.getenv("VISION_MAX_TOKENS", "1500"))
@@ -108,6 +142,9 @@ class Config:
         
         # Limite de tokens pour le contexte RAG (évite les dépassements de context window)
         self.llm_max_context_tokens = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "6000"))
+        
+        # Limite de tokens pour la génération de la réponse RAG
+        self.llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "1000"))
 
         # ------------------------------------------------------------------
         # SYSTÈME / CHEMINS
@@ -122,6 +159,11 @@ class Config:
         self.archive_path = Path(
             os.getenv("ARCHIVE_PATH", "/var/lib/mail2rag/mail2rag_archive")
         )
+        
+        # Fichier de logs d'audit commun (partagé via Docker volume)
+        self.audit_log_path = Path(
+            os.getenv("AUDIT_LOG_PATH", "/var/lib/mail2rag/audit.jsonl")
+        )
         self.routing_path = Path(
             os.getenv("ROUTING_PATH", "/etc/mail2rag/routing.json")
         )
@@ -130,16 +172,35 @@ class Config:
         self.log_path = Path(log_path_str)
 
         # ------------------------------------------------------------------
+        # SECURITY & ROUTING
+        # ------------------------------------------------------------------
+        self.enforce_strict_routing = self._get_bool("ENFORCE_STRICT_ROUTING", False)
+        
+        allowed_domains_str = os.getenv("ALLOWED_DOMAINS", "")
+        self.allowed_domains: Set[str] = {
+            d.strip().lower() for d in allowed_domains_str.split(",") if d.strip()
+        }
+
+        # ------------------------------------------------------------------
         # WORKERS
         # ------------------------------------------------------------------
         self.worker_count = int(os.getenv("WORKER_COUNT", "2"))
         self.worker_queue_size = int(os.getenv("WORKER_QUEUE_SIZE", "100"))
+        self.ingestion_max_workers = int(os.getenv("INGESTION_MAX_WORKERS", "2"))
+        self.ingestion_queue_max_size = int(os.getenv("INGESTION_QUEUE_MAX_SIZE", "20"))
+        self.ingestion_async = self._get_bool("INGESTION_ASYNC", True)
+        self.ingestion_cache = self._get_bool("INGESTION_CACHE", True)
+        self.structured_ingestion_enabled = self._get_bool("STRUCTURED_INGESTION_ENABLED", False)
 
         # ------------------------------------------------------------------
         # ARCHIVE WEB
         # ------------------------------------------------------------------
         archive_base = os.getenv("ARCHIVE_BASE_URL", "http://localhost:8080")
         self.archive_base_url = archive_base.rstrip("/")
+        
+        # Dashboard URL
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8501")
+        self.dashboard_url = dashboard_url.rstrip("/")
 
         # ------------------------------------------------------------------
         # PROMPTS
@@ -203,6 +264,14 @@ class Config:
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "800"))
         self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
         self.chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive")
+        
+        # Paramètres de recherche RAG
+        self.rag_top_k = int(os.getenv("RAG_TOP_K", "30"))
+        self.rag_final_k = int(os.getenv("RAG_FINAL_K", "10"))
+        
+        # SMART INGESTION FILTER
+        # ------------------------------------------------------------------
+        self.enable_smart_ingestion_filter = self._get_bool("ENABLE_SMART_INGESTION_FILTER", False)
 
         # ------------------------------------------------------------------
         # LLM DIRECT (pour RAG Proxy : génération finale)
@@ -362,8 +431,9 @@ class Config:
             backupCount=self.log_backup_count,
             encoding="utf-8",
         )
+
         formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+            "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
         )
         file_handler.setFormatter(formatter)
 

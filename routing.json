@@ -2,6 +2,37 @@
     "rules": [
         {
             "type": "sender",
+            "value": "urba@dsiatlantic.com",
+            "workspace": "urba",
+            "allowed_workspaces": ["urba", "support-client"]
+        },
+        {
+            "type": "sender",
+            "value": "etat-civil@dsiatlantic.com",
+            "workspace": "etat-civil"
+        },
+        {
+            "type": "sender",
+            "value": "police@dsiatlantic.com",
+            "workspace": "police"
+        },
+        {
+            "type": "sender",
+            "value": "social@dsiatlantic.com",
+            "workspace": "social"
+        },
+        {
+            "type": "sender",
+            "value": "asso@dsiatlantic.com",
+            "workspace": "asso"
+        },
+        {
+            "type": "sender",
+            "value": "voirie@dsiatlantic.com",
+            "workspace": "voirie"
+        },
+        {
+            "type": "sender",
             "value": "boss@example.com",
             "workspace": "urgent_workspace"
         },
@@ -26,5 +57,16 @@
             "workspace": "support-client"
         }
     ],
-    "default_workspace": "support-client"
+    "default_workspace": "support-client",
+    "semantic_dispatch": {
+        "enabled": true,
+        "mapping": {
+            "Urbanisme": "urba@dsiatlantic.com",
+            "Etat-Civil": "etat-civil@dsiatlantic.com",
+            "Police": "police@dsiatlantic.com",
+            "Social": "social@dsiatlantic.com",
+            "Associations": "social@dsiatlantic.com",
+            "Voirie": "voirie@dsiatlantic.com"
+        }
+    }
 }

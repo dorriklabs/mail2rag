@@ -14,6 +14,7 @@ from services.email_parser import EmailParser
 from services.mail import MailService
 from services.cleaner import CleanerService
 from services.router import RouterService
+from services.notification_service import NotificationService
 from services.processor import DocumentProcessor
 from services.email_renderer import EmailRenderer
 from services.support_qa import SupportQAService
@@ -26,6 +27,7 @@ from services.tika_client import TikaClient
 from services.ragproxy_client import RAGProxyClient
 from services.draft_service import DraftService
 from services.support_draft_service import SupportDraftService
+from services.dispatch_service import DispatchService
 from services.usage_tracker import UsageTracker
 from models import ParsedEmail
 
@@ -80,6 +82,19 @@ def is_support_draft_mode(
     return sender != support_email
 
 
+def is_sender_allowed(sender: str, allowed_domains: set) -> bool:
+    """Retourne True si l'expéditeur appartient à l'un des domaines autorisés."""
+    if not allowed_domains:
+        return True
+    if not sender:
+        return False
+    match = re.search(r"[\w\.-]+@([\w\.-]+)", sender)
+    if not match:
+        return False
+    domain = match.group(1).lower()
+    return domain in allowed_domains
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -126,6 +141,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     email_renderer = EmailRenderer(template_dir)
 
     support_qa = SupportQAService(config)
+    notification_service = NotificationService(config)
 
     state_manager = StateManager(config.state_path, logger)
     state = state_manager.load_state()
@@ -141,43 +157,11 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
 
     def trigger_bm25_rebuild(workspace: str = None) -> None:
         """
-        Déclenche la reconstruction de l'index BM25 via le RAG Proxy, si activé.
-        Si workspace est fourni, reconstruit uniquement pour ce workspace.
-        Sinon, tente une reconstruction globale ou intelligente.
+        Obsolète : Le BM25 est maintenant natif dans Qdrant via les vecteurs sparses (SPLADE/BM25).
+        Plus besoin de reconstruction manuelle.
         """
-        if not config.auto_rebuild_bm25:
-            logger.debug("AUTO_REBUILD_BM25 désactivé, aucun rebuild BM25 lancé.")
-            return
-
-        base = config.rag_proxy_url.rstrip("/")
-        
-        if workspace:
-            # Endpoint spécifique au workspace
-            candidates = [f"/admin/build-bm25/{workspace}"]
-        else:
-            # Endpoints globaux
-            candidates = ["/admin/auto-rebuild-bm25", "/admin/rebuild-all-bm25"]
-
-        for path in candidates:
-            url = f"{base}{path}"
-            try:
-                logger.info("Déclenchement rebuild BM25 via %s ...", url)
-                resp = requests.post(url, timeout=config.rag_proxy_timeout)
-                if resp.ok:
-                    logger.info("✅ Rebuild BM25 déclenché avec succès via %s", url)
-                    return
-                logger.warning(
-                    "Endpoint %s a répondu %s : %s",
-                    url,
-                    resp.status_code,
-                    resp.text[:300],
-                )
-            except Exception as e:
-                logger.warning(
-                    "Erreur lors de l'appel rebuild BM25 (%s): %s", url, e
-                )
-
-        logger.error("Impossible de déclencher le rebuild BM25 sur les endpoints connus.")
+        logger.debug("Rebuild BM25 ignoré : Le BM25 est géré nativement par Qdrant en temps réel.")
+        return
 
     ingestion_service = IngestionService(
         config=config,
@@ -231,6 +215,18 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         cleaner=cleaner,
         email_renderer=email_renderer,
         usage_tracker=usage_tracker,
+        notification_service=notification_service,
+    )
+
+    # Dispatch Sémantique
+    dispatch_service = DispatchService(
+        config=config,
+        logger_instance=logger,
+        mail_service=mail_service,
+        cleaner=cleaner,
+        router=router,
+        notification_service=notification_service,
+        support_draft_service=support_draft_service,
     )
 
     return {
@@ -246,6 +242,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "maintenance": maintenance,
         "router": router,
         "support_draft_service": support_draft_service,
+        "dispatch_service": dispatch_service,
         "usage_tracker": usage_tracker,
     }
 
@@ -313,6 +310,10 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
     logger.info("Dernier UID connu au démarrage : %s", last_uid)
 
     while True:
+        # Reload routing config if changed
+        router: RouterService = context["router"]
+        router.reload_if_changed()
+
         try:
             messages = mail_service.fetch_new_messages(last_uid)
         except Exception as e:
@@ -350,6 +351,17 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
             # Services additionnels du context
             router: RouterService = context["router"]
             support_draft_service: SupportDraftService = context.get("support_draft_service")
+            dispatch_service: DispatchService = context.get("dispatch_service")
+
+            if not is_sender_allowed(parsed_email.sender, config.allowed_domains):
+                logger.warning(
+                    "Bloqué: Expéditeur '%s' non autorisé par ALLOWED_DOMAINS. Email ignoré.",
+                    parsed_email.sender
+                )
+                last_uid = max(last_uid, uid)
+                state["last_uid"] = last_uid
+                state_manager.save_state(state)
+                continue
 
             try:
                 if is_diagnostic_email(parsed_email.subject):
@@ -358,6 +370,10 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                 elif is_chat_email(parsed_email.subject):
                     # Mode Chat : Chat: / Question:
                     chat_service.handle_chat(parsed_email)
+                elif router.semantic_dispatch_enabled and dispatch_service.handle_dispatch(parsed_email):
+                    # Le Routeur Sémantique a déplacé l'email dans un sous-dossier, on s'arrête là.
+                    logger.info("Email UID %s classé par le Dispatch IA. Fin du traitement.", uid)
+                    pass
                 elif support_draft_service and is_support_draft_mode(parsed_email, router, config):
                     # Mode Support Draft : génère un brouillon
                     support_draft_service.handle_support_request(parsed_email)

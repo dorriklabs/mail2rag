@@ -3,9 +3,10 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 from qdrant_client import QdrantClient
+from qdrant_client import models
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +18,14 @@ class VectorDBProvider(ABC):
     """Interface générique pour toutes les bases de données vectorielles."""
     
     @abstractmethod
-    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
-        """Recherche les vecteurs les plus proches."""
+    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
+        """Recherche les vecteurs les plus proches en mode Hybride (Dense + Sparse)."""
         pass
 
     @abstractmethod
     def get_all_documents(self) -> List[Dict]:
         """
-        Récupère TOUS les documents (texte + métadonnées) pour construire l'index BM25.
+        Récupère TOUS les documents (texte + métadonnées).
         Doit retourner une liste de dicts avec au moins les clés 'text' et 'metadata'.
         """
         pass
@@ -76,8 +77,22 @@ class VectorDBProvider(ABC):
             metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
             
         Returns:
-            Nombre de documents supprimés
         """
+        pass
+
+    @abstractmethod
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Cherche une réponse mise en cache pour une requête sémantiquement similaire."""
+        pass
+
+    @abstractmethod
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Sauvegarde une réponse générée dans le cache sémantique."""
+        pass
+
+    @abstractmethod
+    def clear_semantic_cache(self) -> bool:
+        """Vide entièrement le cache sémantique."""
         pass
 
 
@@ -86,16 +101,38 @@ class VectorDBProvider(ABC):
 # -----------------------------------------------------------------------------
 class QdrantProvider(VectorDBProvider):
     def __init__(self, host: str, port: int, collection_name: str):
+        from fastembed import SparseTextEmbedding
         self.client = QdrantClient(host=host, port=port)
         self.collection_name = collection_name
+        self.sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
         logger.info(f"Initialized QdrantProvider on {host}:{port} (collection: {collection_name})")
 
-    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
+    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
         target_collection = collection_name or self.collection_name
         try:
+            # Générer le sparse vector
+            sparse_result = list(self.sparse_model.embed([query_text]))[0]
+            sparse_vector = models.SparseVector(
+                indices=sparse_result.indices.tolist(),
+                values=sparse_result.values.tolist(),
+            )
+            
+            # Recherche hybride avec RRF
             hits = self.client.query_points(
                 collection_name=target_collection,
-                query=query_vector,
+                prefetch=[
+                    models.Prefetch(
+                        query=sparse_vector,
+                        using="sparse",
+                        limit=limit * 2,
+                    ),
+                    models.Prefetch(
+                        query=query_vector,
+                        using="dense",
+                        limit=limit * 2,
+                    ),
+                ],
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
                 limit=limit,
             ).points
         except Exception as e:
@@ -116,8 +153,6 @@ class QdrantProvider(VectorDBProvider):
 
     def get_all_documents(self) -> List[Dict]:
         try:
-            # Scroll pour récupérer tous les points (limité à 10000 pour l'instant)
-            # TODO: Implémenter une pagination réelle si > 10000 docs
             points, _ = self.client.scroll(
                 collection_name=self.collection_name,
                 limit=10000,
@@ -135,11 +170,9 @@ class QdrantProvider(VectorDBProvider):
             return docs
             
         except Exception as e:
-            # Gestion spécifique des erreurs Qdrant pour aider l'utilisateur
             error_msg = str(e)
             if "Not found: Collection" in error_msg or "doesn't exist" in error_msg:
                 logger.warning(f"Collection {self.collection_name} not found in Qdrant.")
-                # On propage l'erreur pour que l'appelant puisse afficher le bon message d'aide
                 raise e 
             else:
                 logger.error(f"Failed to fetch all documents from Qdrant: {e}")
@@ -161,7 +194,6 @@ class QdrantProvider(VectorDBProvider):
             return 0
     
     def list_collections(self) -> List[str]:
-        """Retourne la liste de toutes les collections Qdrant."""
         try:
             collections = self.client.get_collections()
             return [col.name for col in collections.collections]
@@ -170,7 +202,6 @@ class QdrantProvider(VectorDBProvider):
             return []
     
     def collection_exists(self) -> bool:
-        """Vérifie si la collection actuelle existe dans Qdrant."""
         try:
             collections = self.client.get_collections().collections
             return any(col.name == self.collection_name for col in collections)
@@ -179,7 +210,6 @@ class QdrantProvider(VectorDBProvider):
             return False
     
     def delete_collection(self) -> bool:
-        """Supprime la collection actuelle de Qdrant."""
         try:
             self.client.delete_collection(collection_name=self.collection_name)
             logger.info(f"Deleted Qdrant collection '{self.collection_name}'")
@@ -193,37 +223,37 @@ class QdrantProvider(VectorDBProvider):
         chunks: List[Dict],
         collection_name: str,
     ) -> bool:
-        """
-        Indexe des chunks avec embeddings dans la collection.
-        
-        Crée la collection si elle n'existe pas.
-        """
-        from qdrant_client.models import Distance, VectorParams, PointStruct
         import uuid
         
         try:
-            # Vérifier/créer la collection
             collections = self.client.get_collections().collections
             collection_exists = any(col.name == collection_name for col in collections)
             
             if not collection_exists:
-                # Déterminer la dimension du vecteur depuis le premier chunk
                 if not chunks or "embedding" not in chunks[0]:
                     logger.error("No chunks or missing embedding in first chunk")
                     return False
                 
                 vector_dim = len(chunks[0]["embedding"])
                 
-                logger.info(f"Creating new collection '{collection_name}' with dimension {vector_dim}")
+                logger.info(f"Creating new hybrid collection '{collection_name}' with dense dimension {vector_dim}")
                 self.client.create_collection(
                     collection_name=collection_name,
-                    vectors_config=VectorParams(size=vector_dim, distance=Distance.COSINE),
+                    vectors_config={
+                        "dense": models.VectorParams(size=vector_dim, distance=models.Distance.COSINE),
+                    },
+                    sparse_vectors_config={
+                        "sparse": models.SparseVectorParams(),
+                    }
                 )
             
-            # Préparer les points pour insertion
+            # Générer les sparse vectors pour tous les chunks
+            texts = [chunk.get("text", "") for chunk in chunks]
+            sparse_embeddings = list(self.sparse_model.embed(texts))
+            
             points = []
-            for chunk in chunks:
-                if "embedding" not in chunk or "text" not in chunk:
+            for i, chunk in enumerate(chunks):
+                if "embedding" not in chunk or not chunk.get("text"):
                     logger.warning("Chunk missing embedding or text, skipping")
                     continue
                 
@@ -233,9 +263,17 @@ class QdrantProvider(VectorDBProvider):
                     **chunk.get("metadata", {})
                 }
                 
-                point = PointStruct(
+                sparse_res = sparse_embeddings[i]
+                
+                point = models.PointStruct(
                     id=point_id,
-                    vector=chunk["embedding"],
+                    vector={
+                        "dense": chunk["embedding"],
+                        "sparse": models.SparseVector(
+                            indices=sparse_res.indices.tolist(),
+                            values=sparse_res.values.tolist(),
+                        )
+                    },
                     payload=payload,
                 )
                 points.append(point)
@@ -244,7 +282,6 @@ class QdrantProvider(VectorDBProvider):
                 logger.warning("No valid points to upsert")
                 return False
             
-            # Upserter par batch de 100
             batch_size = 100
             for i in range(0, len(points), batch_size):
                 batch = points[i:i + batch_size]
@@ -253,11 +290,11 @@ class QdrantProvider(VectorDBProvider):
                     points=batch,
                 )
             
-            logger.info(f"Successfully upserted {len(points)} points to '{collection_name}'")
+            logger.info(f"Successfully upserted {len(points)} hybrid points to '{collection_name}'")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to upsert documents to '{collection_name}': {e}")
+            logger.error(f"Failed to upsert hybrid documents to '{collection_name}': {e}")
             return False
     
     def delete_by_metadata(
@@ -265,26 +302,13 @@ class QdrantProvider(VectorDBProvider):
         collection_name: str,
         metadata_filter: Dict,
     ) -> int:
-        """
-        Supprime les documents matchant un filtre de métadonnées.
-        
-        Args:
-            collection_name: Nom de la collection
-            metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
-            
-        Returns:
-            Nombre de documents supprimés
-        """
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-        
         try:
-            # Construire le filtre Qdrant
             conditions = []
             for key, value in metadata_filter.items():
                 conditions.append(
-                    FieldCondition(
+                    models.FieldCondition(
                         key=key,
-                        match=MatchValue(value=value)
+                        match=models.MatchValue(value=value)
                     )
                 )
             
@@ -292,9 +316,8 @@ class QdrantProvider(VectorDBProvider):
                 logger.warning("Empty metadata filter, aborting deletion")
                 return 0
             
-            filter_obj = Filter(must=conditions)
+            filter_obj = models.Filter(must=conditions)
             
-            # Récupérer les points matchant le filtre
             scroll_result = self.client.scroll(
                 collection_name=collection_name,
                 scroll_filter=filter_obj,
@@ -309,10 +332,9 @@ class QdrantProvider(VectorDBProvider):
                 logger.info(f"No documents matching filter in '{collection_name}'")
                 return 0
             
-            # Supprimer les points
             self.client.delete(
                 collection_name=collection_name,
-                points_selector=points_to_delete,
+                points_selector=models.PointIdsList(points=points_to_delete),
             )
             
             logger.info(f"Deleted {len(points_to_delete)} documents from '{collection_name}'")
@@ -322,19 +344,91 @@ class QdrantProvider(VectorDBProvider):
             logger.error(f"Failed to delete by metadata in '{collection_name}': {e}")
             return 0
 
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Recherche dans le cache Qdrant s'il existe une question très similaire."""
+        collection_name = "mail2rag_cache"
+        try:
+            # Vérifier si la collection cache existe
+            if not any(col.name == collection_name for col in self.client.get_collections().collections):
+                return None
+                
+            hits = self.client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                limit=1,
+            ).points
+            
+            if hits and hits[0].score >= threshold:
+                logger.info(f"⚡ Semantic Cache HIT! (score: {hits[0].score:.4f})")
+                return hits[0].payload
+                
+            return None
+        except Exception as e:
+            logger.error(f"Semantic cache search failed: {e}")
+            return None
+
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Ajoute une question/réponse au cache."""
+        import uuid
+        collection_name = "mail2rag_cache"
+        
+        try:
+            # Vérifier/Créer la collection si elle n'existe pas
+            if not any(col.name == collection_name for col in self.client.get_collections().collections):
+                vector_dim = len(query_vector)
+                logger.info(f"Creating semantic cache collection '{collection_name}' with dense dimension {vector_dim}")
+                self.client.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=models.VectorParams(size=vector_dim, distance=models.Distance.COSINE),
+                )
+            
+            point_id = str(uuid.uuid4())
+            payload = {
+                "query": query_text,
+                "answer": answer,
+                "sources": sources,
+            }
+            
+            point = models.PointStruct(
+                id=point_id,
+                vector=query_vector,
+                payload=payload,
+            )
+            
+            self.client.upsert(
+                collection_name=collection_name,
+                points=[point],
+            )
+            
+            logger.info("Saved response to semantic cache.")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add to semantic cache: {e}")
+            return False
+
+    def clear_semantic_cache(self) -> bool:
+        collection_name = "mail2rag_cache"
+        try:
+            if any(col.name == collection_name for col in self.client.get_collections().collections):
+                self.client.delete_collection(collection_name=collection_name)
+                logger.info(f"Deleted semantic cache collection '{collection_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to clear semantic cache: {e}")
+            return False
+
 
 # -----------------------------------------------------------------------------
 #  FACTORY / SERVICE (Le point d'entrée unique)
 # -----------------------------------------------------------------------------
 class VectorDBService:
     def __init__(self, host: str, port: int, collection_name: str):
-        # Ici on pourrait lire os.getenv('VECTOR_DB_PROVIDER') pour choisir dynamiquement
-        # Pour l'instant on hardcode Qdrant, mais l'architecture est prête.
         self.provider: VectorDBProvider = QdrantProvider(host, port, collection_name)
         self.collection_name = collection_name
 
-    def search(self, query_vector: List[float], limit: int, collection_name: str = None) -> List[Dict]:
-        return self.provider.search(query_vector, limit, collection_name)
+    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
+        return self.provider.search(query_text, query_vector, limit, collection_name)
 
     def is_ready(self) -> bool:
         return self.provider.is_ready()
@@ -353,3 +447,12 @@ class VectorDBService:
     
     def delete_by_metadata(self, collection_name: str, metadata_filter: Dict) -> int:
         return self.provider.delete_by_metadata(collection_name, metadata_filter)
+
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        return self.provider.check_semantic_cache(query_vector, threshold)
+        
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        return self.provider.add_to_semantic_cache(query_text, query_vector, answer, sources)
+
+    def clear_semantic_cache(self) -> bool:
+        return self.provider.clear_semantic_cache()

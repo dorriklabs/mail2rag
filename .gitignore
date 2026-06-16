@@ -2,8 +2,7 @@
 # FICHIERS SENSIBLES (NE JAMAIS COMMIT)
 # ============================================
 .env
-.env.local
-.env.production
+.env.*
 *.key
 *.pem
 *.crt
@@ -58,6 +57,7 @@ Thumbs.db
 # ============================================
 *.backup
 *.bak
+docker-compose.override.yml
 
 # ============================================
 # TEMPORAIRES

@@ -5,7 +5,9 @@ Rebuild BM25, logs système, configuration
 
 import streamlit as st
 import requests
+import pandas as pd
 from datetime import datetime
+from utils import load_routing_config, save_routing_config
 
 st.set_page_config(page_title="Administration", page_icon="⚙️", layout="wide")
 
@@ -48,7 +50,7 @@ def rebuild_all_bm25():
         return None
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["🔨 Index BM25", "📜 Logs Système", "🔧 Configuration"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔨 Index BM25", "📜 Logs Système", "🔧 Configuration", "🔀 Routage Sémantique", "🧠 Prompts IA", "🔒 Règles d'Accès (ACL)"])
 
 # =====================================
 # TAB 1 : Index BM25
@@ -329,3 +331,210 @@ docker-compose up -d
 # Footer
 st.divider()
 st.caption(f"Dernière mise à jour: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# =====================================
+# TAB 4 : Routage Sémantique
+# =====================================
+with tab4:
+    st.header("🔀 Routage Sémantique IA")
+    routing_data = load_routing_config()
+    sd_config = routing_data.get("semantic_dispatch", {"enabled": False, "mapping": {}})
+    
+    st.markdown("L'IA analyse le contenu des emails pour les transférer automatiquement au bon service.")
+    
+    enabled = st.toggle("Activer le Routage Sémantique", value=sd_config.get("enabled", False))
+    
+    st.subheader("Configuration des Services")
+    mapping = sd_config.get("mapping", {})
+    
+    df = pd.DataFrame(list(mapping.items()), columns=["Service", "Email"])
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    
+    if st.button("💾 Sauvegarder la configuration", type="primary"):
+        new_mapping = {}
+        for _, row in edited_df.iterrows():
+            srv = str(row["Service"]).strip()
+            eml = str(row["Email"]).strip()
+            if srv and eml and srv != "None" and eml != "None":
+                new_mapping[srv] = eml
+                
+        routing_data["semantic_dispatch"] = {
+            "enabled": enabled,
+            "mapping": new_mapping
+        }
+        
+        save_routing_config(routing_data)
+            
+        st.success("✅ Configuration du routage sémantique sauvegardée avec succès !")
+        st.rerun()
+
+# =====================================
+# TAB 5 : Prompts IA
+# =====================================
+with tab5:
+    from utils import load_workspaces_config, save_workspaces_config
+    
+    st.header("🧠 Personnalisation des Prompts par Workspace")
+    
+    st.markdown("""
+    Définissez ici des **instructions spécifiques (System Prompts)** pour chaque workspace.
+    Lorsque l'utilisateur interroge *uniquement* ce workspace, l'IA obéira à ces règles (ex: ton de la voix, format de réponse, contraintes métier).
+    """)
+    
+    ws_config = load_workspaces_config()
+    
+    collections_list = get_collections()
+    col_names = [c["name"] for c in collections_list] if collections_list else list(ws_config.keys())
+    
+    # Merge les noms du json avec ceux de Qdrant
+    all_workspaces = list(set(col_names + list(ws_config.keys())))
+    all_workspaces.sort()
+    
+    selected_ws = st.selectbox("Sélectionnez le workspace à configurer", all_workspaces)
+    
+    if selected_ws:
+        # Récupérer la config actuelle
+        ws_data = ws_config.get(selected_ws, {})
+        response_style = ws_data.get("response_style", {})
+        current_prompt = response_style.get("custom_prompt", "")
+        
+        new_prompt = st.text_area(
+            "Instructions pour l'IA (System Prompt)",
+            value=current_prompt,
+            height=250,
+            help="Laissez vide pour utiliser le prompt global par défaut du système."
+        )
+        
+        if st.button("💾 Sauvegarder le Prompt"):
+            # Initialiser si besoin
+            if selected_ws not in ws_config:
+                ws_config[selected_ws] = {}
+            if "response_style" not in ws_config[selected_ws]:
+                ws_config[selected_ws]["response_style"] = {}
+                
+            # Sauvegarder
+            if new_prompt.strip():
+                ws_config[selected_ws]["response_style"]["custom_prompt"] = new_prompt.strip()
+            else:
+                # Remove if empty
+                if "custom_prompt" in ws_config[selected_ws]["response_style"]:
+                    del ws_config[selected_ws]["response_style"]["custom_prompt"]
+                    
+            save_workspaces_config(ws_config)
+                
+            st.success(f"✅ Prompt mis à jour pour le workspace '{selected_ws}' !")
+            st.rerun()
+
+# =====================================
+# TAB 6 : Règles d'Accès (ACL)
+# =====================================
+with tab6:
+    st.header("🔒 Règles d'Accès (ACL)")
+    routing_data = load_routing_config()
+    rules_data = routing_data.get("rules", [])
+    
+    st.markdown("Configurez ici les règles d'accès et de transfert prioritaires pour les emails reçus.")
+    
+    with st.expander("📖 Guide d'utilisation des règles ACL", expanded=False):
+        st.markdown("""
+        **Types de règles disponibles :**
+        - `sender` : Adresse email exacte (ex: *facturation@fournisseur.com*)
+        - `sender_domain` : Domaine de l'expéditeur (ex: *fournisseur.com*)
+        - `subject` : Sujet exact de l'email
+        - `subject_regex` : Expression régulière pour filtrer le sujet
+        - `body_contains` : Mot-clé ou phrase spécifique dans le corps du message
+        
+        **Configuration des cibles :**
+        - **Workspace Cible** : Force le transfert exclusif vers ce workspace (contourne le routage IA).
+        - **Workspaces Autorisés** : Restreint l'accès à une liste définie (séparez les noms par des virgules).
+        """)
+        
+    st.divider()
+    st.caption(f"📊 **{len(rules_data)}** règle(s) configurée(s) actuellement dans le système.")
+    
+    # Préparer les données pour le dataframe
+    df_data = []
+    for rule in rules_data:
+        allowed_ws = rule.get("allowed_workspaces", [])
+        df_data.append({
+            "Type": rule.get("type", ""),
+            "Valeur": rule.get("value", ""),
+            "Workspace Cible": rule.get("target_workspace", ""),
+            "Workspaces Autorisés": ", ".join(allowed_ws) if isinstance(allowed_ws, list) else str(allowed_ws)
+        })
+        
+    df = pd.DataFrame(df_data, columns=["Type", "Valeur", "Workspace Cible", "Workspaces Autorisés"])
+    
+    # Configuration des colonnes pour le data editor
+    column_config = {
+        "Type": st.column_config.SelectboxColumn(
+            "Type",
+            help="Critère de déclenchement",
+            width="medium",
+            options=["sender", "sender_domain", "subject", "subject_regex", "body_contains"],
+            required=True
+        ),
+        "Valeur": st.column_config.TextColumn(
+            "Valeur", 
+            help="Valeur à faire correspondre (ex: domaine.com)",
+            required=True,
+            width="large"
+        ),
+        "Workspace Cible": st.column_config.TextColumn(
+            "Workspace Cible",
+            help="Workspace de destination forcée"
+        ),
+        "Workspaces Autorisés": st.column_config.TextColumn(
+            "Workspaces Autorisés", 
+            help="Noms des workspaces autorisés séparés par des virgules (ex: ws_finance, ws_direction)",
+            width="large"
+        )
+    }
+    
+    edited_df = st.data_editor(
+        df,
+        num_rows="dynamic",
+        column_config=column_config,
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    st.write("") # Espace visuel
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        save_btn = st.button("💾 Sauvegarder les règles ACL", type="primary", use_container_width=True)
+        
+    if save_btn:
+        new_rules = []
+        for _, row in edited_df.iterrows():
+            r_type = str(row["Type"]).strip()
+            r_val = str(row["Valeur"]).strip()
+            r_target = str(row["Workspace Cible"]).strip() if pd.notna(row["Workspace Cible"]) else ""
+            r_allowed_str = str(row["Workspaces Autorisés"]).strip() if pd.notna(row["Workspaces Autorisés"]) else ""
+            
+            # Ignorer les lignes incomplètes (None, nan, vides)
+            if r_type and r_type != "None" and r_type != "nan" and r_val and r_val != "None" and r_val != "nan":
+                # Traiter les workspaces autorisés
+                if r_allowed_str and r_allowed_str != "None" and r_allowed_str != "nan":
+                    r_allowed = [ws.strip() for ws in r_allowed_str.split(",") if ws.strip()]
+                else:
+                    r_allowed = []
+                    
+                rule_obj = {
+                    "type": r_type,
+                    "value": r_val,
+                    "allowed_workspaces": r_allowed
+                }
+                if r_target and r_target != "None" and r_target != "nan":
+                    rule_obj["target_workspace"] = r_target
+                    
+                new_rules.append(rule_obj)
+                
+        # Recharger le fichier pour éviter d'écraser des modifs concurrentes sur semantic_dispatch
+        current_data = load_routing_config()
+        current_data["rules"] = new_rules
+        save_routing_config(current_data)
+            
+        st.success("✅ Règles ACL sauvegardées avec succès !")
+        st.rerun()
+

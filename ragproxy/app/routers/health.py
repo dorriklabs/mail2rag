@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Health"])
 
 # Pipeline instance (will be set by main.py)
-pipeline: RAGPipeline = None
+pipeline: RAGPipeline = None # type: ignore
 
 
 def set_pipeline(p: RAGPipeline):
@@ -95,22 +95,6 @@ def test_endpoint():
             "status": "error",
             "error": str(e),
         }
-
-    # Test 3: BM25
-    try:
-        bm25_ready = pipeline.bm25.is_ready()
-        results["tests"]["bm25"] = {
-            "status": "ok" if bm25_ready else "not_configured",
-            "docs_count": len(pipeline.bm25.docs) if bm25_ready else 0,
-            "error": None,
-        }
-    except Exception as e:
-        results["tests"]["bm25"] = {
-            "status": "error",
-            "docs_count": 0,
-            "error": str(e),
-        }
-
     # Test 4: Reranker
     try:
         mock_passages = [

@@ -39,3 +39,29 @@ class ParsedEmail:
             "from": self.sender or "",
             "body": self.body or "",
         }
+
+from typing import List, Dict, Any
+from pydantic import BaseModel, Field
+
+class ExtractedPage(BaseModel):
+    page_number: int
+    page_hash: str
+    text: str
+    char_count: int
+    quality_score: float
+    extraction_method: str  # 'pymupdf', 'tika', 'mixed'
+    vision_used: bool
+    source_type: str        # ex: 'pdf_scan'
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+
+class ExtractedDocument(BaseModel):
+    schema_version: str = "1.0"
+    document_id: str
+    filename: str
+    file_hash: str
+    total_pages: int
+    source_type: str
+    pages: List[ExtractedPage]
+    global_metadata: Dict[str, Any] = Field(default_factory=dict)

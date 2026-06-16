@@ -1,0 +1,779 @@
+************* Module pages.3_💬_Chat
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app:[15:28]
+==main:[20:35]
+os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+)
+file_handler = RotatingFileHandler(
+    log_path, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+)
+file_handler.setFormatter(formatter)
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+logging.basicConfig( (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[200:236]
+==services.llm_client:[188:228]
+            logger.debug(f"LLM chat request: model={target_model}")
+
+            response = completion(**params)
+
+            content = response.choices[0].message.content
+            logger.debug(f"LLM chat response: {len(content)} chars")
+
+            return content
+
+        except Exception as e:
+            logger.error(f"LLM chat error: {e}", exc_info=True)
+            raise
+
+    def vision(
+        self,
+        prompt: str,
+        image_path: Optional[Path] = None,
+        image_base64: Optional[str] = None,
+        model: Optional[str] = None,
+        max_tokens: int = 1500,
+        timeout: int = 90,
+    ) -> str:
+        """
+        Analyze an image using a vision-capable model.
+
+        Args:
+            prompt: Text prompt describing what to analyze
+            image_path: Path to image file (optional)
+            image_base64: Base64-encoded image data (optional)
+            model: Override model (optional)
+            max_tokens: Max tokens for response
+            timeout: Request timeout in seconds
+
+        Returns:
+            Generated description/analysis
+        """
+        try:
+            target_model = model or self.vision_model
+
+            # Get base64 from path if needed (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[22:101]
+==services.mail_providers.base:[15:64]
+        pass
+
+    @abstractmethod
+    def get_all_documents(self) -> List[Dict]:
+        """
+        Récupère TOUS les documents (texte + métadonnées).
+        Doit retourner une liste de dicts avec au moins les clés 'text' et 'metadata'.
+        """
+        pass
+
+    @abstractmethod
+    def is_ready(self) -> bool:
+        """Vérifie si la base de données est accessible."""
+        pass
+
+    @abstractmethod
+    def count_documents(self) -> int:
+        """Retourne le nombre total de documents dans la collection."""
+        pass
+
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections disponibles."""
+        pass
+
+    @abstractmethod
+    def upsert_documents(
+        self,
+        chunks: List[Dict],
+        collection_name: str,
+    ) -> bool:
+        """
+        Indexe des chunks avec embeddings dans la collection.
+
+        Args:
+            chunks: Liste de dicts avec clés 'text', 'metadata', 'embedding'
+            collection_name: Nom de la collection cible
+
+        Returns:
+            True si succès, False sinon
+        """
+        pass
+
+    @abstractmethod
+    def delete_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+    ) -> int:
+        """
+        Supprime les documents matchant un filtre de métadonnées.
+
+        Args:
+            collection_name: Nom de la collection
+            metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
+
+        Returns:
+        """
+        pass
+
+    @abstractmethod
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Cherche une réponse mise en cache pour une requête sémantiquement similaire."""
+        pass
+
+    @abstractmethod
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Sauvegarde une réponse générée dans le cache sémantique."""
+        pass
+
+    @abstractmethod
+    def clear_semantic_cache(self) -> bool:
+        """Vide entièrement le cache sémantique."""
+        pass
+
+
+# -----------------------------------------------------------------------------
+#  ADAPTATEUR QDRANT (Le "Driver")
+# ----------------------------------------------------------------------------- (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[260:290]
+==services.llm_client:[270:287]
+                params["api_key"] = self.api_key
+
+            logger.debug(f"LLM vision request: model={target_model}")
+
+            response = completion(**params)
+
+            content = response.choices[0].message.content
+            logger.debug(f"LLM vision response: {len(content)} chars")
+
+            return content
+
+        except Exception as e:
+            logger.error(f"LLM vision error: {e}", exc_info=True)
+            raise
+
+    def embed(
+        self,
+        texts: List[str],
+        model: Optional[str] = None,
+    ) -> List[List[float]]:
+        """
+        Generate embeddings for a list of texts.
+
+        Args:
+            texts: List of texts to embed
+            model: Override model (optional)
+
+        Returns:
+            List of embedding vectors
+        """ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[30:101]
+==services.mail_providers.base:[15:63]
+        pass
+
+    @abstractmethod
+    def fetch_new_messages(self, last_uid: int) -> Dict[int, Any]:
+        """Récupère les nouveaux messages depuis last_uid."""
+        pass
+
+    @abstractmethod
+    def folder_exists(self, folder_name: str) -> bool:
+        """Vérifie l'existence d'un dossier."""
+        pass
+
+    @abstractmethod
+    def create_folder(self, folder_name: str) -> bool:
+        """Crée un dossier."""
+        pass
+
+    @abstractmethod
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un message d'un dossier à un autre."""
+        pass
+
+    @abstractmethod
+    def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        """Envoie une réponse à un email."""
+        pass
+
+    @abstractmethod
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        """Envoie un email combiné au service cible avec l'adresse du client en Reply-To."""
+        pass
+
+    @abstractmethod
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+        """
+        Transfère un email parsé vers une nouvelle adresse.
+        Si prefix_text est fourni, il sera injecté au début du message transféré.
+        """
+        pass
+
+    @abstractmethod
+    def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
+        """Envoie un email synthétique (avec pièces jointes)."""
+        pass
+
+    @abstractmethod
+    def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
+        """Ajoute manuellement un message dans un dossier (ex: pour les brouillons).""" (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[22:95]
+==services.mail_providers.base:[20:64]
+        pass
+
+    @abstractmethod
+    def folder_exists(self, folder_name: str) -> bool:
+        """Vérifie l'existence d'un dossier."""
+        pass
+
+    @abstractmethod
+    def create_folder(self, folder_name: str) -> bool:
+        """Crée un dossier."""
+        pass
+
+    @abstractmethod
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un message d'un dossier à un autre."""
+        pass
+
+    @abstractmethod
+    def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        """Envoie une réponse à un email."""
+        pass
+
+    @abstractmethod
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        """Envoie un email combiné au service cible avec l'adresse du client en Reply-To."""
+        pass
+
+    @abstractmethod
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+        """
+        Transfère un email parsé vers une nouvelle adresse.
+        Si prefix_text est fourni, il sera injecté au début du message transféré.
+        """
+        pass
+
+    @abstractmethod
+    def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
+        """Envoie un email synthétique (avec pièces jointes)."""
+        pass
+
+    @abstractmethod
+    def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
+        """Ajoute manuellement un message dans un dossier (ex: pour les brouillons)."""
+        pass (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==services.ingestion_service:[518:527]
+==services.maintenance:[146:154]
+                result = self.ragproxy_client.ingest_document(
+                    collection=workspace,
+                    text=text_content,
+                    metadata=metadata,
+                    chunk_size=self.config.chunk_size,
+                    chunk_overlap=self.config.chunk_overlap,
+                )
+
+                if result.get("status") == "ok": (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[236:244]
+==services.llm_client:[245:253]
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": { (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==services.diagnostic:[400:410]
+==services.ingestion_service:[315:325]
+        for part in msg.walk():
+            if part.get_content_maintype() == "multipart":
+                continue
+            if part.get("Content-Disposition") is None:
+                continue
+
+            filename = part.get_filename()
+            if not filename:
+                continue
+ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[35:101]
+==services.mail_providers.base:[15:58]
+        pass
+
+    @abstractmethod
+    def count_documents(self) -> int:
+        """Retourne le nombre total de documents dans la collection."""
+        pass
+
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections disponibles."""
+        pass
+
+    @abstractmethod
+    def upsert_documents(
+        self,
+        chunks: List[Dict],
+        collection_name: str,
+    ) -> bool:
+        """
+        Indexe des chunks avec embeddings dans la collection.
+
+        Args:
+            chunks: Liste de dicts avec clés 'text', 'metadata', 'embedding'
+            collection_name: Nom de la collection cible
+
+        Returns:
+            True si succès, False sinon
+        """
+        pass
+
+    @abstractmethod
+    def delete_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+    ) -> int:
+        """
+        Supprime les documents matchant un filtre de métadonnées.
+
+        Args:
+            collection_name: Nom de la collection
+            metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
+
+        Returns:
+        """
+        pass
+
+    @abstractmethod
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Cherche une réponse mise en cache pour une requête sémantiquement similaire."""
+        pass
+
+    @abstractmethod
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Sauvegarde une réponse générée dans le cache sémantique."""
+        pass
+
+    @abstractmethod
+    def clear_semantic_cache(self) -> bool:
+        """Vide entièrement le cache sémantique."""
+        pass
+
+
+# -----------------------------------------------------------------------------
+#  ADAPTATEUR QDRANT (Le "Driver")
+# ----------------------------------------------------------------------------- (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[22:90]
+==services.mail_providers.base:[25:64]
+        pass
+
+    @abstractmethod
+    def create_folder(self, folder_name: str) -> bool:
+        """Crée un dossier."""
+        pass
+
+    @abstractmethod
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un message d'un dossier à un autre."""
+        pass
+
+    @abstractmethod
+    def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        """Envoie une réponse à un email."""
+        pass
+
+    @abstractmethod
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        """Envoie un email combiné au service cible avec l'adresse du client en Reply-To."""
+        pass
+
+    @abstractmethod
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+        """
+        Transfère un email parsé vers une nouvelle adresse.
+        Si prefix_text est fourni, il sera injecté au début du message transféré.
+        """
+        pass
+
+    @abstractmethod
+    def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
+        """Envoie un email synthétique (avec pièces jointes)."""
+        pass
+
+    @abstractmethod
+    def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
+        """Ajoute manuellement un message dans un dossier (ex: pour les brouillons)."""
+        pass (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==pages.3_💬_Chat:[66:73]
+==services.ragproxy_client:[330:337]
+        payload = {
+            "query": query,
+            "collection": collection,
+            "top_k": top_k,
+            "final_k": final_k,
+            "use_bm25": use_bm25,
+            "temperature": temperature, (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[40:101]
+==services.mail_providers.base:[15:53]
+        pass
+
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections disponibles."""
+        pass
+
+    @abstractmethod
+    def upsert_documents(
+        self,
+        chunks: List[Dict],
+        collection_name: str,
+    ) -> bool:
+        """
+        Indexe des chunks avec embeddings dans la collection.
+
+        Args:
+            chunks: Liste de dicts avec clés 'text', 'metadata', 'embedding'
+            collection_name: Nom de la collection cible
+
+        Returns:
+            True si succès, False sinon
+        """
+        pass
+
+    @abstractmethod
+    def delete_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+    ) -> int:
+        """
+        Supprime les documents matchant un filtre de métadonnées.
+
+        Args:
+            collection_name: Nom de la collection
+            metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
+
+        Returns:
+        """
+        pass
+
+    @abstractmethod
+    def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
+        """Cherche une réponse mise en cache pour une requête sémantiquement similaire."""
+        pass
+
+    @abstractmethod
+    def add_to_semantic_cache(self, query_text: str, query_vector: List[float], answer: str, sources: List[Dict]) -> bool:
+        """Sauvegarde une réponse générée dans le cache sémantique."""
+        pass
+
+    @abstractmethod
+    def clear_semantic_cache(self) -> bool:
+        """Vide entièrement le cache sémantique."""
+        pass
+
+
+# -----------------------------------------------------------------------------
+#  ADAPTATEUR QDRANT (Le "Driver")
+# ----------------------------------------------------------------------------- (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[22:85]
+==services.mail_providers.base:[30:64]
+        pass
+
+    @abstractmethod
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un message d'un dossier à un autre."""
+        pass
+
+    @abstractmethod
+    def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        """Envoie une réponse à un email."""
+        pass
+
+    @abstractmethod
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        """Envoie un email combiné au service cible avec l'adresse du client en Reply-To."""
+        pass
+
+    @abstractmethod
+    def forward_parsed_email(self, parsed_email: "ParsedEmail", to_email: str, prefix_text: str = None) -> bool:
+        """
+        Transfère un email parsé vers une nouvelle adresse.
+        Si prefix_text est fourni, il sera injecté au début du message transféré.
+        """
+        pass
+
+    @abstractmethod
+    def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
+        """Envoie un email synthétique (avec pièces jointes)."""
+        pass
+
+    @abstractmethod
+    def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
+        """Ajoute manuellement un message dans un dossier (ex: pour les brouillons)."""
+        pass (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[45:101]
+==services.mail_providers.base:[15:45]
+        pass
+
+    @abstractmethod
+    def fetch_new_messages(self, last_uid: int) -> Dict[int, Any]:
+        """Récupère les nouveaux messages depuis last_uid."""
+        pass
+
+    @abstractmethod
+    def folder_exists(self, folder_name: str) -> bool:
+        """Vérifie l'existence d'un dossier."""
+        pass
+
+    @abstractmethod
+    def create_folder(self, folder_name: str) -> bool:
+        """Crée un dossier."""
+        pass
+
+    @abstractmethod
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un message d'un dossier à un autre."""
+        pass
+
+    @abstractmethod
+    def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        """Envoie une réponse à un email."""
+        pass
+
+    @abstractmethod
+    def send_combined_email(self, service_email: str, client_email: str, subject: str, body_html: str, original_message_id: str = None) -> bool:
+        """Envoie un email combiné au service cible avec l'adresse du client en Reply-To.""" (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[22:80]
+==services.mail_providers.base:[35:64]
+        pass
+
+    @abstractmethod
+    def get_all_documents(self) -> List[Dict]:
+        """
+        Récupère TOUS les documents (texte + métadonnées).
+        Doit retourner une liste de dicts avec au moins les clés 'text' et 'metadata'.
+        """
+        pass
+
+    @abstractmethod
+    def is_ready(self) -> bool:
+        """Vérifie si la base de données est accessible."""
+        pass
+
+    @abstractmethod
+    def count_documents(self) -> int:
+        """Retourne le nombre total de documents dans la collection."""
+        pass
+
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections disponibles."""
+        pass
+
+    @abstractmethod
+    def upsert_documents(
+        self,
+        chunks: List[Dict],
+        collection_name: str,
+    ) -> bool:
+        """
+        Indexe des chunks avec embeddings dans la collection.
+
+        Args:
+            chunks: Liste de dicts avec clés 'text', 'metadata', 'embedding'
+            collection_name: Nom de la collection cible
+
+        Returns:
+            True si succès, False sinon
+        """
+        pass
+
+    @abstractmethod
+    def delete_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+    ) -> int:
+        """
+        Supprime les documents matchant un filtre de métadonnées.
+
+        Args:
+            collection_name: Nom de la collection
+            metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
+
+        Returns:
+        """ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.local_reranker:[69:78]
+==app.reranker:[51:59]
+                enriched.append(new_p)
+
+            # Trier par score décroissant
+            ranked = sorted(
+                enriched,
+                key=lambda x: float(x.get("score", 0.0)),
+                reverse=True,
+            )
+ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[98:106]
+==services.llm_client:[86:94]
+            if self.api_key:
+                os.environ["ANTHROPIC_API_KEY"] = self.api_key
+
+        elif self.provider == "groq":
+            # Groq: Fast inference, generous free tier
+            self.base_url = None
+            self.api_key = os.getenv("GROQ_API_KEY", "")
+ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[111:119]
+==services.llm_client:[97:105]
+            if self.api_key:
+                os.environ["GROQ_API_KEY"] = self.api_key
+
+        elif self.provider == "mistral":
+            # Mistral AI: EU-based, RGPD-friendly
+            self.base_url = None
+            self.api_key = os.getenv("MISTRAL_API_KEY", "")
+ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[123:131]
+==services.llm_client:[108:116]
+            if self.api_key:
+                os.environ["MISTRAL_API_KEY"] = self.api_key
+
+        elif self.provider == "gemini":
+            # Google Gemini: Generous free tier
+            self.base_url = None
+            self.api_key = os.getenv("GEMINI_API_KEY", "")
+ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[135:143]
+==services.llm_client:[119:127]
+            if self.api_key:
+                os.environ["GEMINI_API_KEY"] = self.api_key
+
+        elif self.provider == "ollama":
+            # Ollama: Local alternative to LM Studio
+            self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            self.api_key = "ollama"  # Ollama doesn't need a key
+ (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[147:155]
+==services.llm_client:[130:139]
+            os.environ["OLLAMA_API_BASE"] = self.base_url
+
+        else:
+            # Fallback to LM Studio
+            logger.warning(f"Unknown provider '{self.provider}', falling back to lmstudio")
+            self.provider = "lmstudio"
+            self._setup_provider()
+
+        # Fallback models (optional) (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.llm_gateway:[178:185]
+==services.llm_client:[164:171]
+        try:
+            target_model = model or self.chat_model
+
+            # Build request params
+            params = {
+                "model": target_model,
+                "messages": messages, (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[63:101]
+==services.mail_providers.base:[15:40]
+        pass
+
+    @abstractmethod
+    def fetch_new_messages(self, last_uid: int) -> Dict[int, Any]:
+        """Récupère les nouveaux messages depuis last_uid."""
+        pass
+
+    @abstractmethod
+    def folder_exists(self, folder_name: str) -> bool:
+        """Vérifie l'existence d'un dossier."""
+        pass
+
+    @abstractmethod
+    def create_folder(self, folder_name: str) -> bool:
+        """Crée un dossier."""
+        pass
+
+    @abstractmethod
+    def move_message(self, uid: int, dest_folder: str, source_folder: Optional[str] = None) -> bool:
+        """Déplace un message d'un dossier à un autre."""
+        pass
+
+    @abstractmethod
+    def send_reply(self, to_email: str, subject: str, body: str, is_html: bool = False, original_message_id: str = None) -> bool:
+        """Envoie une réponse à un email.""" (duplicate-code)
+streamlit_admin/pages/3_💬_Chat.py:1:0: R0801: Similar lines in 2 files
+==app.vectordb:[22:63]
+==services.mail_providers.base:[40:64]
+        pass
+
+    @abstractmethod
+    def get_all_documents(self) -> List[Dict]:
+        """
+        Récupère TOUS les documents (texte + métadonnées).
+        Doit retourner une liste de dicts avec au moins les clés 'text' et 'metadata'.
+        """
+        pass
+
+    @abstractmethod
+    def is_ready(self) -> bool:
+        """Vérifie si la base de données est accessible."""
+        pass
+
+    @abstractmethod
+    def count_documents(self) -> int:
+        """Retourne le nombre total de documents dans la collection."""
+        pass
+
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """Retourne la liste de toutes les collections disponibles."""
+        pass
+
+    @abstractmethod
+    def upsert_documents(
+        self,
+        chunks: List[Dict],
+        collection_name: str,
+    ) -> bool:
+        """
+        Indexe des chunks avec embeddings dans la collection.
+
+        Args:
+            chunks: Liste de dicts avec clés 'text', 'metadata', 'embedding'
+            collection_name: Nom de la collection cible
+
+        Returns:
+            True si succès, False sinon
+        """ (duplicate-code)
+
+------------------------------------------------------------------
+Your code has been rated at 9.96/10 (previous run: 9.96/10, +0.00)
+

@@ -80,23 +80,50 @@ class DraftService:
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         original_uid: Optional[int] = None,
+        service_email: Optional[str] = None,
     ) -> bool:
         """
-        Crée un brouillon dans le dossier Drafts IMAP.
+        Crée un brouillon ou envoie un email combiné au service selon le provider.
         
         Args:
-            to_email: Destinataire (le client ayant posé la question)
-            subject: Sujet (Re: préfixé automatiquement si absent)
-            body_html: Corps HTML du brouillon
+            to_email: Destinataire original (le client ayant posé la question)
+            subject: Sujet de l'email
+            body_html: Corps HTML généré (Brouillon + message original)
             in_reply_to: Message-ID de l'email original
             references: Chaîne de Message-IDs pour threading
             original_uid: UID de l'email original (pour tracking)
+            service_email: Email du service cible (utilisé en mode SMTP combiné)
             
         Returns:
-            True si création réussie, False sinon
+            True si opération réussie, False sinon
         """
         try:
-            # Préparer le sujet
+            # Si on est en mode IMAP/SMTP standard, on utilise l'envoi d'email combiné
+            if getattr(self.config, "mail_provider", "imap").lower() == "imap":
+                # Fallback sur l'utilisateur SMTP si le service_email n'est pas fourni
+                target_email = service_email or getattr(self.config, "smtp_from", None) or self.config.smtp_user
+                
+                success = self.mail_service.send_combined_email(
+                    service_email=target_email,
+                    client_email=to_email,
+                    subject=subject,
+                    body_html=body_html,
+                    original_message_id=in_reply_to
+                )
+                
+                if success:
+                    self.logger.info(
+                        "📝 Email combiné envoyé à %s pour %s (sujet: %s)",
+                        target_email,
+                        to_email,
+                        subject[:50],
+                    )
+                return success
+
+            # Sinon (Microsoft Graph, etc.), on conserve la logique de brouillon/append
+            # (Note: Microsoft Graph devrait avoir son propre _append_to_drafts ou api)
+            
+            # Préparer le sujet (seulement pour la création de draft classique)
             if not subject.lower().startswith("re:"):
                 subject = f"Re: {subject}"
             
@@ -156,62 +183,9 @@ class DraftService:
 
     def move_to_processed(self, uid: int) -> bool:
         """
-        Déplace un email vers le dossier 'En cours'.
-        
-        Crée le dossier s'il n'existe pas.
-        
-        Args:
-            uid: UID de l'email à déplacer
-            
-        Returns:
-            True si déplacement réussi, False sinon
+        Déplace un email vers le dossier 'En cours' via le MailService.
         """
-        try:
-            self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                self.logger.error("❌ Connexion IMAP non disponible")
-                return False
-            
-            # Créer le dossier si nécessaire
-            if not self._folder_exists(self.processed_folder):
-                self._create_folder(self.processed_folder)
-            
-            # Sélectionner INBOX (source)
-            source_folder = self.mail_service.imap_folder
-            server.select_folder(source_folder)
-            
-            # Déplacer l'email
-            try:
-                # Essayer MOVE (extension IMAP)
-                server.move([uid], self.processed_folder)
-                self.logger.info(
-                    "📨 Email UID %s déplacé vers '%s'",
-                    uid,
-                    self.processed_folder,
-                )
-                return True
-            except Exception:
-                # Fallback: COPY + DELETE
-                server.copy([uid], self.processed_folder)
-                server.delete_messages([uid])
-                server.expunge()
-                self.logger.info(
-                    "📨 Email UID %s copié+supprimé vers '%s'",
-                    uid,
-                    self.processed_folder,
-                )
-                return True
-                
-        except Exception as e:
-            self.logger.error(
-                "❌ Erreur lors du déplacement de l'email UID %s: %s",
-                uid,
-                e,
-                exc_info=True,
-            )
-            return False
+        return self.mail_service.move_message(uid, self.processed_folder)
 
     def _find_drafts_folder(self) -> Optional[str]:
         """
@@ -295,18 +269,11 @@ class DraftService:
         """
         try:
             self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                return False
-            
-            # APPEND avec flags \Draft et \Seen
-            server.append(
-                drafts_folder,
-                message.as_bytes(),
-                flags=["\\Draft", "\\Seen"],
+            self.mail_service.append_message_to_folder(
+                folder=drafts_folder,
+                msg=message.as_bytes(),
+                flags=(br"\Draft", br"\Seen"),
             )
-            
             return True
             
         except Exception as e:
@@ -318,42 +285,7 @@ class DraftService:
             )
             return False
 
-    def _folder_exists(self, folder_name: str) -> bool:
-        """Vérifie si un dossier IMAP existe."""
-        try:
-            self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                return False
-            
-            folders = server.list_folders()
-            folder_names = [f[2] for f in folders]
-            return folder_name in folder_names
-            
-        except Exception:
-            return False
 
-    def _create_folder(self, folder_name: str) -> bool:
-        """Crée un dossier IMAP."""
-        try:
-            self.mail_service.ensure_connection()
-            server = self.mail_service.server
-            
-            if not server:
-                return False
-            
-            server.create_folder(folder_name)
-            self.logger.info("📁 Dossier IMAP '%s' créé", folder_name)
-            return True
-            
-        except Exception as e:
-            self.logger.error(
-                "❌ Erreur lors de la création du dossier '%s': %s",
-                folder_name,
-                e,
-            )
-            return False
 
     def _get_domain(self) -> str:
         """Extrait le domaine de l'adresse email configurée."""

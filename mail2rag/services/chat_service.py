@@ -61,27 +61,37 @@ class ChatService:
         workspace: str | None = None
 
         try:
-            workspace = self.router.determine_workspace(email.email_data)
+            workspace, rejected = self.router.determine_workspace(email.email_data, return_rejected=True, is_chat=True)
 
-            cleaned_body = self.cleaner.clean_body(email.body)
+            cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query_content = cleaned_body if cleaned_body.strip() else (email.body or "")
             
-            # Extraction collection spécifique du corps (syntaxe: dossier : xxx ou collection : xxx)
-            collection_to_search = self._extract_collection_from_body(query_content, workspace)
-            
-            # Nettoyer la query en retirant la ligne de collection si présente
+            # Le routeur a déjà validé les permissions (ACL) et renvoyé le bon workspace cible
+            collection_to_search = workspace
+            # Nettoyer la query en retirant la ligne de collection si présente pour ne pas polluer l'IA
             query_content_cleaned = self._remove_collection_line(query_content)
 
             query_message = f"Sujet : {clean_subject}\n\nQuestion :\n{query_content_cleaned}"
 
             # Recherche via RAG Proxy (hybride)
             self.logger.info(
-                "🔍 [RAG Proxy] Recherche hybride pour '%s' dans collection '%s'...", 
+                "🔍 [RAG Proxy] Recherche hybride pour '%s' dans collection(s) '%s'...", 
                 clean_subject, collection_to_search
             )
             response_text, sources = self._search_via_rag_proxy(
                 query_message, collection_to_search
             )
+            
+            # Enregistrement dans le journal d'audit
+            self._log_audit_event(
+                user=email.sender,
+                query=query_content_cleaned,
+                workspaces=collection_to_search
+            )
+
+            if rejected:
+                warning_msg = f"⚠️ Vous n'avez pas accès aux espaces de travail suivants : {', '.join(rejected)}.\n\n"
+                response_text = warning_msg + response_text
 
             # Sauvegarde optionnelle du chat (log-only, non indexé)
             if self.config.save_chat_history:
@@ -176,6 +186,28 @@ class ChatService:
                 exc_info=True,
             )
 
+    def _log_audit_event(self, user: str, query: str, workspaces: str) -> None:
+        """Enregistre la requête dans le journal d'audit partagé."""
+        try:
+            import json
+            from datetime import datetime
+            
+            event = {
+                "timestamp": datetime.now().isoformat(),
+                "user": user,
+                "source": "Email",
+                "workspaces": workspaces,
+                "query": query
+            }
+            
+            # Créer le dossier parent si nécessaire
+            self.config.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with self.config.audit_log_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        except Exception as e:
+            self.logger.error("Erreur lors de l'écriture du journal d'audit: %s", e)
+
     # ------------------------------------------------------------------ #
     # RAG Proxy + LM Studio
     # ------------------------------------------------------------------ #
@@ -199,8 +231,8 @@ class ChatService:
         rag_url = f"{self.config.rag_proxy_url}/rag"
         payload = {
             "query": query,
-            "top_k": 20,
-            "final_k": 5,
+            "top_k": self.config.rag_top_k,
+            "final_k": self.config.rag_final_k,
             "use_bm25": True,
         }
         
@@ -263,7 +295,7 @@ class ChatService:
             meta = chunk.get("metadata", {}) or {}
             score = float(chunk.get("score", 0.0))
 
-            source_title = meta.get("title", "Document inconnu")
+            source_title = meta.get("title") or meta.get("filename") or meta.get("subject") or "Document inconnu"
             
             # --- Enrichissement des métadonnées pour les liens ---
             # On essaie d'extraire l'UID du nom de fichier pour retrouver le secure_id
@@ -356,7 +388,7 @@ class ChatService:
                 content = self.llm_client.chat(
                     messages=messages,
                     temperature=self.config.default_llm_temperature,
-                    max_tokens=1000,
+                    max_tokens=self.config.llm_max_tokens,
                     timeout=self.config.llm_timeout,
                 )
                 
@@ -371,7 +403,7 @@ class ChatService:
                 "model": self.config.ai_model_name,
                 "messages": messages,
                 "temperature": self.config.default_llm_temperature,
-                "max_tokens": 1000,
+                "max_tokens": self.config.llm_max_tokens,
             }
 
             self.logger.debug("Appel LLM Generation: %s", self.config.llm_api_url)
