@@ -12,6 +12,7 @@ from services.cleaner import CleanerService
 from services.email_renderer import EmailRenderer
 from services.support_qa import SupportQAService
 from services.utils import sanitize_filename, decode_email_header
+from services.cache_service import CacheService
 
 
 class IngestionService:
@@ -49,6 +50,12 @@ class IngestionService:
             timeout=config.rag_proxy_timeout,
         )
         self.logger.info("✅ RAG Proxy ingestion enabled")
+        
+        # Cache Service
+        self.cache_service = CacheService(
+            state_dir=config.state_path.parent,
+            enabled=getattr(config, "ingestion_cache", True)
+        )
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -351,7 +358,38 @@ class IngestionService:
             ext = Path(filename).suffix.lower()
 
             if ext in {".png", ".jpg", ".jpeg", ".pdf"}:
-                analysis_text = self.processor.analyze_document(str(filepath))
+                analysis_text = None
+                
+                # Extraction des paramètres influençant le résultat
+                extraction_params = {
+                    "vision_mode": self.config.vision_pdf_mode,
+                    "dpi": self.config.vision_pdf_dpi,
+                    "max_pages": self.config.vision_pdf_max_pages,
+                    "model": self.config.ai_model_name,
+                    "force_tables": self.config.vision_force_on_tables,
+                    "scorer_version": "1.0", # Version du scorer actuel
+                }
+                
+                # Vérification du cache avec clé composite
+                cache_key = self.cache_service.get_cache_key(filepath, extraction_params)
+                cached_data = self.cache_service.get_cached_extraction(cache_key)
+                
+                if cached_data and "extracted_text" in cached_data:
+                    self.logger.info("♻️ Réutilisation de l'extraction en cache pour %s", filename)
+                    analysis_text = cached_data["extracted_text"]
+                else:
+                    # Extraction normale
+                    analysis_text = self.processor.analyze_document(str(filepath))
+                    if analysis_text:
+                        self.cache_service.set_cached_extraction(
+                            cache_key, 
+                            {
+                                "extracted_text": analysis_text, 
+                                "filename": filename,
+                                "params": extraction_params
+                            }
+                        )
+
                 if analysis_text:
                     analysis_path = secure_folder / f"{safe_pj_name}_analysis.txt"
                     with analysis_path.open("w", encoding="utf-8") as f:
@@ -501,6 +539,8 @@ class IngestionService:
                     "sender": email.sender,
                     "date": email.date or time.strftime("%Y-%m-%d %H:%M"),
                     "filename": filename,
+                    "workspace": workspace,
+                    "acl": [workspace],  # Par défaut, accès restreint au workspace
                 }
                 
                 # Ajouter le lien d'archive si disponible
@@ -515,26 +555,73 @@ class IngestionService:
                 if email.message_id:
                     metadata["message_id"] = email.message_id
                 
-                # Ingestion via RAG Proxy
-                result = self.ragproxy_client.ingest_document(
-                    collection=workspace,
-                    text=text_content,
-                    metadata=metadata,
-                    chunk_size=self.config.chunk_size,
-                    chunk_overlap=self.config.chunk_overlap,
-                )
+                # Ingestion page par page si balises détectées
+                import re
+                # Pattern: [Page 1/5 | Qualité : 0.85 | Méthode : mixed]
+                page_pattern = r'\n\[Page (\d+)/\d+ \| Qualité : ([\d\.]+) \| Méthode : (\w+)\]\n'
+                parts = re.split(page_pattern, text_content)
                 
-                if result.get("status") == "ok":
-                    chunks_count = result.get("chunks_created", 0)
-                    total_chunks += chunks_count
-                    self.logger.info(
-                        f"Document ingéré : {Path(file_path).name} → {chunks_count} chunks"
-                    )
+                if len(parts) > 1:
+                    # On a des pages
+                    # parts[0] est l'entête
+                    header = parts[0]
+                    for i in range(1, len(parts), 4):
+                        page_num = int(parts[i])
+                        quality_score = float(parts[i+1])
+                        method = parts[i+2]
+                        page_text = parts[i+3].strip()
+                        
+                        if not page_text:
+                            continue
+                            
+                        page_metadata = metadata.copy()
+                        page_metadata["page"] = page_num
+                        page_metadata["quality_score"] = quality_score
+                        page_metadata["extraction_method"] = method
+                        page_metadata["vision_used"] = (method == "mixed")
+                        # Hash file direct sans paramètres pour les métadonnées (recherche)
+                        page_metadata["file_hash"] = self.cache_service.get_cache_key(file_path).split('_')[0]
+                        
+                        result = self.ragproxy_client.ingest_document(
+                            collection=workspace,
+                            text=f"{header}\n{page_text}",
+                            metadata=page_metadata,
+                            chunk_size=self.config.chunk_size,
+                            chunk_overlap=self.config.chunk_overlap,
+                        )
+                        
+                        if result.get("status") == "ok":
+                            chunks_count = result.get("chunks_created", 0)
+                            total_chunks += chunks_count
+                            self.logger.info(
+                                f"Page {page_num} ingérée ({filename}) → {chunks_count} chunks (Score: {quality_score})"
+                            )
+                        else:
+                            self.logger.error(
+                                f"Échec ingestion de {filename} (Page {page_num}) : {result.get('message')}"
+                            )
+                            errors += 1
                 else:
-                    self.logger.error(
-                        f"Échec ingestion de {Path(file_path).name} : {result.get('message')}"
+                    # Ingestion classique (fichier entier)
+                    result = self.ragproxy_client.ingest_document(
+                        collection=workspace,
+                        text=text_content,
+                        metadata=metadata,
+                        chunk_size=self.config.chunk_size,
+                        chunk_overlap=self.config.chunk_overlap,
                     )
-                    errors += 1
+                    
+                    if result.get("status") == "ok":
+                        chunks_count = result.get("chunks_created", 0)
+                        total_chunks += chunks_count
+                        self.logger.info(
+                            f"Document ingéré : {filename} → {chunks_count} chunks"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Échec ingestion de {filename} : {result.get('message')}"
+                        )
+                        errors += 1
                     
             except Exception as e:
                 self.logger.error(

@@ -3,15 +3,17 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import threading
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple, List
 
 import requests
-from pdf2image import convert_from_path
+import fitz  # PyMuPDF
 from PIL import Image
 
 from config import Config
 from services.tika_client import TikaClient
+from services.quality_scorer import QualityScorer
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,9 @@ class DocumentProcessor:
             from services.llm_client import get_llm_client
             self.llm_client = get_llm_client(config)
             logger.info(f"LLMClient initialisé pour vision (provider: {os.getenv('LLM_PROVIDER')})")
+            
+        # Sémaphore pour limiter les appels concurrents à Vision AI
+        self._vision_semaphore = threading.Semaphore(config.vision_max_concurrent_calls)
 
     # ------------------------------------------------------------------ #
     # API publique
@@ -142,7 +147,16 @@ class DocumentProcessor:
 
         # ========== PIPELINE POUR LES DOCUMENTS (PDF, DOCX, etc.) ==========
         else:
-            # 1. Priorité Tika pour extraction optimale
+            if is_pdf:
+                # Nouveau pipeline PDF via PyMuPDF (page par page)
+                try:
+                    result = self._process_pdf(path)
+                    if result:
+                        return result
+                except Exception as e:
+                    logger.warning("⚠️ Échec PyMuPDF sur %s (%s).", path.name, e)
+            
+            # 1. Priorité Tika pour extraction optimale (documents bureautiques, ou PDF si PyMuPDF a échoué)
             if self.tika_client:
                 try:
                     result = self._analyze_with_tika(path)
@@ -164,7 +178,7 @@ class DocumentProcessor:
                         e,
                     )
 
-            # 2. Fallback Vision AI (si activé et autorisé)
+            # 2. Fallback Vision AI global (si activé et autorisé)
             if vision_enabled and self.config.tika_fallback_to_vision:
                 try:
                     result = self._analyze_with_vision_llm(path)
@@ -364,21 +378,24 @@ class DocumentProcessor:
         temp_img_path = path
         is_temp = False
 
-        # Si PDF, convertit la première page en image temporaire
+        # Si PDF, convertit la première page en image temporaire (fallback legacy pour doc entier)
         if path.suffix.lower() == ".pdf":
             dpi = self.config.ocr_dpi
-            pages = convert_from_path(
-                str(path),
-                first_page=1,
-                last_page=1,
-                dpi=dpi,
-            )
-            if not pages:
-                raise RuntimeError("PDF sans page exploitable")
-
-            temp_img_path = path.with_suffix(".tmp.png")
-            pages[0].save(temp_img_path, "PNG")
-            is_temp = True
+            try:
+                doc = fitz.open(str(path))
+                if len(doc) == 0:
+                    raise RuntimeError("PDF sans page exploitable")
+                page = doc.load_page(0)
+                zoom = dpi / 72.0
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat)
+                
+                temp_img_path = path.with_suffix(".tmp.png")
+                pix.save(str(temp_img_path))
+                is_temp = True
+                doc.close()
+            except Exception as e:
+                raise RuntimeError(f"Erreur rendu PDF via PyMuPDF: {e}")
 
         try:
             image_bytes = temp_img_path.read_bytes()
@@ -387,114 +404,120 @@ class DocumentProcessor:
             if is_temp and temp_img_path.exists():
                 temp_img_path.unlink()
 
-        # Use LLMClient if gateway is enabled
-        if self.llm_client:
+        return self._analyze_vision_base64(base64_image, self.vision_prompt, path.name)
+
+    def _analyze_vision_base64(self, base64_image: str, prompt: str, source_name: str) -> Optional[str]:
+        """Analyse une image en base64 via LLM Vision, avec gestion de concurrence."""
+        
+        with self._vision_semaphore:
+            # Use LLMClient if gateway is enabled
+            if self.llm_client:
+                try:
+                    content = self.llm_client.vision(
+                        prompt=prompt,
+                        image_base64=base64_image,
+                        max_tokens=self.config.vision_max_tokens,
+                        timeout=self.config.vision_timeout,
+                    )
+                
+                    if not content:
+                        logger.error("Réponse Vision IA vide pour %s", source_name)
+                        return None
+                    
+                    logger.info("✅ Réponse Vision IA reçue pour %s.", source_name)
+                    return (
+                        f"--- ANALYSE VISION IA (LiteLLM Gateway) ---\n\n"
+                        f"{content}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        "❌ Erreur LLM Gateway Vision sur %s : %s",
+                        source_name,
+                        e,
+                        exc_info=True,
+                    )
+                    raise
+            
+            # Direct HTTP for LM Studio
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.config.ai_api_key}",
+            }
+
+            payload = {
+                "model": self.config.ai_model_name,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                },
+                            },
+                        ],
+                    }
+                ],
+                "temperature": self.config.vision_temperature,
+                "max_tokens": self.config.vision_max_tokens,
+            }
+
             try:
-                content = self.llm_client.vision(
-                    prompt=self.vision_prompt,
-                    image_base64=base64_image,
-                    max_tokens=self.config.vision_max_tokens,
+                response = requests.post(
+                    self.config.ai_api_url,
+                    headers=headers,
+                    json=payload,
                     timeout=self.config.vision_timeout,
                 )
-                
-                if not content:
-                    logger.error("Réponse Vision IA vide pour %s", path.name)
-                    return None
-                
-                logger.info("✅ Réponse Vision IA reçue pour %s.", path.name)
-                return (
-                    f"--- ANALYSE VISION IA (LiteLLM Gateway) ---\n\n"
-                    f"{content}"
-                )
-            except Exception as e:
+                response.raise_for_status()
+                result = response.json()
+            except requests.RequestException as e:
                 logger.error(
-                    "❌ Erreur LLM Gateway Vision sur %s : %s",
-                    path.name,
+                    "❌ Erreur HTTP Vision IA sur %s : %s",
+                    source_name,
                     e,
                     exc_info=True,
                 )
                 raise
-        
-        # Direct HTTP for LM Studio
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config.ai_api_key}",
-        }
+            except ValueError as e:
+                logger.error(
+                    "❌ Erreur de décodage JSON Vision IA sur %s : %s",
+                    source_name,
+                    e,
+                    exc_info=True,
+                )
+                raise
 
-        payload = {
-            "model": self.config.ai_model_name,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": self.vision_prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{base64_image}"
-                            },
-                        },
-                    ],
-                }
-            ],
-            "temperature": self.config.vision_temperature,
-            "max_tokens": self.config.vision_max_tokens,
-        }
+            choices = result.get("choices") or []
+            if not choices:
+                logger.error(
+                    "Réponse Vision IA sans 'choices' pour %s : %s",
+                    source_name,
+                    str(result)[:500],
+                )
+                return None
 
-        try:
-            response = requests.post(
-                self.config.ai_api_url,
-                headers=headers,
-                json=payload,
-                timeout=self.config.vision_timeout,
+            content = (
+                choices[0]
+                .get("message", {})
+                .get("content", "")
+                .strip()
             )
-            response.raise_for_status()
-            result = response.json()
-        except requests.RequestException as e:
-            logger.error(
-                "❌ Erreur HTTP Vision IA sur %s : %s",
-                path.name,
-                e,
-                exc_info=True,
-            )
-            raise
-        except ValueError as e:
-            logger.error(
-                "❌ Erreur de décodage JSON Vision IA sur %s : %s",
-                path.name,
-                e,
-                exc_info=True,
-            )
-            raise
+            if not content:
+                logger.error(
+                    "Réponse Vision IA vide pour %s : %s",
+                    source_name,
+                    str(result)[:500],
+                )
+                return None
 
-        choices = result.get("choices") or []
-        if not choices:
-            logger.error(
-                "Réponse Vision IA sans 'choices' pour %s : %s",
-                path.name,
-                str(result)[:500],
+            logger.info("✅ Réponse Vision IA reçue pour %s.", source_name)
+            return (
+                f"--- ANALYSE VISION IA ({self.config.ai_model_name}) ---\n\n"
+                f"{content}"
             )
-            return None
-
-        content = (
-            choices[0]
-            .get("message", {})
-            .get("content", "")
-            .strip()
-        )
-        if not content:
-            logger.error(
-                "Réponse Vision IA vide pour %s : %s",
-                path.name,
-                str(result)[:500],
-            )
-            return None
-
-        logger.info("✅ Réponse Vision IA reçue pour %s.", path.name)
-        return (
-            f"--- ANALYSE VISION IA ({self.config.ai_model_name}) ---\n\n"
-            f"{content}"
-        )
 
     # ------------------------------------------------------------------ #
     # Prompt par défaut
@@ -532,7 +555,104 @@ class DocumentProcessor:
             "   - Les couleurs, la lumière, l'ambiance\n"
             "   - Les actions ou événements capturés\n"
             "   - Tout détail pertinent ou remarquable\n\n"
-            "## 4. Transcription Textuelle\n"
             "**Transcris TOUT texte visible** (panneaux, enseignes, légendes, texte structuré) en respectant la mise en forme.\n"
             "Si aucun texte n'est présent, écris : 'Aucun texte visible.'"
         )
+
+    # ------------------------------------------------------------------ #
+    # Traitement PDF Page par Page (PyMuPDF)
+    # ------------------------------------------------------------------ #
+    def _process_pdf(self, path: Path) -> Optional[str]:
+        """
+        Analyse un PDF page par page en utilisant PyMuPDF.
+        """
+        logger.info("📄 Analyse PDF multipages via PyMuPDF : %s", path.name)
+        try:
+            doc = fitz.open(str(path))
+            page_count = len(doc)
+            logger.info("Le PDF %s contient %d pages.", path.name, page_count)
+            
+            result_parts = [f"--- EXTRACTION PDF ({page_count} pages) ---\n"]
+            
+            vision_calls_count = 0
+            max_vision_pages = self.config.vision_pdf_max_pages
+            
+            for i in range(page_count):
+                page = doc.load_page(i)
+                text = page.get_text("text").strip()
+                
+                # Évaluer la qualité de l'extraction texte
+                quality_res = QualityScorer.score_extraction_quality(text)
+                is_usable = quality_res["is_usable"]
+                suspected_table = quality_res["suspected_table"]
+                suspected_scan = quality_res["suspected_scan"]
+                
+                needs_vision = False
+                vision_prompt = self.vision_prompt
+                
+                # Déclenchement de Vision selon le mode et la qualité
+                mode = self.config.vision_pdf_mode
+                if mode != "disabled" and vision_calls_count < max_vision_pages:
+                    if mode == "all_pages_small_pdf":
+                        needs_vision = True
+                    elif mode == "first_n_pages" and i < max_vision_pages:
+                        needs_vision = True
+                    elif mode == "low_quality_pages":
+                        if not is_usable or suspected_scan:
+                            needs_vision = True
+                        elif suspected_table and self.config.vision_force_on_tables:
+                            needs_vision = True
+                            vision_prompt = (
+                                "Analyse cette page de document administratif. "
+                                "Lis uniquement les informations visibles. "
+                                "Restitue les tableaux en Markdown si possible. "
+                                "Décris les éléments utiles pour retrouver l'information. "
+                                "Signale les zones incertaines ou illisibles. "
+                                "N'invente aucune information absente de l'image. "
+                                "Réponds en français, de façon structurée."
+                            )
+                            
+                method = "mixed" if needs_vision else "pymupdf"
+                score = quality_res["score"]
+                result_parts.append(f"\n[Page {i+1}/{page_count} | Qualité : {score} | Méthode : {method}]\n")
+                
+                if needs_vision:
+                    logger.info("Appel Vision AI déclenché pour %s (Page %d) - Raisons: %s", path.name, i+1, ", ".join(quality_res["reasons"]))
+                    
+                    dpi = self.config.vision_pdf_dpi
+                    zoom = dpi / 72.0
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat)
+                    
+                    # Convert to base64
+                    img_data = pix.tobytes("png")
+                    base64_image = base64.b64encode(img_data).decode("utf-8")
+                    
+                    vision_result = self._analyze_vision_base64(base64_image, vision_prompt, f"{path.name} (Page {i+1})")
+                    
+                    if vision_result:
+                        vision_calls_count += 1
+                        result_parts.append(self._merge_page_extractions(text, vision_result, quality_res))
+                    else:
+                        result_parts.append(text if text else "(Page vide ou scan illisible)")
+                else:
+                    result_parts.append(text if text else "(Page vide)")
+            
+            doc.close()
+            return "".join(result_parts)
+            
+        except Exception as e:
+            logger.error("❌ Erreur PyMuPDF sur %s : %s", path.name, e, exc_info=True)
+            return None
+
+    def _merge_page_extractions(self, text: str, vision_result: str, quality_res: dict) -> str:
+        """
+        Fusionne le texte extrait par PyMuPDF avec le résultat Vision AI.
+        """
+        parts = []
+        if text and len(text.strip()) > 50:
+            parts.append("--- TEXTE EXTRAIT ---")
+            parts.append(text)
+            parts.append("\n--- COMPLÉMENT VISION IA ---")
+        parts.append(vision_result)
+        return "\n".join(parts)

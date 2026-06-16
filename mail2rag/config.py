@@ -114,6 +114,11 @@ class Config:
         # Activation Vision séparée pour images et PDFs
         self.vision_enable_images = self._get_bool("VISION_ENABLE_IMAGES", True)
         self.vision_enable_pdf = self._get_bool("VISION_ENABLE_PDF", True)
+        self.vision_pdf_mode = os.getenv("VISION_PDF_MODE", "low_quality_pages")
+        self.vision_pdf_max_pages = int(os.getenv("VISION_PDF_MAX_PAGES", "5"))
+        self.vision_pdf_dpi = int(os.getenv("VISION_PDF_DPI", "150"))
+        self.vision_force_on_tables = self._get_bool("VISION_FORCE_ON_TABLES", False)
+        self.vision_max_concurrent_calls = int(os.getenv("VISION_MAX_CONCURRENT_CALLS", "1"))
 
         self.vision_temperature = float(os.getenv("VISION_TEMPERATURE", "0.0"))
         self.vision_max_tokens = int(os.getenv("VISION_MAX_TOKENS", "1500"))
@@ -181,6 +186,10 @@ class Config:
         # ------------------------------------------------------------------
         self.worker_count = int(os.getenv("WORKER_COUNT", "2"))
         self.worker_queue_size = int(os.getenv("WORKER_QUEUE_SIZE", "100"))
+        self.ingestion_max_workers = int(os.getenv("INGESTION_MAX_WORKERS", "2"))
+        self.ingestion_queue_max_size = int(os.getenv("INGESTION_QUEUE_MAX_SIZE", "20"))
+        self.ingestion_async = self._get_bool("INGESTION_ASYNC", True)
+        self.ingestion_cache = self._get_bool("INGESTION_CACHE", True)
 
         # ------------------------------------------------------------------
         # ARCHIVE WEB
