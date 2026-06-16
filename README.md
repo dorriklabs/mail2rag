@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.10.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.34.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -38,7 +38,8 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.10.0**: **LiteLLM Gateway** - Support for 7 LLM providers (LM Studio, OpenAI, Anthropic, Groq, Mistral, Gemini, Ollama)!
+> 🆕 **v3.34.0**: **Optimized PDF Pipeline** - Page-by-page extraction, selective vision AI for low-quality scans, and composite caching.
+> 🔜 **v3.35.0 (Feature Branch)**: **Structured JSON Ingestion** - Opt-in via `STRUCTURED_INGESTION_ENABLED`.
 
 ---
 
@@ -284,7 +285,7 @@ mail2rag/
 │
 ├── mail2rag/                    # Main email processing app
 │   ├── app.py                   # Application entry point
-│   ├── version.py               # Version: 3.10.0
+│   ├── version.py               # Version: 3.34.0
 │   ├── config.py                # Configuration management
 │   ├── services/
 │   │   ├── ingestion_service.py # Document ingestion
