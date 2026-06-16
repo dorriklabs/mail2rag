@@ -4,6 +4,8 @@ import base64
 import logging
 import os
 import threading
+import uuid
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, List
 
@@ -12,6 +14,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 
 from config import Config
+from models import ExtractedDocument, ExtractedPage
 from services.tika_client import TikaClient
 from services.quality_scorer import QualityScorer
 
@@ -65,7 +68,7 @@ class DocumentProcessor:
     # ------------------------------------------------------------------ #
     # API publique
     # ------------------------------------------------------------------ #
-    def analyze_document(self, file_path: str | Path) -> Optional[str]:
+    def analyze_document(self, file_path: str, return_structured: bool = False) -> Optional[str | Any]:
         """
         Analyse un document et renvoie un texte descriptif/ocrisé.
 
@@ -150,7 +153,7 @@ class DocumentProcessor:
             if is_pdf:
                 # Nouveau pipeline PDF via PyMuPDF (page par page)
                 try:
-                    result = self._process_pdf(path)
+                    result = self._process_pdf(path, return_structured=return_structured)
                     if result:
                         return result
                 except Exception as e:
@@ -562,7 +565,7 @@ class DocumentProcessor:
     # ------------------------------------------------------------------ #
     # Traitement PDF Page par Page (PyMuPDF)
     # ------------------------------------------------------------------ #
-    def _process_pdf(self, path: Path) -> Optional[str]:
+    def _process_pdf(self, path: Path, return_structured: bool = False) -> Optional[str | Any]:
         """
         Analyse un PDF page par page en utilisant PyMuPDF.
         """
@@ -573,6 +576,7 @@ class DocumentProcessor:
             logger.info("Le PDF %s contient %d pages.", path.name, page_count)
             
             result_parts = [f"--- EXTRACTION PDF ({page_count} pages) ---\n"]
+            extracted_pages = []
             
             vision_calls_count = 0
             max_vision_pages = self.config.vision_pdf_max_pages
@@ -632,13 +636,45 @@ class DocumentProcessor:
                     
                     if vision_result:
                         vision_calls_count += 1
-                        result_parts.append(self._merge_page_extractions(text, vision_result, quality_res))
+                        merged_text = self._merge_page_extractions(text, vision_result, quality_res)
+                        result_parts.append(merged_text)
                     else:
-                        result_parts.append(text if text else "(Page vide ou scan illisible)")
+                        merged_text = text if text else "(Page vide ou scan illisible)"
+                        result_parts.append(merged_text)
                 else:
-                    result_parts.append(text if text else "(Page vide)")
+                    merged_text = text if text else "(Page vide)"
+                    result_parts.append(merged_text)
+                    
+                if return_structured:
+                    # Hachage spécifique de la page (texte fusionné)
+                    phash = hashlib.md5(merged_text.encode('utf-8')).hexdigest()
+                    extracted_pages.append(
+                        ExtractedPage(
+                            page_number=i+1,
+                            page_hash=phash,
+                            text=merged_text,
+                            char_count=len(merged_text),
+                            quality_score=score,
+                            extraction_method=method,
+                            vision_used=needs_vision,
+                            source_type="pdf_scan" if suspected_scan else "pdf_native",
+                            warnings=quality_res.get("reasons", [])
+                        )
+                    )
             
             doc.close()
+            
+            if return_structured:
+                fhash = hashlib.sha256(path.read_bytes()).hexdigest()
+                return ExtractedDocument(
+                    document_id=str(uuid.uuid4()),
+                    filename=path.name,
+                    file_hash=fhash,
+                    total_pages=page_count,
+                    source_type="pdf",
+                    pages=extracted_pages
+                )
+                
             return "".join(result_parts)
             
         except Exception as e:

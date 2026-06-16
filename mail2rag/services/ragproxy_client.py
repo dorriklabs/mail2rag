@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
+from models import ExtractedDocument
 
 
 logger = logging.getLogger(__name__)

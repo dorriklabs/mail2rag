@@ -3,7 +3,8 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
+from models import ExtractedDocument
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class CacheService:
             
         return file_hash
 
-    def get_cached_extraction(self, file_hash: str) -> Optional[Dict[str, Any]]:
+    def get_cached_extraction(self, file_hash: str, return_structured: bool = False) -> Optional[Union[Dict[str, Any], ExtractedDocument]]:
         """Récupère l'extraction depuis le cache si elle existe."""
         if not self.enabled:
             return None
@@ -72,7 +73,10 @@ class CacheService:
                     json_path = Path(row[0])
                     if json_path.exists():
                         with open(json_path, "r", encoding="utf-8") as f:
-                            return json.load(f)
+                            data = json.load(f)
+                            if return_structured and "schema_version" in data:
+                                return ExtractedDocument(**data)
+                            return data
                     else:
                         # Index invalide (fichier supprimé)
                         cursor.execute("DELETE FROM cache_index WHERE file_hash = ?", (file_hash,))
@@ -83,7 +87,7 @@ class CacheService:
             
         return None
 
-    def set_cached_extraction(self, file_hash: str, data: Dict[str, Any]) -> None:
+    def set_cached_extraction(self, file_hash: str, data: Union[Dict[str, Any], ExtractedDocument]) -> None:
         """Enregistre le résultat de l'extraction dans le cache."""
         if not self.enabled:
             return
@@ -94,7 +98,10 @@ class CacheService:
             
             # Sauvegarde JSON
             with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                if isinstance(data, ExtractedDocument):
+                    json.dump(data.model_dump(), f, ensure_ascii=False, indent=2)
+                else:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
                 
             # Mise à jour index SQLite
             with sqlite3.connect(self.db_path) as conn:

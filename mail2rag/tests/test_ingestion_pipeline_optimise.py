@@ -18,6 +18,7 @@ def mock_config():
     config.vision_prompt_file = "prompts/vision.txt"
     config.vision_max_tokens = 4000
     config.vision_timeout = 60
+    config.structured_ingestion_enabled = False
     config.tika_enable = False
     config.ocr_dpi = 150
     config.ai_model_name = "qwen2-vl"
@@ -281,3 +282,37 @@ def test_pdf_multipage_cible(processor):
         assert "Texte propre page 1" in result
         assert "Texte IA page 2" in result
         assert "Texte propre page 3" in result
+
+def test_structured_format(processor, mock_config, tmp_path):
+    """Vérifie que la sortie structurée retourne bien un ExtractedDocument avec pages."""
+    mock_config.structured_ingestion_enabled = True
+    
+    with patch("fitz.open") as mock_fitz_open, \
+         patch("services.processor.QualityScorer.score_extraction_quality") as mock_scorer:
+        
+        mock_doc = MagicMock()
+        mock_doc.__len__.return_value = 1
+        mock_page = MagicMock()
+        mock_page.get_text.return_value = "Texte propre"
+        mock_doc.load_page.return_value = mock_page
+        mock_fitz_open.return_value = mock_doc
+        
+        mock_scorer.return_value = {"score": 1.0, "is_usable": True, "suspected_scan": False, "suspected_table": False, "reasons": []}
+        
+        # Test direct _process_pdf
+        path = tmp_path / "fake.pdf"
+        path.write_bytes(b"fake")
+        doc = processor._process_pdf(path, return_structured=True)
+            
+        assert doc.__class__.__name__ == "ExtractedDocument"
+        assert doc.filename == "fake.pdf"
+        assert doc.total_pages == 1
+        assert len(doc.pages) == 1
+        assert doc.pages[0].text == "Texte propre"
+        assert doc.pages[0].page_number == 1
+        assert doc.pages[0].quality_score == 1.0
+        
+        # Pydantic v2 dump
+        dump = doc.model_dump()
+        assert "pages" in dump
+        assert dump["pages"][0]["text"] == "Texte propre"

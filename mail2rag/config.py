@@ -190,6 +190,7 @@ class Config:
         self.ingestion_queue_max_size = int(os.getenv("INGESTION_QUEUE_MAX_SIZE", "20"))
         self.ingestion_async = self._get_bool("INGESTION_ASYNC", True)
         self.ingestion_cache = self._get_bool("INGESTION_CACHE", True)
+        self.structured_ingestion_enabled = self._get_bool("STRUCTURED_INGESTION_ENABLED", False)
 
         # ------------------------------------------------------------------
         # ARCHIVE WEB

@@ -1,9 +1,10 @@
 import time
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Any, Dict
+import json
 
 from config import Config
-from models import ParsedEmail
+from models import ParsedEmail, ExtractedDocument
 from services.ragproxy_client import RAGProxyClient
 from services.mail import MailService
 from services.router import RouterService
@@ -369,40 +370,48 @@ class IngestionService:
                     "force_tables": self.config.vision_force_on_tables,
                     "scorer_version": "1.0", # Version du scorer actuel
                 }
+                if self.config.structured_ingestion_enabled:
+                    extraction_params["schema_version"] = "1.0"
                 
                 # Vérification du cache avec clé composite
                 cache_key = self.cache_service.get_cache_key(filepath, extraction_params)
                 cached_data = self.cache_service.get_cached_extraction(cache_key)
                 
-                if cached_data and "extracted_text" in cached_data:
+                if cached_data and ("extracted_text" in cached_data or isinstance(cached_data, ExtractedDocument)):
                     self.logger.info("♻️ Réutilisation de l'extraction en cache pour %s", filename)
-                    analysis_text = cached_data["extracted_text"]
+                    analysis_result = cached_data.get("extracted_text") if isinstance(cached_data, dict) else cached_data
                 else:
                     # Extraction normale
-                    analysis_text = self.processor.analyze_document(str(filepath))
-                    if analysis_text:
+                    analysis_result = self.processor.analyze_document(str(filepath), return_structured=self.config.structured_ingestion_enabled)
+                    if analysis_result:
+                        cache_payload = analysis_result if isinstance(analysis_result, ExtractedDocument) else {
+                            "extracted_text": analysis_result, 
+                            "filename": filename,
+                            "params": extraction_params
+                        }
                         self.cache_service.set_cached_extraction(
                             cache_key, 
-                            {
-                                "extracted_text": analysis_text, 
-                                "filename": filename,
-                                "params": extraction_params
-                            }
+                            cache_payload
                         )
 
-                if analysis_text:
-                    analysis_path = secure_folder / f"{safe_pj_name}_analysis.txt"
-                    with analysis_path.open("w", encoding="utf-8") as f:
-                        f.write(f"Source Document (Lien) : {public_link}\n")
-                        f.write(
-                            f"Email Parent (Sujet) : {email.subject}\n"
-                        )
-                        real_date = email.date or time.strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
-                        f.write(f"Date Email : {real_date}\n")
-                        f.write("-" * 30 + "\n")
-                        f.write(analysis_text)
+                if analysis_result:
+                    if isinstance(analysis_result, ExtractedDocument):
+                        analysis_path = secure_folder / f"{safe_pj_name}_analysis.json"
+                        with analysis_path.open("w", encoding="utf-8") as f:
+                            json.dump(analysis_result.model_dump(), f, ensure_ascii=False)
+                    else:
+                        analysis_path = secure_folder / f"{safe_pj_name}_analysis.txt"
+                        with analysis_path.open("w", encoding="utf-8") as f:
+                            f.write(f"Source Document (Lien) : {public_link}\n")
+                            f.write(
+                                f"Email Parent (Sujet) : {email.subject}\n"
+                            )
+                            real_date = email.date or time.strftime(
+                                "%Y-%m-%d %H:%M"
+                            )
+                            f.write(f"Date Email : {real_date}\n")
+                            f.write("-" * 30 + "\n")
+                            f.write(analysis_result)
 
                     files_to_upload.append(str(analysis_path))
                     self.logger.info(
@@ -524,7 +533,32 @@ class IngestionService:
         
         for file_path in files_to_upload:
             try:
-                # Extraction du texte depuis le fichier
+                if file_path.endswith("_analysis.json"):
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        doc_data = json.load(f)
+                    
+                    doc = ExtractedDocument(**doc_data)
+                    result = self.ragproxy_client.ingest_structured_document(
+                        collection=workspace,
+                        document=doc,
+                        chunk_size=self.config.chunk_size,
+                        chunk_overlap=self.config.chunk_overlap,
+                    )
+                    
+                    if result.get("status") == "ok":
+                        chunks_count = result.get("chunks_created", 0)
+                        total_chunks += chunks_count
+                        self.logger.info(
+                            f"Document structuré ingéré ({doc.filename}) → {chunks_count} chunks"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Erreur proxy pour {file_path}: {result.get('message')}"
+                        )
+                        errors += 1
+                    continue
+                    
+                # Extraction du texte depuis le fichier pour l'ancien flux textuel
                 text_content = self._extract_text_from_file(file_path)
                 
                 if not text_content or not text_content.strip():
