@@ -10,7 +10,7 @@ networks:
 services:
   # 1. QDRANT (Vector Database)
   qdrant:
-    image: qdrant/qdrant:v1.10.1
+    image: qdrant/qdrant:v1.18.0
     container_name: qdrant
     ports:
       - "9110:6333"
