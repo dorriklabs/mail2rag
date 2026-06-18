@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.37.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-4.0.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -38,7 +38,8 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Dynamic metadata extraction (e.g., year) via LLM with Reranker bonus (+0.25) to prevent data loss, plus multi-turn and off-topic E2E tests.
+> 🚀 **v4.0.0**: **Architecture V4 (Enterprise RAG)** - Strict RBAC vector filtering, Parent-Child Retrieval (fetch email body when an attachment matches), AI Query Router (Factual vs Exploratory), and strict Answerability Checks (anti-hallucination).
+> 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Dynamic metadata extraction (e.g., year) via LLM with Reranker bonus (+0.10) to prevent data loss.
 > ✅ **v3.36.0**: **HyDE & Dynamic Chunking** - Hypothetical Document Embeddings for short queries and dynamic chunk sizes (emails vs PDFs) for optimal precision.
 > ✅ **v3.35.0**: **Structured JSON Ingestion** - Emails encapsulated in ExtractedDocument format.
 > ✅ **v3.34.0**: **Optimized PDF Pipeline** - Page-by-page extraction, selective vision AI for low-quality scans.
@@ -315,15 +316,16 @@ The system operates in three distinct phases to guarantee high-precision answers
 - **Storage**: Chunks and metadata are stored in **Qdrant**.
 
 #### 2. Retrieval Phase (RAG Proxy)
-- **Soft Filtering & HyDE**: The local LLM quickly analyzes the user's question to extract critical metadata (e.g., explicit years) and generates a hypothetical answer (HyDE) to enrich short queries.
-- **Hybrid Search**: Qdrant executes a combined Dense + Sparse search, returning the top candidates.
+- **AI Query Router**: Categorizes queries into *factual* or *exploratory* intents to dynamically adjust the search pipeline.
+- **Soft Filtering & HyDE**: Analyzes the question to extract critical metadata (e.g., explicit years). HyDE is applied *only* to exploratory queries.
+- **Hybrid Search & Strict RBAC**: Qdrant executes a combined Dense + Sparse search with hard ACL filters to enforce workspace boundaries at the vector database level.
 - **Cross-Encoder Reranking**: A specialized model (`bge-reranker-v2-m3`) meticulously scores the top candidates against the query.
-- **Soft Filter Bonus**: Candidates matching the extracted metadata (e.g., the correct year) receive a mathematical score bonus (`+0.25`), pushing them to the top without risking data loss from hard filtering.
+- **Parent-Child Retrieval**: If a highly ranked chunk belongs to an attachment, the system automatically retrieves and appends its parent email body to provide full context.
 
 #### 3. Generation Phase
-- **Security Check**: The system validates the conversation history and intercepts off-topic or malicious queries.
+- **Answerability Check**: For factual queries, the system strictly checks if the retrieved context contains the answer. If not, it safely refuses to answer instead of hallucinating.
 - **Prompt Assembly**: The highest-ranked chunks are injected into the system prompt.
-- **LLM Generation**: The main LLM (e.g., Qwen) drafts a precise, factual answer based *only* on the provided context.
+- **LLM Generation**: The main LLM (e.g., Qwen) drafts a precise, factual answer based *only* on the provided context with backend-validated source citations.
 
 ### Secure Architecture for Production (Dual Box Strategy)
 
@@ -528,7 +530,8 @@ Mail2RAG surveille votre boîte mail et **automatiquement** :
 1. 📥 Ingère emails + pièces jointes dans Qdrant (base vectorielle)
 2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking Cross-Encoder)
 3. 💬 Répond aux questions par email ou via le dashboard Streamlit
-> 🆕 **v3.37.0** : **Soft Filtering & Contexte Avancé** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.25) anti-perte de données, et tests E2E multi-tours / hors-sujet.
+> 🚀 **v4.0.0** : **Architecture V4 (Enterprise RAG)** - Filtrage vectoriel RBAC strict, Parent-Child Retrieval (remontée du corps de l'email si une PJ matche), AI Query Router (Factuel vs Exploratoire), et Answerability Check strict (anti-hallucination).
+> 🆕 **v3.37.0** : **Soft Filtering & Contexte Avancé** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.10) anti-perte de données.
 > ✅ **v3.36.0** : **HyDE & Chunking Dynamique** - Hypothetical Document Embeddings pour les requêtes courtes et tailles de blocs dynamiques (emails vs PDFs).
 > ✅ **v3.35.0** : **Ingestion JSON Structurée** - Les emails sont encapsulés au format ExtractedDocument.
 ---
@@ -668,15 +671,16 @@ Le système fonctionne en trois phases distinctes pour garantir des réponses d'
 - **Stockage** : Vecteurs et métadonnées sont enregistrés dans **Qdrant**.
 
 #### 2. Phase de Recherche (RAG Proxy)
-- **Soft Filtering & HyDE** : Le LLM analyse la question pour extraire des métadonnées critiques (ex: une année) et génère une réponse hypothétique pour enrichir sémantiquement les requêtes courtes.
-- **Recherche Hybride** : Qdrant croise la recherche sémantique et lexicale pour remonter les meilleurs candidats.
+- **AI Query Router** : Catégorise les requêtes (factuelles ou exploratoires) pour ajuster dynamiquement la stratégie de recherche.
+- **Soft Filtering & HyDE** : Le LLM extrait les métadonnées critiques. HyDE n'est activé que pour les requêtes exploratoires.
+- **Recherche Hybride & RBAC Strict** : Qdrant croise la recherche sémantique et lexicale avec l'application stricte des ACL (Access Control Lists) dès la base de données.
 - **Cross-Encoder Reranking** : Un modèle spécialisé (`bge-reranker-v2-m3`) re-note très précisément les candidats.
-- **Bonus Soft Filter** : Les documents correspondant aux métadonnées extraites (ex: la bonne année) reçoivent un bonus mathématique (`+0.25`), garantissant la première place sans risquer d'éliminer de l'information par un filtre strict.
+- **Parent-Child Retrieval** : Si un document sélectionné est une pièce jointe, le corps du mail parent est automatiquement récupéré pour enrichir le contexte.
 
 #### 3. Phase de Génération
-- **Sécurité** : Le système vérifie l'historique et bloque les questions hors-sujet.
+- **Answerability Check** : Pour les requêtes factuelles, le système vérifie formellement que le contexte contient la réponse. Sinon, il refuse de répondre pour bloquer toute hallucination.
 - **Assemblage** : Les meilleurs extraits (Top 5 reranké) sont injectés dans le prompt système.
-- **Génération LLM** : Le LLM principal (ex: Qwen) rédige une réponse factuelle, basée *uniquement* sur le contexte fourni.
+- **Génération LLM** : Le LLM rédige une réponse factuelle, basée *uniquement* sur le contexte fourni, avec des citations de sources validées par le backend.
 
 ### Architecture Sécurisée pour la Production (Stratégie à 2 Boîtes)
 
