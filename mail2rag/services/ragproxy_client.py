@@ -139,6 +139,68 @@ class RAGProxyClient:
                 "chunks_created": 0,
                 "message": str(e),
             }
+
+    def ingest_structured_document(
+        self,
+        collection: str,
+        document: ExtractedDocument,
+        chunk_size: int = 800,
+        chunk_overlap: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        Ingère un document structuré (ExtractedDocument) de manière DRY.
+        Itère sur chaque page et appelle ingest_document en fusionnant les métadonnées.
+        
+        Args:
+            collection: Nom de la collection
+            document: Document structuré (issu du parseur PDF ou Email)
+            chunk_size: Taille des chunks
+            chunk_overlap: Chevauchement
+        """
+        total_chunks = 0
+        errors = []
+        global_metadata = document.global_metadata or {}
+
+        for page in document.pages:
+            if not page.text or not page.text.strip():
+                continue
+
+            # Fusion des métadonnées (la page écrase la globale si doublon)
+            page_meta = {**global_metadata, **(page.metadata or {})}
+            page_meta["page_number"] = page.page_number
+            if page.page_hash:
+                page_meta["page_hash"] = page.page_hash
+
+            result = self.ingest_document(
+                collection=collection,
+                text=page.text,
+                metadata=page_meta,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+
+            if result.get("status") == "ok":
+                total_chunks += result.get("chunks_created", 0)
+            else:
+                errors.append(f"Page {page.page_number}: {result.get('message')}")
+
+        if errors:
+            logger.warning(f"Structured ingestion completed with errors: {errors}")
+            if total_chunks == 0:
+                return {
+                    "status": "error",
+                    "collection": collection,
+                    "chunks_created": 0,
+                    "message": " | ".join(errors)
+                }
+
+        return {
+            "status": "ok",
+            "collection": collection,
+            "chunks_created": total_chunks,
+            "message": f"Successfully ingested structured document"
+        }
+
     
     def delete_document(
         self,

@@ -2,9 +2,10 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional, Any, Dict
 import json
+import hashlib
 
 from config import Config
-from models import ParsedEmail, ExtractedDocument
+from models import ParsedEmail, ExtractedDocument, ExtractedPage
 from services.ragproxy_client import RAGProxyClient
 from services.mail import MailService
 from services.router import RouterService
@@ -99,7 +100,7 @@ class IngestionService:
             # Résumé d'email (IA ou fallback simple)
             email_summary = self._build_email_summary(email, cleaned_body)
 
-            # Fichier texte principal (email)
+            # Fichier texte principal (email) et document structuré
             body_path = self._write_email_body_file(
                 email=email,
                 workspace=workspace,
@@ -107,6 +108,7 @@ class IngestionService:
                 email_summary=email_summary,
                 secure_folder=secure_folder,
                 safe_subject=safe_subject,
+                secure_id=secure_id,
             )
 
             files_to_upload: List[str] = [str(body_path)]
@@ -274,8 +276,10 @@ class IngestionService:
         email_summary: Optional[str],
         secure_folder: Path,
         safe_subject: str,
+        secure_id: str,
     ) -> Path:
-        """Crée le fichier texte contenant l'email (métadonnées + corps)."""
+        """Crée l'archive texte et retourne le chemin JSON pour l'indexation."""
+        # 1. Archive texte classique pour debug/humains
         body_filename = f"{email.uid}_{safe_subject}.txt"
         body_path = secure_folder / body_filename
 
@@ -302,7 +306,61 @@ class IngestionService:
             f.write("-" * 30 + "\n\n")
             f.write(cleaned_body)
 
-        return body_path
+        # 2. Objet ExtractedDocument pour le RAG Proxy
+        
+        page_hash = hashlib.md5(cleaned_body.encode('utf-8')).hexdigest()
+        
+        metadata = {
+            "uid": str(email.uid),
+            "subject": email.subject,
+            "sender": email.sender,
+            "date": real_date,
+            "workspace": workspace,
+            "filename": body_filename,
+            "acl": [workspace],
+        }
+        if self.config.archive_base_url:
+            metadata["archive_url"] = f"{self.config.archive_base_url}/{secure_id}/{body_filename}"
+        if email.to:
+            metadata["to"] = email.to
+        if email.cc:
+            metadata["cc"] = email.cc
+        if email.message_id:
+            metadata["message_id"] = email.message_id
+        if email_summary:
+            metadata["summary"] = email_summary
+        if email.is_synthetic:
+            metadata["is_synthetic"] = True
+            
+        page = ExtractedPage(
+            page_number=1,
+            page_hash=page_hash,
+            text=cleaned_body,
+            char_count=len(cleaned_body),
+            quality_score=1.0,
+            extraction_method="email_body",
+            vision_used=False,
+            source_type="email_text",
+            metadata=metadata
+        )
+        
+        doc = ExtractedDocument(
+            document_id=str(email.uid),
+            filename=body_filename,
+            file_hash=page_hash,
+            total_pages=1,
+            source_type="email",
+            pages=[page],
+            global_metadata=metadata
+        )
+        
+        json_filename = f"{email.uid}_{safe_subject}_body_analysis.json"
+        json_path = secure_folder / json_filename
+        
+        with json_path.open("w", encoding="utf-8") as f:
+            json.dump(doc.model_dump(), f, ensure_ascii=False)
+
+        return json_path
 
     # ------------------------------------------------------------------ #
     # Pièces jointes / analyse documentaire
