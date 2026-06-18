@@ -162,8 +162,24 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
             except Exception as e:
                 logger.warning(f"Failed to rewrite query, falling back to original: {e}")
         
+        # 0.5 HyDE (Hypothetical Document Embeddings)
+        search_query = standalone_query
+        if len(standalone_query) < 80:
+            hyde_prompt = (
+                "Tu es un expert. Rédige un court paragraphe (3 phrases) qui répondrait de manière théorique "
+                f"à cette question/recherche : '{standalone_query}'. Donne juste des faits ou mots-clés liés, sans introduction."
+            )
+            try:
+                hyde_msg = [{"role": "user", "content": hyde_prompt}]
+                hypo_doc, _, _, _ = await _call_llm(hyde_msg, temperature=0.3, max_tokens=150)
+                if hypo_doc and len(hypo_doc.strip()) > 10:
+                    search_query = f"{standalone_query}\n\n{hypo_doc.strip()}"
+                    logger.info("HyDE applied to short query.")
+            except Exception as e:
+                logger.warning(f"HyDE failed: {e}")
+
         # 0b. Check Semantic Cache
-        query_vector = pipeline.embedder.embed(standalone_query)
+        query_vector = pipeline.embedder.embed(search_query)
         cached_result = pipeline.vdb.check_semantic_cache(query_vector, threshold=0.95)
         
         if cached_result:
@@ -179,7 +195,7 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
         
         # pipeline.run() returns (chunks, debug_info) tuple
         chunks, rag_debug = pipeline.run(
-            query=req.query,
+            query=search_query,
             top_k=req.top_k,
             final_k=req.final_k,
             use_bm25=req.use_bm25,

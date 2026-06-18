@@ -596,10 +596,15 @@ class IngestionService:
                         doc_data = json.load(f)
                     
                     doc = ExtractedDocument(**doc_data)
+                    
+                    # Quick Win 1: Dynamic Chunk Size (400 for emails, 1000 for PDFs)
+                    is_email_body = file_path.endswith("_body_analysis.json")
+                    dynamic_chunk_size = 400 if is_email_body else 1000
+                    
                     result = self.ragproxy_client.ingest_structured_document(
                         collection=workspace,
                         document=doc,
-                        chunk_size=self.config.chunk_size,
+                        chunk_size=dynamic_chunk_size,
                         chunk_overlap=self.config.chunk_overlap,
                     )
                     
