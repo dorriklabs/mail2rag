@@ -150,7 +150,7 @@ class Config:
         # SYSTÈME / CHEMINS
         # ------------------------------------------------------------------
         self.save_chat_history = self._get_bool("SAVE_CHAT_HISTORY", True)
-        self.sync_on_start = self._get_bool("SYNC_ON_START", True)
+        self.sync_on_start = self._get_bool("SYNC_ON_START", False)
         self.cleanup_archive_before_sync = self._get_bool(
             "CLEANUP_ARCHIVE_BEFORE_SYNC", False
         )

@@ -263,6 +263,179 @@ class RAGProxyClient:
                 "debug_info": {"error": str(e)},
             }
     
+    def search_by_metadata(
+        self,
+        collection: str,
+        filters: Dict[str, Any],
+        limit: int = 100,
+        with_text: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Recherche directe par métadonnées via RAG Proxy.
+
+        Args:
+            collection: Collection/workspace cible
+            filters: Filtres exacts sur payload, ex: {"document_key": "..."}
+            limit: Nombre maximum de points retournés
+            with_text: Inclure le texte complet des chunks
+
+        Returns:
+            Dict avec status, collection, count, matches
+        """
+        url = f"{self.base_url}/admin/documents/search"
+
+        payload = {
+            "collection": collection,
+            "filters": filters,
+            "limit": limit,
+            "with_text": with_text,
+        }
+
+        try:
+            response = self.session.post(url, json=payload, timeout=self.timeout)
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Metadata search failed with status {response.status_code}: {response.text}"
+                )
+                return {
+                    "status": "error",
+                    "collection": collection,
+                    "count": 0,
+                    "matches": [],
+                    "message": f"HTTP {response.status_code}: {response.text}",
+                }
+
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Metadata search timeout after {self.timeout}s")
+            return {
+                "status": "error",
+                "collection": collection,
+                "count": 0,
+                "matches": [],
+                "message": f"Request timeout after {self.timeout}s",
+            }
+        except Exception as e:
+            logger.error(f"Metadata search exception: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "collection": collection,
+                "count": 0,
+                "matches": [],
+                "message": str(e),
+            }
+
+    def document_exists(
+        self,
+        collection: str,
+        document_key: Optional[str] = None,
+        content_hash: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Vérifie l'existence d'un document par document_key et/ou métadonnées.
+        """
+        url = f"{self.base_url}/admin/documents/exists"
+
+        payload = {
+            "collection": collection,
+            "document_key": document_key,
+            "content_hash": content_hash,
+            "filters": filters or {},
+        }
+
+        try:
+            response = self.session.post(url, json=payload, timeout=self.timeout)
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Document exists failed with status {response.status_code}: {response.text}"
+                )
+                return {
+                    "status": "error",
+                    "collection": collection,
+                    "exists": False,
+                    "same_hash": False if content_hash else None,
+                    "chunks_count": 0,
+                    "matches": [],
+                    "message": f"HTTP {response.status_code}: {response.text}",
+                }
+
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Document exists timeout after {self.timeout}s")
+            return {
+                "status": "error",
+                "collection": collection,
+                "exists": False,
+                "same_hash": False if content_hash else None,
+                "chunks_count": 0,
+                "matches": [],
+                "message": f"Request timeout after {self.timeout}s",
+            }
+        except Exception as e:
+            logger.error(f"Document exists exception: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "collection": collection,
+                "exists": False,
+                "same_hash": False if content_hash else None,
+                "chunks_count": 0,
+                "matches": [],
+                "message": str(e),
+            }
+
+    def delete_by_metadata(
+        self,
+        collection: str,
+        filters: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Supprime les points Qdrant par métadonnées exactes.
+        """
+        url = f"{self.base_url}/admin/documents/delete-by-metadata"
+
+        payload = {
+            "collection": collection,
+            "filters": filters,
+        }
+
+        try:
+            response = self.session.post(url, json=payload, timeout=self.timeout)
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Delete by metadata failed with status {response.status_code}: {response.text}"
+                )
+                return {
+                    "status": "error",
+                    "collection": collection,
+                    "deleted_count": 0,
+                    "message": f"HTTP {response.status_code}: {response.text}",
+                }
+
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Delete by metadata timeout after {self.timeout}s")
+            return {
+                "status": "error",
+                "collection": collection,
+                "deleted_count": 0,
+                "message": f"Request timeout after {self.timeout}s",
+            }
+        except Exception as e:
+            logger.error(f"Delete by metadata exception: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "collection": collection,
+                "deleted_count": 0,
+                "message": str(e),
+            }
+
     def rebuild_bm25(self, collection: str) -> bool:
         """
         Déclenche un rebuild de l'index BM25 pour une collection.

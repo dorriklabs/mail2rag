@@ -8,7 +8,18 @@ from typing import Optional
 from fastapi import APIRouter
 
 from app.config import VECTOR_DB_HOST, VECTOR_DB_PORT
-from app.models import IngestRequest, IngestResponse, CronConfigRequest, CronConfigResponse
+from app.models import (
+    IngestRequest,
+    IngestResponse,
+    CronConfigRequest,
+    CronConfigResponse,
+    MetadataSearchRequest,
+    MetadataSearchResponse,
+    DocumentExistsRequest,
+    DocumentExistsResponse,
+    DeleteByMetadataRequest,
+    DeleteByMetadataResponse,
+)
 from app.pipeline import RAGPipeline
 from app.chunker import TextChunker
 from app.vectordb import QdrantProvider
@@ -170,6 +181,180 @@ def delete_document(doc_id: str, collection: Optional[str] = None):
             "status": "error",
             "message": str(e)
         }
+
+
+
+@router.post("/documents/search", response_model=MetadataSearchResponse)
+def search_documents_by_metadata(req: MetadataSearchRequest):
+    """
+    Search Qdrant points by exact payload metadata.
+
+    Example:
+    {
+      "collection": "voirie",
+      "filters": {"document_key": "..."},
+      "limit": 100,
+      "with_text": false
+    }
+    """
+    try:
+        if not req.filters:
+            return MetadataSearchResponse(
+                status="error",
+                collection=req.collection,
+                count=0,
+                matches=[],
+                message="filters cannot be empty",
+            )
+
+        target_collection = req.collection or pipeline.vdb.collection_name
+
+        matches = pipeline.vdb.search_by_metadata(
+            collection_name=target_collection,
+            metadata_filter=req.filters,
+            limit=req.limit,
+        )
+
+        if not req.with_text:
+            cleaned_matches = []
+            for match in matches:
+                metadata = dict(match.get("metadata") or {})
+                payload = dict(match.get("payload") or {})
+                metadata.pop("text", None)
+                payload.pop("text", None)
+
+                cleaned_matches.append({
+                    "point_id": match.get("point_id"),
+                    "metadata": metadata,
+                    "payload": payload,
+                })
+            matches = cleaned_matches
+
+        return MetadataSearchResponse(
+            status="ok",
+            collection=target_collection,
+            count=len(matches),
+            matches=matches,
+        )
+
+    except Exception as e:
+        logger.error(f"Metadata search failed: {e}", exc_info=True)
+        return MetadataSearchResponse(
+            status="error",
+            collection=req.collection,
+            count=0,
+            matches=[],
+            message=str(e),
+        )
+
+
+@router.post("/documents/exists", response_model=DocumentExistsResponse)
+def document_exists(req: DocumentExistsRequest):
+    """
+    Check if a document exists by document_key and/or metadata filters.
+    """
+    try:
+        target_collection = req.collection or pipeline.vdb.collection_name
+
+        metadata_filter = dict(req.filters or {})
+        if req.document_key:
+            metadata_filter["document_key"] = req.document_key
+
+        if not metadata_filter:
+            return DocumentExistsResponse(
+                status="error",
+                collection=target_collection,
+                exists=False,
+                same_hash=False if req.content_hash else None,
+                chunks_count=0,
+                matches=[],
+                message="document_key or filters required",
+            )
+
+        result = pipeline.vdb.document_exists(
+            collection_name=target_collection,
+            metadata_filter=metadata_filter,
+            content_hash=req.content_hash,
+        )
+
+        # Ne pas renvoyer le texte complet par défaut.
+        cleaned_matches = []
+        for match in result.get("matches", []):
+            metadata = dict(match.get("metadata") or {})
+            payload = dict(match.get("payload") or {})
+            metadata.pop("text", None)
+            payload.pop("text", None)
+            cleaned_matches.append({
+                "point_id": match.get("point_id"),
+                "metadata": metadata,
+                "payload": payload,
+            })
+
+        return DocumentExistsResponse(
+            status="ok",
+            collection=target_collection,
+            exists=bool(result.get("exists", False)),
+            same_hash=result.get("same_hash"),
+            chunks_count=int(result.get("chunks_count", 0) or 0),
+            matches=cleaned_matches,
+        )
+
+    except Exception as e:
+        logger.error(f"Document exists check failed: {e}", exc_info=True)
+        return DocumentExistsResponse(
+            status="error",
+            collection=req.collection,
+            exists=False,
+            same_hash=False if req.content_hash else None,
+            chunks_count=0,
+            matches=[],
+            message=str(e),
+        )
+
+
+@router.post("/documents/delete-by-metadata", response_model=DeleteByMetadataResponse)
+def delete_documents_by_metadata(req: DeleteByMetadataRequest):
+    """
+    Delete Qdrant points by exact payload metadata.
+    POST is used instead of DELETE to avoid client/proxy issues with JSON bodies.
+    """
+    try:
+        if not req.filters:
+            return DeleteByMetadataResponse(
+                status="error",
+                collection=req.collection,
+                deleted_count=0,
+                message="filters cannot be empty",
+            )
+
+        target_collection = req.collection or pipeline.vdb.collection_name
+
+        deleted_count = pipeline.vdb.delete_by_metadata(
+            collection_name=target_collection,
+            metadata_filter=req.filters,
+        )
+
+        if deleted_count > 0:
+            try:
+                pipeline.vdb.clear_semantic_cache()
+            except Exception as e:
+                logger.warning(f"Failed to invalidate semantic cache: {e}")
+
+        return DeleteByMetadataResponse(
+            status="ok",
+            collection=target_collection,
+            deleted_count=deleted_count,
+            message=f"Deleted {deleted_count} point(s)",
+        )
+
+    except Exception as e:
+        logger.error(f"Delete by metadata failed: {e}", exc_info=True)
+        return DeleteByMetadataResponse(
+            status="error",
+            collection=req.collection,
+            deleted_count=0,
+            message=str(e),
+        )
 
 
 @router.get("/collections")

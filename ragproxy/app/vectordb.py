@@ -3,7 +3,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any, Any
 
 from qdrant_client import QdrantClient
 from qdrant_client import models
@@ -77,6 +77,31 @@ class VectorDBProvider(ABC):
             metadata_filter: Filtre de métadonnées (ex: {"uid": "12345"})
             
         Returns:
+        """
+        pass
+
+    @abstractmethod
+    def search_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+        limit: int = 100,
+    ) -> List[Dict]:
+        """
+        Recherche des points par filtre exact de métadonnées/payload.
+        """
+        pass
+
+    @abstractmethod
+    def document_exists(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+        content_hash: Optional[str] = None,
+        limit: int = 10000,
+    ) -> Dict:
+        """
+        Vérifie l'existence d'un document à partir de métadonnées exactes.
         """
         pass
 
@@ -344,6 +369,150 @@ class QdrantProvider(VectorDBProvider):
             logger.error(f"Failed to delete by metadata in '{collection_name}': {e}")
             return 0
 
+
+    def _build_metadata_filter(self, metadata_filter: Dict) -> Optional[models.Filter]:
+        """
+        Construit un filtre Qdrant exact sur payload/métadonnées.
+
+        Exemple :
+            {"document_key": "...", "content_hash": "..."}
+        """
+        conditions = []
+
+        for key, value in (metadata_filter or {}).items():
+            if key is None:
+                continue
+
+            key = str(key).strip()
+            if not key:
+                continue
+
+            if value is None:
+                continue
+
+            conditions.append(
+                models.FieldCondition(
+                    key=key,
+                    match=models.MatchValue(value=value),
+                )
+            )
+
+        if not conditions:
+            return None
+
+        return models.Filter(must=conditions)
+
+    def search_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+        limit: int = 100,
+    ) -> List[Dict]:
+        """
+        Recherche directe par métadonnées/payload Qdrant.
+        """
+        try:
+            if limit <= 0:
+                limit = 100
+
+            collections = self.client.get_collections().collections
+            if not any(col.name == collection_name for col in collections):
+                logger.info(f"Collection '{collection_name}' not found for metadata search")
+                return []
+
+            filter_obj = self._build_metadata_filter(metadata_filter)
+            if filter_obj is None:
+                logger.warning("Empty metadata filter, aborting metadata search")
+                return []
+
+            results = []
+            offset = None
+
+            while len(results) < limit:
+                batch_limit = min(limit - len(results), 1000)
+
+                points, next_offset = self.client.scroll(
+                    collection_name=collection_name,
+                    scroll_filter=filter_obj,
+                    limit=batch_limit,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+
+                for point in points:
+                    payload = point.payload or {}
+                    results.append(
+                        {
+                            "point_id": str(point.id),
+                            "text": payload.get("text", ""),
+                            "metadata": payload,
+                            "payload": payload,
+                        }
+                    )
+
+                if not next_offset or not points:
+                    break
+
+                offset = next_offset
+
+            logger.debug(
+                f"Metadata search in '{collection_name}' returned {len(results)} point(s)"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(
+                f"Failed metadata search in '{collection_name}': {e}",
+                exc_info=True,
+            )
+            return []
+
+    def document_exists(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+        content_hash: Optional[str] = None,
+        limit: int = 10000,
+    ) -> Dict:
+        """
+        Vérifie si un document existe à partir d'un filtre exact.
+
+        Si content_hash est fourni :
+        - exists indique si des chunks existent ;
+        - same_hash indique si les chunks trouvés portent le même hash.
+        """
+        matches = self.search_by_metadata(
+            collection_name=collection_name,
+            metadata_filter=metadata_filter,
+            limit=limit,
+        )
+
+        exists = len(matches) > 0
+        same_hash = None
+
+        if content_hash is not None:
+            if not matches:
+                same_hash = False
+            else:
+                hashes = {
+                    (m.get("metadata") or {}).get("content_hash")
+                    for m in matches
+                    if (m.get("metadata") or {}).get("content_hash") is not None
+                }
+
+                if not hashes:
+                    same_hash = None
+                else:
+                    same_hash = hashes == {content_hash}
+
+        return {
+            "exists": exists,
+            "same_hash": same_hash,
+            "chunks_count": len(matches),
+            "matches": matches,
+        }
+
     def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
         """Recherche dans le cache Qdrant s'il existe une question très similaire."""
         collection_name = "mail2rag_cache"
@@ -447,6 +616,23 @@ class VectorDBService:
     
     def delete_by_metadata(self, collection_name: str, metadata_filter: Dict) -> int:
         return self.provider.delete_by_metadata(collection_name, metadata_filter)
+
+    def search_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+        limit: int = 100,
+    ) -> List[Dict]:
+        return self.provider.search_by_metadata(collection_name, metadata_filter, limit)
+
+    def document_exists(
+        self,
+        collection_name: str,
+        metadata_filter: Dict,
+        content_hash: Optional[str] = None,
+        limit: int = 10000,
+    ) -> Dict:
+        return self.provider.document_exists(collection_name, metadata_filter, content_hash, limit)
 
     def check_semantic_cache(self, query_vector: List[float], threshold: float = 0.95) -> Optional[Dict]:
         return self.provider.check_semantic_cache(query_vector, threshold)

@@ -95,6 +95,61 @@ class ChatResponse(BaseModel):
     debug_info: Optional[Dict] = None
 
 
+
+# ---------------------------------------------------------------------------
+# Admin document metadata operations
+# ---------------------------------------------------------------------------
+
+class MetadataSearchRequest(BaseModel):
+    """Request to search Qdrant points by exact payload metadata."""
+    collection: str
+    filters: Dict[str, Any]
+    limit: int = 100
+    with_text: bool = False
+
+
+class MetadataSearchResponse(BaseModel):
+    """Response from metadata search."""
+    status: str
+    collection: str
+    count: int = 0
+    matches: List[Dict[str, Any]] = []
+    message: Optional[str] = None
+
+
+class DocumentExistsRequest(BaseModel):
+    """Request to check whether a document exists by metadata."""
+    collection: str
+    document_key: Optional[str] = None
+    content_hash: Optional[str] = None
+    filters: Dict[str, Any] = {}
+
+
+class DocumentExistsResponse(BaseModel):
+    """Response from document existence check."""
+    status: str
+    collection: str
+    exists: bool = False
+    same_hash: Optional[bool] = None
+    chunks_count: int = 0
+    matches: List[Dict[str, Any]] = []
+    message: Optional[str] = None
+
+
+class DeleteByMetadataRequest(BaseModel):
+    """Request to delete Qdrant points by exact payload metadata."""
+    collection: str
+    filters: Dict[str, Any]
+
+
+class DeleteByMetadataResponse(BaseModel):
+    """Response from metadata deletion."""
+    status: str
+    collection: str
+    deleted_count: int = 0
+    message: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Cron Scheduler
 # ---------------------------------------------------------------------------
