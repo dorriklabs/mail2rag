@@ -13,7 +13,7 @@ class RerankerService:
         self.http = http_client
         self.model = model
 
-    def rerank(self, query: str, passages: List[Dict]) -> List[Dict]:
+    def rerank(self, query: str, passages: List[Dict], filters: Dict = None) -> List[Dict]:
         if not passages:
             return []
 
@@ -47,7 +47,13 @@ class RerankerService:
 
             # 'score' reste le score principal exposé à l'extérieur
             # (alias du score de rerank)
-            new_p["score"] = score_val
+            bonus = 0.0
+            if filters:
+                for k, v in filters.items():
+                    doc_v = meta.get(k)
+                    if doc_v is not None and str(doc_v).lower() == str(v).lower():
+                        bonus += 0.25
+            new_p["score"] = min(1.0, score_val + bonus)
 
             enriched.append(new_p)
 

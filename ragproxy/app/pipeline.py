@@ -44,6 +44,26 @@ class RAGPipeline:
         
         logger.info("Initializing RAG Pipeline with Qdrant Native Hybrid Search")
 
+    def _extract_metadata_filters(self, query: str) -> dict:
+        import json
+        from app.config import LLM_CHAT_MODEL
+        prompt = "Tu es un extracteur de métadonnées pour un moteur de recherche. Si la question de l'utilisateur mentionne explicitement une année (ex: 2023, 2024), extrais-la. Sinon, renvoie null. Renvoie UNIQUEMENT un JSON valide de cette forme stricte : {\"year\": \"2023\"} ou {\"year\": null}."
+        payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 50}
+        try:
+            resp = self.embedder.http.post("/v1/chat/completions", payload)
+            c = resp.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            if c.startswith("```json"): c = c.replace("```json", "", 1)
+            if c.startswith("```"): c = c.replace("```", "", 1)
+            if c.endswith("```"): c = c[:c.rfind("```")]
+            c = c.strip()
+            d = json.loads(c)
+            y = d.get("year") or d.get("annee")
+            if y: return {"year": str(y)}
+        except Exception as e:
+            logger.error(f"Soft Filter extraction error: {e} | response: {c if 'c' in locals() else 'None'}")
+            pass
+        return {}
+
     def run(
         self,
         query: str,
@@ -62,6 +82,12 @@ class RAGPipeline:
             "counts": {},
             "timings": {}
         }
+
+        # 0. Soft Filtering
+        filters = self._extract_metadata_filters(query)
+        if filters:
+            logger.info(f"Filtres dynamiques extraits : {filters}")
+            debug_info["extracted_filters"] = filters
 
         # 1. Embeddings (Dense)
         t0 = time.time()
@@ -139,6 +165,7 @@ class RAGPipeline:
         reranked_results = self.reranker.rerank(
             query=query,
             passages=merged_candidates,
+            filters=filters
         )
         debug_info["timings"]["reranking"] = round(time.time() - t0, 3)
         

@@ -33,7 +33,7 @@ class LocalReranker:
             logger.error(f"❌ Erreur lors du chargement du modèle de reranking: {e}")
             raise
 
-    def rerank(self, query: str, passages: List[Dict]) -> List[Dict]:
+    def rerank(self, query: str, passages: List[Dict], filters: Dict = None) -> List[Dict]:
         """
         Reranke une liste de passages en fonction de leur pertinence par rapport à la query.
         
@@ -70,10 +70,16 @@ class LocalReranker:
                 
                 # Stocker le score de rerank dans les métadonnées
                 meta["rerank_score"] = float(score)  # Logit brut
+                bonus = 0.0
+                if filters:
+                    for k, v in filters.items():
+                        doc_v = meta.get(k)
+                        if doc_v is not None and str(doc_v).lower() == str(v).lower():
+                            bonus += 0.25
                 new_p["metadata"] = meta
                 
                 # Mettre à jour le score principal (normalisé 0-1)
-                new_p["score"] = norm_score
+                new_p["score"] = min(1.0, norm_score + bonus)
                 enriched.append(new_p)
             
             # Trier par score décroissant

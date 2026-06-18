@@ -597,6 +597,17 @@ class IngestionService:
                     
                     doc = ExtractedDocument(**doc_data)
                     
+                    # --- Ajout dynamique de l'année (Soft Filtering) ---
+                    import re
+                    real_date = str(email.date or time.strftime("%Y-%m-%d %H:%M"))
+                    year_match = re.search(r'\b(19|20)\d{2}\b', real_date)
+                    if year_match:
+                        year = year_match.group(0)
+                        for page in doc.pages:
+                            if not page.metadata:
+                                page.metadata = {}
+                            page.metadata["year"] = year
+
                     # Quick Win 1: Dynamic Chunk Size (400 for emails, 1000 for PDFs)
                     is_email_body = file_path.endswith("_body_analysis.json")
                     dynamic_chunk_size = 400 if is_email_body else 1000
@@ -630,15 +641,23 @@ class IngestionService:
                 
                 # Métadonnées enrichies
                 filename = Path(file_path).name
+                real_date = str(email.date or time.strftime("%Y-%m-%d %H:%M"))
+                
                 metadata = {
                     "uid": str(email.uid),
                     "subject": email.subject,
                     "sender": email.sender,
-                    "date": email.date or time.strftime("%Y-%m-%d %H:%M"),
+                    "date": real_date,
                     "filename": filename,
                     "workspace": workspace,
                     "acl": [workspace],  # Par défaut, accès restreint au workspace
                 }
+                
+                # --- Ajout dynamique de l'année (Soft Filtering) ---
+                import re
+                year_match = re.search(r'\b(19|20)\d{2}\b', real_date)
+                if year_match:
+                    metadata["year"] = year_match.group(0)
                 
                 # Ajouter le lien d'archive si disponible
                 if secure_id and self.config.archive_base_url:
