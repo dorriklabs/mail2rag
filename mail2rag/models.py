@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from email.message import Message
-from typing import Optional, Dict
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 
 
 @dataclass
@@ -40,9 +41,17 @@ class ParsedEmail:
             "body": self.body or "",
         }
 
-from typing import List, Dict, Any
-from pydantic import BaseModel, Field
-
+    @property
+    def thread_id(self) -> Optional[str]:
+        """Extrait le thread_id à partir des références ou de l'ID du message."""
+        if self.msg:
+            refs = self.msg.get("References")
+            in_reply = self.msg.get("In-Reply-To")
+            if refs:
+                return str(refs).split()[0]
+            elif in_reply:
+                return str(in_reply).split()[0]
+        return self.message_id
 class ExtractedPage(BaseModel):
     page_number: int
     page_hash: str

@@ -18,7 +18,7 @@ class VectorDBProvider(ABC):
     """Interface générique pour toutes les bases de données vectorielles."""
     
     @abstractmethod
-    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
+    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None, metadata_filter: Optional[Dict] = None, acl_groups: Optional[List[str]] = None) -> List[Dict]:
         """Recherche les vecteurs les plus proches en mode Hybride (Dense + Sparse)."""
         pass
 
@@ -132,7 +132,7 @@ class QdrantProvider(VectorDBProvider):
         self.sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
         logger.info(f"Initialized QdrantProvider on {host}:{port} (collection: {collection_name})")
 
-    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
+    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None, metadata_filter: Optional[Dict] = None, acl_groups: Optional[List[str]] = None) -> List[Dict]:
         target_collection = collection_name or self.collection_name
         try:
             # Générer le sparse vector
@@ -142,6 +142,9 @@ class QdrantProvider(VectorDBProvider):
                 values=sparse_result.values.tolist(),
             )
             
+            # Construire le filtre strict si fourni
+            filter_obj = self._build_metadata_filter(metadata_filter, acl_groups=acl_groups)
+            
             # Recherche hybride avec RRF
             hits = self.client.query_points(
                 collection_name=target_collection,
@@ -150,11 +153,13 @@ class QdrantProvider(VectorDBProvider):
                         query=sparse_vector,
                         using="sparse",
                         limit=limit * 2,
+                        filter=filter_obj,
                     ),
                     models.Prefetch(
                         query=query_vector,
                         using="dense",
                         limit=limit * 2,
+                        filter=filter_obj,
                     ),
                 ],
                 query=models.FusionQuery(fusion=models.Fusion.RRF),
@@ -370,9 +375,10 @@ class QdrantProvider(VectorDBProvider):
             return 0
 
 
-    def _build_metadata_filter(self, metadata_filter: Dict) -> Optional[models.Filter]:
+    def _build_metadata_filter(self, metadata_filter: Dict, acl_groups: Optional[List[str]] = None) -> Optional[models.Filter]:
         """
-        Construit un filtre Qdrant exact sur payload/métadonnées.
+        Construit un filtre Qdrant exact sur payload/métadonnées et ACL.
+
 
         Exemple :
             {"document_key": "...", "content_hash": "..."}
@@ -394,6 +400,14 @@ class QdrantProvider(VectorDBProvider):
                 models.FieldCondition(
                     key=key,
                     match=models.MatchValue(value=value),
+                )
+            )
+
+        if acl_groups:
+            conditions.append(
+                models.FieldCondition(
+                    key="acl",
+                    match=models.MatchAny(any=acl_groups),
                 )
             )
 
@@ -596,8 +610,8 @@ class VectorDBService:
         self.provider: VectorDBProvider = QdrantProvider(host, port, collection_name)
         self.collection_name = collection_name
 
-    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None) -> List[Dict]:
-        return self.provider.search(query_text, query_vector, limit, collection_name)
+    def search(self, query_text: str, query_vector: List[float], limit: int, collection_name: Optional[str] = None, metadata_filter: Optional[Dict] = None, acl_groups: Optional[List[str]] = None) -> List[Dict]:
+        return self.provider.search(query_text, query_vector, limit, collection_name, metadata_filter, acl_groups)
 
     def is_ready(self) -> bool:
         return self.provider.is_ready()

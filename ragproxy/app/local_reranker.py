@@ -4,6 +4,7 @@ import logging
 from typing import List, Dict
 
 from sentence_transformers import CrossEncoder
+from .scoring import calculate_metadata_bonus
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +71,7 @@ class LocalReranker:
                 
                 # Stocker le score de rerank dans les métadonnées
                 meta["rerank_score"] = float(score)  # Logit brut
-                bonus = 0.0
-                if filters:
-                    for k, v in filters.items():
-                        doc_v = meta.get(k)
-                        if doc_v is not None and str(doc_v).lower() == str(v).lower():
-                            bonus += 0.25
+                bonus = calculate_metadata_bonus(meta, filters)
                 new_p["metadata"] = meta
                 
                 # Mettre à jour le score principal (normalisé 0-1)

@@ -44,34 +44,58 @@ class RAGPipeline:
         
         logger.info("Initializing RAG Pipeline with Qdrant Native Hybrid Search")
 
-    def _extract_metadata_filters(self, query: str) -> dict:
+    def query_router(self, query: str) -> dict:
+        """
+        Classifie la requête (Factuelle vs Exploratoire) et extrait les filtres.
+        """
         import json
         from app.config import LLM_CHAT_MODEL
-        prompt = "Tu es un extracteur de métadonnées pour un moteur de recherche. Si la question de l'utilisateur mentionne explicitement une année (ex: 2023, 2024), extrais-la. Sinon, renvoie null. Renvoie UNIQUEMENT un JSON valide de cette forme stricte : {\"year\": \"2023\"} ou {\"year\": null}."
-        payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 50}
+        
+        prompt = """Tu es un Query Router pour un moteur RAG d'entreprise.
+Analyse la requête de l'utilisateur et détermine :
+1. L'intention : "factual" (recherche précise, chiffre, date, référence) ou "exploratory" (explication, procédure, comment faire).
+2. Les métadonnées : extrais les années ou expéditeurs explicitement mentionnés.
+3. La confiance ("confidence") : "high" (mention claire/explicite), "probable" (déduite), "ambiguous" (vague ou contradictoire).
+
+Renvoie UNIQUEMENT un JSON valide de ce format strict :
+{
+    "intent": "factual",
+    "filters": {"year": "2023"},
+    "confidence": "high"
+}
+Si aucun filtre n'est trouvé, mets "filters": {}."""
+        payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 100}
         try:
             resp = self.embedder.http.post("/v1/chat/completions", payload)
-            logger.info(f"Raw Soft Filter Response: {resp}")
+            logger.info(f"Raw Query Router Response: {resp}")
             c = resp.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
             if c.startswith("```json"): c = c.replace("```json", "", 1)
             if c.startswith("```"): c = c.replace("```", "", 1)
             if c.endswith("```"): c = c[:c.rfind("```")]
-            c = c.strip()
-            d = json.loads(c)
-            y = d.get("year") or d.get("annee")
-            if y: return {"year": str(y)}
+            d = json.loads(c.strip())
+            
+            intent = d.get("intent", "exploratory")
+            filters = d.get("filters", {})
+            confidence = d.get("confidence", "ambiguous")
+            
+            y = filters.get("year") or filters.get("annee")
+            if y: filters = {"year": str(y)}
+            else: filters = {}
+                
+            return {"intent": intent, "filters": filters, "confidence": confidence}
         except Exception as e:
-            logger.error(f"Soft Filter extraction error: {e} | response: {c if 'c' in locals() else 'None'}")
-            pass
-        return {}
+            logger.error(f"Query Router error: {e}")
+            return {"intent": "exploratory", "filters": {}, "confidence": "ambiguous"}
 
     def run(
         self,
         query: str,
+        routing_info: dict,
         top_k: int = 20,
         final_k: int = 5,
         use_bm25: bool = True,
         workspace: str | None = None,
+        acl_groups: list[str] | None = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Exécute le pipeline RAG complet.
@@ -84,11 +108,19 @@ class RAGPipeline:
             "timings": {}
         }
 
-        # 0. Soft Filtering
-        filters = self._extract_metadata_filters(query)
-        if filters:
-            logger.info(f"Filtres dynamiques extraits : {filters}")
-            debug_info["extracted_filters"] = filters
+        # 0. Query Routing info
+        intent = routing_info.get("intent", "exploratory")
+        filters = routing_info.get("filters", {})
+        confidence = routing_info.get("confidence", "ambiguous")
+        
+        strict_filter = None
+        if confidence == "high" and filters:
+            strict_filter = filters
+            logger.info(f"Application de filtres stricts : {strict_filter}")
+            debug_info["strict_filters"] = strict_filter
+        elif filters:
+            logger.info(f"Boost de métadonnées (confiance {confidence}) : {filters}")
+            debug_info["boost_filters"] = filters
 
         # 1. Embeddings (Dense)
         t0 = time.time()
@@ -145,6 +177,8 @@ class RAGPipeline:
                     query_vector=query_vector,
                     limit=dynamic_top_k,
                     collection_name=coll,
+                    metadata_filter=strict_filter,
+                    acl_groups=acl_groups,
                 ): coll for coll in final_collections
             }
             
@@ -170,8 +204,37 @@ class RAGPipeline:
         )
         debug_info["timings"]["reranking"] = round(time.time() - t0, 3)
         
-        # 4. Limiter à final_k résultats
-        final_results = reranked_results[:final_k]
+        # 4. Parent-Child Expansion & final_k
+        t0 = time.time()
+        expanded_results = []
+        for chunk in reranked_results[:final_k]:
+            meta = chunk.get("metadata", {})
+            attachment_id = meta.get("attachment_id")
+            uid = meta.get("uid")
+            
+            # Si le chunk provient d'une pièce jointe, on cherche le corps de l'email (le parent)
+            if attachment_id and attachment_id != "body" and uid:
+                coll = meta.get("collection", workspace.split(",")[0] if workspace else None)
+                if coll:
+                    try:
+                        parent_docs = self.vdb.search_by_metadata(
+                            collection_name=coll,
+                            metadata_filter={"uid": uid, "attachment_id": "body"},
+                            limit=1
+                        )
+                        if parent_docs:
+                            parent_text = parent_docs[0].get("text", "")
+                            # On enrichit le chunk avec le contexte de l'email parent
+                            chunk["metadata"]["extended_text"] = f"[Contexte Email Parent]\n{parent_text}\n\n[Extrait Pièce Jointe '{attachment_id}']\n{chunk.get('text', '')}"
+                            logger.info(f"Parent-Child Expansion réussie pour l'UID {uid} (enfant: {attachment_id})")
+                    except Exception as e:
+                        logger.error(f"Erreur lors de l'expansion Parent-Child pour l'UID {uid}: {e}")
+            
+            expanded_results.append(chunk)
+            
+        debug_info["timings"]["parent_child_expansion"] = round(time.time() - t0, 3)
+        final_results = expanded_results
+        
         debug_info["counts"]["reranked_total"] = len(reranked_results)
         debug_info["counts"]["final_results"] = len(final_results)
 

@@ -85,6 +85,7 @@ class ChatRequest(BaseModel):
     max_tokens: int = 1000
     history: Optional[List[Dict[str, str]]] = None  # Historique de conversation
     system_prompt: Optional[str] = None  # Custom system prompt per workspace
+    acl_groups: Optional[List[str]] = None  # Groupes ACL pour RBAC strict
 
 
 class ChatResponse(BaseModel):

@@ -308,7 +308,8 @@ class IngestionService:
 
         # 2. Objet ExtractedDocument pour le RAG Proxy
         
-        page_hash = hashlib.md5(cleaned_body.encode('utf-8')).hexdigest()
+        page_hash = hashlib.sha256(cleaned_body.encode('utf-8')).hexdigest()
+        thread_id = email.thread_id
         
         metadata = {
             "uid": str(email.uid),
@@ -318,7 +319,11 @@ class IngestionService:
             "workspace": workspace,
             "filename": body_filename,
             "acl": [workspace],
+            "attachment_id": "body",
         }
+        if thread_id:
+            metadata["thread_id"] = thread_id
+
         if self.config.archive_base_url:
             metadata["archive_url"] = f"{self.config.archive_base_url}/{secure_id}/{body_filename}"
         if email.to:
@@ -365,6 +370,13 @@ class IngestionService:
     # ------------------------------------------------------------------ #
     # Pièces jointes / analyse documentaire
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _compute_file_hash(file_path: str) -> str:
+        """Calcule le SHA-256 d'un fichier."""
+        import hashlib
+        with open(file_path, "rb") as f_bin:
+            return hashlib.sha256(f_bin.read()).hexdigest()
+
     def _process_attachments(
         self,
         email: ParsedEmail,
@@ -643,6 +655,9 @@ class IngestionService:
                 filename = Path(file_path).name
                 real_date = str(email.date or time.strftime("%Y-%m-%d %H:%M"))
                 
+                # Extraction du thread_id
+                thread_id = email.thread_id
+
                 metadata = {
                     "uid": str(email.uid),
                     "subject": email.subject,
@@ -651,7 +666,10 @@ class IngestionService:
                     "filename": filename,
                     "workspace": workspace,
                     "acl": [workspace],  # Par défaut, accès restreint au workspace
+                    "attachment_id": filename,
                 }
+                if thread_id:
+                    metadata["thread_id"] = thread_id
                 
                 # --- Ajout dynamique de l'année (Soft Filtering) ---
                 import re
@@ -695,8 +713,8 @@ class IngestionService:
                         page_metadata["quality_score"] = quality_score
                         page_metadata["extraction_method"] = method
                         page_metadata["vision_used"] = (method == "mixed")
-                        # Hash file direct sans paramètres pour les métadonnées (recherche)
-                        page_metadata["file_hash"] = self.cache_service.get_cache_key(file_path).split('_')[0]
+                        
+                        page_metadata["file_hash"] = self._compute_file_hash(file_path)
                         
                         result = self.ragproxy_client.ingest_document(
                             collection=workspace,
@@ -719,6 +737,8 @@ class IngestionService:
                             errors += 1
                 else:
                     # Ingestion classique (fichier entier)
+                    metadata["file_hash"] = self._compute_file_hash(file_path)
+
                     result = self.ragproxy_client.ingest_document(
                         collection=workspace,
                         text=text_content,
