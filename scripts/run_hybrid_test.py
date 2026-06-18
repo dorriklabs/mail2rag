@@ -61,17 +61,7 @@ class HybridTester:
                 print("\n" + "="*80)
                 print("🔄 RECONSTRUCTION GLOBALE BM25 (Synchronisation)")
                 print("="*80)
-                try:
-                    import requests
-                    rag_url = self.config.rag_proxy_url.rstrip("/")
-                    print(f"Appel de l'API : {rag_url}/admin/rebuild-all-bm25...")
-                    resp = requests.post(f"{rag_url}/admin/rebuild-all-bm25", timeout=120)
-                    if resp.status_code == 200:
-                        print(f"✅ BM25 rebuild OK : {resp.json()}")
-                    else:
-                        print(f"⚠️ Erreur BM25 rebuild : {resp.status_code} - {resp.text}")
-                except Exception as e:
-                    print(f"❌ Exception lors du rebuild BM25 : {e}")
+                print("✅ BM25 rebuild n'est plus nécessaire : géré nativement par Qdrant (Sparse Vectors).")
                 print("="*80 + "\n")
                 
             uid_counter += 1
