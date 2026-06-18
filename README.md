@@ -304,6 +304,27 @@ A robust scheduling manager for background tasks:
 
 ```
 
+### The Mail2RAG Pipeline
+
+The system operates in three distinct phases to guarantee high-precision answers:
+
+#### 1. Ingestion Phase
+- **Extraction**: Emails and attachments are fetched. Images and PDFs are processed via **Apache Tika** and **Vision AI** (for low-quality scans) to extract text and metadata.
+- **Dynamic Chunking**: Text is split into overlapping chunks. Chunk size dynamically adapts (smaller for emails, larger for PDFs) to preserve context.
+- **Vectorization**: Each chunk is embedded into dense vectors (semantic) and sparse vectors (BM25 lexical) using `bge-m3`.
+- **Storage**: Chunks and metadata are stored in **Qdrant**.
+
+#### 2. Retrieval Phase (RAG Proxy)
+- **Soft Filtering & HyDE**: The local LLM quickly analyzes the user's question to extract critical metadata (e.g., explicit years) and generates a hypothetical answer (HyDE) to enrich short queries.
+- **Hybrid Search**: Qdrant executes a combined Dense + Sparse search, returning the top candidates.
+- **Cross-Encoder Reranking**: A specialized model (`bge-reranker-v2-m3`) meticulously scores the top candidates against the query.
+- **Soft Filter Bonus**: Candidates matching the extracted metadata (e.g., the correct year) receive a mathematical score bonus (`+0.25`), pushing them to the top without risking data loss from hard filtering.
+
+#### 3. Generation Phase
+- **Security Check**: The system validates the conversation history and intercepts off-topic or malicious queries.
+- **Prompt Assembly**: The highest-ranked chunks are injected into the system prompt.
+- **LLM Generation**: The main LLM (e.g., Qwen) drafts a precise, factual answer based *only* on the provided context.
+
 ### Secure Architecture for Production (Dual Box Strategy)
 
 When deploying to a public environment (like a City Hall), **never connect the AI with full Chat/Ingestion permissions directly to the public inbox (`contact@...`)**. Instead, run two parallel Docker instances of Mail2RAG:
@@ -635,6 +656,27 @@ Mail2Rag gère désormais les conversations multi-tours à la perfection :
 ---
 
 ## 🏗️ Architecture
+
+### Le Pipeline Mail2RAG
+
+Le système fonctionne en trois phases distinctes pour garantir des réponses d'une haute précision :
+
+#### 1. Phase d'Ingestion
+- **Extraction** : Emails et pièces jointes sont récupérés. Les images et PDFs passent par **Apache Tika** et une **IA de Vision** pour en extraire le texte et les métadonnées.
+- **Chunking Dynamique** : Le texte est découpé en blocs avec chevauchement (taille adaptée selon le format : email ou PDF).
+- **Vectorisation** : Chaque bloc est transformé en vecteurs denses et creux (BM25) via `bge-m3`.
+- **Stockage** : Vecteurs et métadonnées sont enregistrés dans **Qdrant**.
+
+#### 2. Phase de Recherche (RAG Proxy)
+- **Soft Filtering & HyDE** : Le LLM analyse la question pour extraire des métadonnées critiques (ex: une année) et génère une réponse hypothétique pour enrichir sémantiquement les requêtes courtes.
+- **Recherche Hybride** : Qdrant croise la recherche sémantique et lexicale pour remonter les meilleurs candidats.
+- **Cross-Encoder Reranking** : Un modèle spécialisé (`bge-reranker-v2-m3`) re-note très précisément les candidats.
+- **Bonus Soft Filter** : Les documents correspondant aux métadonnées extraites (ex: la bonne année) reçoivent un bonus mathématique (`+0.25`), garantissant la première place sans risquer d'éliminer de l'information par un filtre strict.
+
+#### 3. Phase de Génération
+- **Sécurité** : Le système vérifie l'historique et bloque les questions hors-sujet.
+- **Assemblage** : Les meilleurs extraits (Top 5 reranké) sont injectés dans le prompt système.
+- **Génération LLM** : Le LLM principal (ex: Qwen) rédige une réponse factuelle, basée *uniquement* sur le contexte fourni.
 
 ### Architecture Sécurisée pour la Production (Stratégie à 2 Boîtes)
 
