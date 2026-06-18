@@ -39,7 +39,9 @@ class Evaluator:
                 "SUPPORT_SOCIAL_1": "La réponse doit mentionner de remplir un formulaire/cerfa et de s'adresser à la mairie ou au CCAS.",
                 "SUPPORT_SOCIAL_2": "La réponse doit proposer une aide financière/ponctuelle du CCAS et suggérer un rendez-vous avec une assistante sociale.",
                 "SUPPORT_SECU": "La réponse doit mentionner la limite de 22h, caractériser la situation de tapage nocturne/nuisances, et avertir d'une contravention/verbalisation de la police.",
-                "SUPPORT_ELEC": "La réponse doit rediriger vers le commissariat/police/gendarmerie avec une pièce d'identité."
+                "SUPPORT_ELEC": "La réponse doit rediriger vers le commissariat/police/gendarmerie avec une pièce d'identité.",
+                "SUPPORT_HORS_SUJET": "La réponse doit poliment refuser de répondre ou indiquer qu'elle n'a pas l'information dans sa base de connaissances, sans inventer de recette.",
+                "SUPPORT_CONVERSATION": "La réponse doit mentionner que pour une piscine, le permis de construire est obligatoire si le bassin excède 20m2."
             }
             
             if email_id not in expected_concepts:

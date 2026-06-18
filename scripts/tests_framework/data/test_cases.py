@@ -300,4 +300,18 @@ TEST_EMAILS = [
         "sender": "electeur.absent@dsiatlantic.com.com",
         "body": "Je serai en vacances lors du prochain scrutin. Comment puis-je donner procuration à mon frère ?",
     },
+    {
+        "id": "SUPPORT_HORS_SUJET",
+        "type": "Support (RAG)",
+        "subject": "Recette de cuisine",
+        "sender": "citoyen.curieux@dsiatlantic.com",
+        "body": "Bonjour, pouvez-vous me donner la vraie recette des crêpes bretonnes s'il vous plaît ?",
+    },
+    {
+        "id": "SUPPORT_CONVERSATION",
+        "type": "Support (RAG)",
+        "subject": "Re: Demande de PLU",
+        "sender": "citoyen.urba@dsiatlantic.com",
+        "body": "Merci pour la réponse sur l'abri de jardin. Et pour une piscine, c'est quoi la limite de taille avant de devoir faire un permis ?",
+    },
 ]
