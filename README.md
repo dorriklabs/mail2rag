@@ -38,7 +38,7 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.25) anti-perte de données, et tests E2E multi-tours / hors-sujet.
+> 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Dynamic metadata extraction (e.g., year) via LLM with Reranker bonus (+0.25) to prevent data loss, plus multi-turn and off-topic E2E tests.
 > ✅ **v3.36.0**: **HyDE & Dynamic Chunking** - Hypothetical Document Embeddings for short queries and dynamic chunk sizes (emails vs PDFs) for optimal precision.
 > ✅ **v3.35.0**: **Structured JSON Ingestion** - Emails encapsulated in ExtractedDocument format.
 > ✅ **v3.34.0**: **Optimized PDF Pipeline** - Page-by-page extraction, selective vision AI for low-quality scans.
@@ -507,8 +507,8 @@ Mail2RAG surveille votre boîte mail et **automatiquement** :
 1. 📥 Ingère emails + pièces jointes dans Qdrant (base vectorielle)
 2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking Cross-Encoder)
 3. 💬 Répond aux questions par email ou via le dashboard Streamlit
-
-> 🆕 **v3.36.0** : **HyDE & Chunking Dynamique** - Hypothetical Document Embeddings pour les requêtes courtes et tailles de blocs dynamiques (emails vs PDFs).
+> 🆕 **v3.37.0** : **Soft Filtering & Contexte Avancé** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.25) anti-perte de données, et tests E2E multi-tours / hors-sujet.
+> ✅ **v3.36.0** : **HyDE & Chunking Dynamique** - Hypothetical Document Embeddings pour les requêtes courtes et tailles de blocs dynamiques (emails vs PDFs).
 > ✅ **v3.35.0** : **Ingestion JSON Structurée** - Les emails sont encapsulés au format ExtractedDocument.
 ---
 
