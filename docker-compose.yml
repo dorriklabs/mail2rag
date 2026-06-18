@@ -18,7 +18,7 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      test: [ "CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,9 +31,9 @@ services:
     networks:
       - rag_net
 
-  # 3. TIKA (Document Text Extraction)
+  # 2. TIKA (Document Text Extraction)
   tika:
-    image: apache/tika:2.9.2.0-full # Avec Tesseract OCR
+    image: apache/tika:2.9.2.0-full
     container_name: mail2rag-tika
     ports:
       - "9120:9998"
@@ -48,7 +48,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # 2. RAG PROXY (FastAPI + Qdrant + BM25 + LM Studio)
+  # 3. RAG PROXY (FastAPI + Qdrant + BM25 + LM Studio)
   rag_proxy:
     build:
       context: ./ragproxy
@@ -60,26 +60,35 @@ services:
     environment:
       TZ: Europe/Paris
 
-      # LM Studio sur la machine hôte
-      LM_STUDIO_URL: "http://host.docker.internal:1234"
+      STATE_PATH: /app/state/state.json
+      ARCHIVE_PATH: /archive
 
-      # Modèle d'embedding (doit correspondre à celui chargé dans LM Studio)
+      HF_HOME: /models/huggingface
+      HF_HUB_CACHE: /models/huggingface/hub
+      SENTENCE_TRANSFORMERS_HOME: /models/sentence-transformers
+      FASTEMBED_CACHE_PATH: /models/fastembed
+
+      LM_STUDIO_URL: ${LM_STUDIO_URL:-http://host.docker.internal:1234}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+
       EMBED_MODEL: ${EMBED_MODEL:-text-embedding-bge-m3}
+      EMBEDDING_MODEL_PREF: ${EMBEDDING_MODEL_PREF:-text-embedding-bge-m3}
 
-      # Accès à Qdrant dans le réseau Docker
-      VECTOR_DB_HOST: "qdrant"
+      VECTOR_DB_HOST: qdrant
       VECTOR_DB_PORT: "6333"
-      VECTOR_DB_COLLECTION: "default-workspace"
+      VECTOR_DB_COLLECTION: ${VECTOR_DB_COLLECTION:-documents}
+      MULTI_COLLECTION_MODE: ${MULTI_COLLECTION_MODE:-true}
 
-      # BM25 index (optionnel)
-      BM25_INDEX: "/bm25/bm25.pkl"
-      USE_BM25: "true"
+      BM25_INDEX: /bm25/bm25.pkl
+      USE_BM25: ${USE_BM25:-true}
+      AUTO_REBUILD_BM25: ${AUTO_REBUILD_BM25:-true}
 
-      REQUEST_TIMEOUT: "20"
-      LOG_PATH: "/var/log/mail2rag/rag_proxy.log"
+      REQUEST_TIMEOUT: ${REQUEST_TIMEOUT:-20}
+      LOG_PATH: /var/log/mail2rag/rag_proxy.log
     volumes:
       - bm25_data:/bm25
       - mail2rag_archive:/archive
+      - ./model_cache:/models
       - ./scripts:/app/scripts:ro
       - ./state:/app/state
       - ./logs:/var/log/mail2rag
@@ -89,7 +98,7 @@ services:
       qdrant:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/openapi.json\")' || exit 1"]
+      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/openapi.json\")' || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -100,7 +109,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # 3. MAIL2RAG (Application Python par défaut)
+  # 4. MAIL2RAG (Application Python principale)
   mail2rag:
     build:
       context: ./mail2rag
@@ -110,20 +119,24 @@ services:
       - ./.env
     environment:
       TZ: Europe/Paris
+
+      STATE_PATH: /var/lib/mail2rag/state.json
+      ARCHIVE_PATH: /var/lib/mail2rag/mail2rag_archive
+      ROUTING_PATH: /etc/mail2rag/routing.json
+      PROMPTS_DIR: /etc/mail2rag/prompts
+
+      RAG_PROXY_URL: http://rag_proxy:8000
+      TIKA_SERVER_URL: http://tika:9998
+      ARCHIVE_BASE_URL: ${ARCHIVE_BASE_URL:-http://localhost:9102}
     volumes:
-      # Code source (dev hot-reload)
       - ./mail2rag:/app
-      # Routing configuration
+
       - ./routing.json:/etc/mail2rag/routing.json:ro
-      # Workspaces configuration
       - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json:ro
-      # Prompts directory
       - ./mail2rag/prompts:/etc/mail2rag/prompts:ro
-      # Logs
+
       - ./logs:/var/log/mail2rag
-      # State
       - ./state:/var/lib/mail2rag
-      # Archive (volume nommé)
       - mail2rag_archive:/var/lib/mail2rag/mail2rag_archive
     depends_on:
       qdrant:
@@ -140,37 +153,44 @@ services:
     networks:
       - rag_net
 
-  # 4. STREAMLIT ADMIN (Dashboard)
+  # 5. STREAMLIT ADMIN (Dashboard)
   streamlit_admin:
-    build: ./streamlit_admin
+    build:
+      context: ./streamlit_admin
+      dockerfile: Dockerfile
     container_name: streamlit_admin
+    env_file:
+      - ./.env
     ports:
       - "9101:8501"
     volumes:
-      # Code source (dev hot-reload)
       - ./streamlit_admin:/app
-      # Accès à l'archive pour suppression de dossiers
+
       - mail2rag_archive:/archive
-      # Etat persistant pour les utilisateurs
       - ./state:/state
-      # Configuration du routage dynamique
+
       - ./routing.json:/etc/mail2rag/routing.json
-      # Configuration des workspaces (prompts custom)
       - ./workspaces_config.json:/etc/mail2rag/workspaces_config.json
-      # Logs unifiés
+
       - ./logs:/var/log/mail2rag
     environment:
-      - RAG_PROXY_URL=http://rag_proxy:8000
-      - QDRANT_URL=http://qdrant:6333
-      - TIKA_URL=http://tika:9998
-      - LM_STUDIO_URL=http://host.docker.internal:1234
-      - ARCHIVE_PATH=/archive
-      - ARCHIVE_BASE_URL=${ARCHIVE_BASE_URL:-http://localhost:9102}
-      - ADMIN_NAME=${ADMIN_NAME:-Admin}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change_me_securely}
-      - COOKIE_KEY=${COOKIE_KEY:-some_random_secret_string}
-      - LOG_PATH=/var/log/mail2rag/admin.log
+      TZ: Europe/Paris
+
+      RAG_PROXY_URL: http://rag_proxy:8000
+      QDRANT_URL: http://qdrant:6333
+      TIKA_URL: http://tika:9998
+      LM_STUDIO_URL: ${LM_STUDIO_URL:-http://host.docker.internal:1234}
+
+      ARCHIVE_PATH: /archive
+      STATE_PATH: /state/state.json
+      LOG_PATH: /var/log/mail2rag/admin.log
+
+      ARCHIVE_BASE_URL: ${ARCHIVE_BASE_URL:-http://localhost:9102}
+
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change_me_securely}
+      COOKIE_KEY: ${COOKIE_KEY:-some_random_secret_string}
     depends_on:
       rag_proxy:
         condition: service_healthy
@@ -182,16 +202,14 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
-  # 5. ARCHIVE SERVER (NGINX)
+  # 6. ARCHIVE SERVER (NGINX)
   archive_server:
     image: nginx:1.25-alpine
     container_name: mail2rag_archive_server
     ports:
       - "9102:80"
     volumes:
-      # Custom Nginx configuration
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # Archive en lecture seule
       - mail2rag_archive:/usr/share/nginx/html:ro
     restart: unless-stopped
     networks:

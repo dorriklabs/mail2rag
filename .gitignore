@@ -20,6 +20,7 @@ mail2rag/archive/
 anythingllm_storage/
 qdrant_data/
 bm25_data/
+model_cache/
 
 # ============================================
 # PYTHON
@@ -66,6 +67,7 @@ tmp/
 temp/
 *.tmp
 
+# ============================================
 # Local environment overrides
-.env.*
+# ============================================
 docker-compose.override.yml

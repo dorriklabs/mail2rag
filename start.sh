@@ -15,14 +15,21 @@ sleep 5
 # --- CHARGEMENT DES MODELES ---
 # Vous pouvez modifier ici le nom exact des modèles selon ce qui est installé sur votre machine
 
-echo "🧠 Chargement du modèle de langage (Qwen) avec un contexte de 8192 tokens..."
+echo "🧠 Déchargement de tous les modeles de LM Studio"
+lms unload --all
+sleep 2
+
+echo "🧠 Chargement du modèle de langage (Qwen3-VL) avec un contexte de 6500 tokens..."
 # Le flag -c définit le contexte, -y valide automatiquement les choix
-lms load "qwen" -c 8192 -y
+lms load "qwen3-vl-4b" -c 6500 --gpu max --parallel 1 -y
 
 echo "📚 Chargement du modèle d'embedding (BGE-M3)..."
-lms load "bge-m3" -y
+lms load "text-embedding-bge-m3" --gpu max -y
 
 echo "🐳 Lancement des conteneurs Docker Mail2RAG..."
+docker compose down
 docker compose up -d
 
 echo "✅ Démarrage complet ! Mail2RAG est prêt et l'IA est chargée."
+
+nvidia-smi
