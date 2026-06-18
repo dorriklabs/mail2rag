@@ -473,6 +473,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz state/ .env routing.json
 - [x] Advanced Conversational RAG & Smart Query Rewriting
 - [x] Streamlit UI Source Grouping & Semantic Cache improvements
 - [x] End-to-End Hybrid Test Suite with Auto-Cleanup
+- [x] Intelligent & Idempotent Archive Resync (SHA-256 Hash, Test filtering, Dry-Run)
 - [ ] Webhook integrations
 - [ ] Slack/Teams connectors
 
@@ -719,6 +720,7 @@ EMBED_MODEL=text-embedding-bge-m3
 - [x] RAG Conversationnel Avancé & Reformulation (Few-Shot)
 - [x] UI : Regroupement visuel des sources par collection
 - [x] Suite de tests E2E Hybride avec auto-nettoyage Qdrant
+- [x] Resynchronisation intelligente et idempotente de l'archive (Hash SHA-256, filtrage des tests, Dry-Run)
 - [ ] Intégrations webhook
 - [ ] Connecteurs Slack/Teams
 
