@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-3.36.0-blue?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-3.37.0-blue?style=flat-square" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/FastAPI-RAG_Proxy-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
@@ -38,7 +38,8 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
-> 🆕 **v3.36.0**: **HyDE & Dynamic Chunking** - Hypothetical Document Embeddings for short queries and dynamic chunk sizes (emails vs PDFs) for optimal precision.
+> 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.25) anti-perte de données, et tests E2E multi-tours / hors-sujet.
+> ✅ **v3.36.0**: **HyDE & Dynamic Chunking** - Hypothetical Document Embeddings for short queries and dynamic chunk sizes (emails vs PDFs) for optimal precision.
 > ✅ **v3.35.0**: **Structured JSON Ingestion** - Emails encapsulated in ExtractedDocument format.
 > ✅ **v3.34.0**: **Optimized PDF Pipeline** - Page-by-page extraction, selective vision AI for low-quality scans.
 
