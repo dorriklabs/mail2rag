@@ -5,6 +5,15 @@
 
 echo "🔍 Recherche du conteneur Mail2Rag en cours d'exécution..."
 
+# Vérifie si LM Studio tourne sur le port 1234
+if ! curl -s http://localhost:1234/v1/models > /dev/null; then
+    echo "⚠️ ATTENTION : LM Studio ne semble pas être lancé sur le port 1234."
+    echo "Il est fortement recommandé d'exécuter './start.sh' avant de lancer ce script."
+    echo "Le test va continuer, mais les appels à l'IA (RAG, etc.) risquent d'échouer."
+    echo "--------------------------------------------------------------------------------"
+    sleep 3
+fi
+
 # On cherche en priorité l'instance "accueil" (qui contient le moteur principal), 
 # sinon on prend n'importe quelle instance mail2rag (sauf les services annexes)
 CONTAINER=$(docker ps --format '{{.Names}}' | grep -m 1 'mail2rag_accueil')
