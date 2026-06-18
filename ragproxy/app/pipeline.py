@@ -51,6 +51,7 @@ class RAGPipeline:
         payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 50}
         try:
             resp = self.embedder.http.post("/v1/chat/completions", payload)
+            logger.info(f"Raw Soft Filter Response: {resp}")
             c = resp.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
             if c.startswith("```json"): c = c.replace("```json", "", 1)
             if c.startswith("```"): c = c.replace("```", "", 1)
