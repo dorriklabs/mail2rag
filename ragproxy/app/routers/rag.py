@@ -59,10 +59,12 @@ def rag_endpoint(req: RequestModel):
 
     results, debug_info = pipeline.run(
         query=req.query,
+        routing_info={"intent": "exploratory", "filters": {}},
         top_k=req.top_k,
         final_k=req.final_k,
         use_bm25=use_bm25,
         workspace=req.workspace,
+        acl_groups=[]
     )
 
     return ResponseModel(

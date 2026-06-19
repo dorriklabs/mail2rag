@@ -103,9 +103,10 @@ Si aucun filtre n'est trouvé, mets "filters": {}."""
         """
         start_time = time.time()
         debug_info = {
-            "steps": {},
+            "query": query,
+            "timings": {},
             "counts": {},
-            "timings": {}
+            "intermediate_results": {}
         }
 
         # 0. Query Routing info
@@ -203,6 +204,10 @@ Si aucun filtre n'est trouvé, mets "filters": {}."""
             filters=filters
         )
         debug_info["timings"]["reranking"] = round(time.time() - t0, 3)
+        
+        # Tracking intermédiaire pour benchmark
+        debug_info["intermediate_results"]["pre_reranking_uids"] = [c.get("metadata", {}).get("uid") for c in merged_candidates]
+        debug_info["intermediate_results"]["post_reranking_uids"] = [c.get("metadata", {}).get("uid") for c in reranked_results]
         
         # 4. Parent-Child Expansion & final_k
         t0 = time.time()

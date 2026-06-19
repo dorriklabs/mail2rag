@@ -51,7 +51,14 @@ LLM_CHAT_TEMPERATURE = float(os.getenv("LLM_CHAT_TEMPERATURE", "0.1"))
 LLM_CHAT_MAX_TOKENS = int(os.getenv("LLM_CHAT_MAX_TOKENS", "1000"))
 LLM_CHAT_SYSTEM_PROMPT = os.getenv(
     "LLM_CHAT_SYSTEM_PROMPT",
-    "Tu es un assistant IA serviable. Réponds de manière concise et précise en te basant uniquement sur le contexte fourni."
+    "Tu es un assistant expert Mail2RAG. Ta mission est d'aider l'utilisateur en analysant ses documents et emails archivés.\n\n"
+    "RÈGLES STRICTES :\n"
+    "1. Réponds TOUJOURS en français.\n"
+    "2. Base tes réponses UNIQUEMENT sur le contexte fourni (les documents).\n"
+    "3. Si l'information est absente, dis \"Je ne trouve pas cette information dans vos documents\" (n'invente rien).\n"
+    "4. Sois précis et factuel. Utilise des listes à puces pour la clarté.\n"
+    "5. Cite TOUJOURS tes sources en utilisant la syntaxe exacte [Document X] à la fin de tes affirmations.\n"
+    "6. Sois EXHAUSTIF. Tu DOIS inclure absolument tous les prérequis, conditions, adresses, délais et démarches spécifiques mentionnés dans le contexte. N'omets aucun détail important."
 )
 
 # Limite de tokens pour le contexte (évite les dépassements de context window)
