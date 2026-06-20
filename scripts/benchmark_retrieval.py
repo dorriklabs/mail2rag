@@ -9,6 +9,8 @@ import os
 import requests
 import json
 import time
+import argparse
+import math
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -33,10 +35,43 @@ TARGET_MAPPING = {
     "SUPPORT_SOCIAL_2": 1017,  # INGEST_SOCIAL_CIBLE_2
     "SUPPORT_SECU": 1021,      # INGEST_SECU_CIBLE_1
     "SUPPORT_ELEC": 1012,      # INGEST_EC_CIBLE_2
-    "SUPPORT_CONVERSATION": 1001 # INGEST_URBA_CIBLE
+    "SUPPORT_CONVERSATION": 1001, # INGEST_URBA_CIBLE
+    # --- AMBIGUOUS ---
+    "AMBIGUOUS_1": 1001,
+    "AMBIGUOUS_2": 1011,
+    "AMBIGUOUS_3": 1006,
+    "AMBIGUOUS_4": 1016,
+    "AMBIGUOUS_5": 1017,
+    # --- TYPO ---
+    "TYPO_1": 1011,
+    "TYPO_2": 1021,
+    "TYPO_3": 1016,
+    "TYPO_4": 1001,
+    "TYPO_5": 1006,
+    # --- ENGLISH ---
+    "EN_1": 1001,
+    "EN_2": 1011,
+    "EN_3": 1021,
+    "EN_4": 1016,
+    "EN_5": 1006,
+    # --- CONVERSATIONAL ---
+    "CONV_1": 1016,
+    "CONV_2": 1011,
+    "CONV_3": 1007,
+    "CONV_4": 1018,
+    "CONV_5": 1021
 }
 
+# Map OOD to None meaning we expect abstention
+for i in range(1, 6):
+    TARGET_MAPPING[f"OOD_{i}"] = None
+
 def run_benchmark():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--export", type=str, help="Export results to JSON file")
+    parser.add_argument("--real-data", action="store_true", help="Use real staging data")
+    args = parser.parse_args()
+
     print("="*80)
     print("🎯 BENCHMARK RETRIEVAL (GOLDEN DATASET)")
     print("="*80)
@@ -47,7 +82,11 @@ def run_benchmark():
         "pre_reranking_hits": 0,
         "post_reranking_hits": 0,
         "mrr_post": 0.0,
+        "ndcg_post": 0.0,
+        "precision_k": 0.0,
         "parent_child_expansions": 0,
+        "abstentions": 0,
+        "ood_queries": 0,
         "total_child_tokens": 0,
         "total_parent_tokens": 0
     }
@@ -92,7 +131,7 @@ def run_benchmark():
     for email in TEST_EMAILS:
         if email["type"] == "Support (RAG)" and email["id"] in TARGET_MAPPING:
             query = email["body"]
-            target_uid = str(TARGET_MAPPING[email["id"]])
+            target_uid = str(TARGET_MAPPING[email["id"]]) if TARGET_MAPPING[email["id"]] else None
             
             # Determine workspace mapping for search
             workspace = "default-workspace"
@@ -121,9 +160,14 @@ def run_benchmark():
                     pre_uids = inter.get("pre_reranking_uids", [])
                     post_uids = inter.get("post_reranking_uids", [])
                     
-                    # Convert target to list of possible valid UIDs if needed
-                    hit_pre = target_uid in pre_uids
-                    hit_post = target_uid in post_uids
+                    if target_uid is None:
+                        metrics["ood_queries"] += 1
+                        if not post_uids or data.get("answer", "").startswith("Je ne"):
+                            metrics["abstentions"] += 1
+                        hit_pre = hit_post = False
+                    else:
+                        hit_pre = target_uid in pre_uids
+                        hit_post = target_uid in post_uids
                     
                     metrics["queries_tested"] += 1
                     if hit_pre:
@@ -133,6 +177,9 @@ def run_benchmark():
                         # Calculate MRR
                         rank = post_uids.index(target_uid) + 1
                         metrics["mrr_post"] += 1.0 / rank
+                        # Precision@3 and NDCG@3 (simplistic: rel=1 if target else 0)
+                        metrics["precision_k"] += 1.0 / len(post_uids) if len(post_uids) > 0 else 0.0
+                        metrics["ndcg_post"] += 1.0 / math.log2(rank + 1)
                         
                     # Ratio Parent-Child Bruit/Signal
                     for chunk in data.get("chunks", []):
@@ -204,11 +251,17 @@ def run_benchmark():
         recall_pre = (metrics["pre_reranking_hits"] / total) * 100
         recall_post = (metrics["post_reranking_hits"] / total) * 100
         mrr = metrics["mrr_post"] / total
+        ndcg = metrics["ndcg_post"] / total
+        prec = metrics["precision_k"] / total
+        abstention_rate = (metrics["abstentions"] / metrics["ood_queries"]) * 100 if metrics["ood_queries"] > 0 else 0
         
         print(f"Nombre de requêtes    : {total}")
         print(f"Recall@10 (Initial)   : {recall_pre:.1f}%")
         print(f"Recall@3 (Reranké)    : {recall_post:.1f}%")
         print(f"MRR (Post-Reranking)  : {mrr:.3f}")
+        print(f"NDCG@3                : {ndcg:.3f}")
+        print(f"Precision@3           : {prec:.3f}")
+        print(f"Taux d'abstention     : {abstention_rate:.1f}%")
         
         print("\n" + "-"*80)
         if metrics["parent_child_expansions"] > 0:
@@ -219,6 +272,24 @@ def run_benchmark():
             print("Expansions Parent-Child : Aucune détectée sur ce dataset (Normal si pas de PJ).")
             
         print(f"Test Citations LLM        : {'✅ PASS' if citation_passed else '❌ FAIL'} ({citation_reason})")
+
+        if args.export:
+            res_dict = {
+                "total_queries": total,
+                "recall_10": recall_pre,
+                "recall_3": recall_post,
+                "mrr": mrr,
+                "ndcg_3": ndcg,
+                "precision_3": prec,
+                "abstention_rate": abstention_rate
+            }
+            try:
+                os.makedirs(os.path.dirname(args.export), exist_ok=True)
+            except Exception:
+                pass
+            with open(args.export, "w") as f:
+                json.dump(res_dict, f, indent=4)
+            print(f"\nRésultats exportés vers {args.export}")
     else:
         print("Aucune requête traitée.")
 

@@ -38,6 +38,7 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
+> 🚀 **v4.2.0**: **Dynamic Soft Filtering** - Configurable metadata extraction (`RAG_ALLOWED_FILTERS`) and weighted reranking (`RAG_FILTER_WEIGHTS`), with automatic malus for obsolete documents.
 > 🚀 **v4.0.0**: **Architecture V4 (Enterprise RAG)** - Strict RBAC vector filtering, Parent-Child Retrieval (fetch email body when an attachment matches), AI Query Router (Factual vs Exploratory), and strict Answerability Checks (anti-hallucination).
 > 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Dynamic metadata extraction (e.g., year) via LLM with Reranker bonus (+0.10) to prevent data loss.
 > ✅ **v3.36.0**: **HyDE & Dynamic Chunking** - Hypothetical Document Embeddings for short queries and dynamic chunk sizes (emails vs PDFs) for optimal precision.
@@ -317,7 +318,7 @@ The system operates in three distinct phases to guarantee high-precision answers
 
 #### 2. Retrieval Phase (RAG Proxy)
 - **AI Query Router**: Categorizes queries into *factual* or *exploratory* intents to dynamically adjust the search pipeline.
-- **Soft Filtering & HyDE**: Analyzes the question to extract critical metadata (e.g., explicit years). HyDE is applied *only* to exploratory queries.
+- **Soft Filtering & HyDE**: Analyzes the question to extract critical metadata based on allowed filters (`RAG_ALLOWED_FILTERS`). HyDE is applied *only* to exploratory queries.
 - **Hybrid Search & Strict RBAC**: Qdrant executes a combined Dense + Sparse search with hard ACL filters to enforce workspace boundaries at the vector database level.
 - **Cross-Encoder Reranking**: A specialized model (`bge-reranker-v2-m3`) meticulously scores the top candidates against the query.
 - **Parent-Child Retrieval**: If a highly ranked chunk belongs to an attachment, the system automatically retrieves and appends its parent email body to provide full context.
@@ -530,6 +531,7 @@ Mail2RAG surveille votre boîte mail et **automatiquement** :
 1. 📥 Ingère emails + pièces jointes dans Qdrant (base vectorielle)
 2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking Cross-Encoder)
 3. 💬 Répond aux questions par email ou via le dashboard Streamlit
+> 🚀 **v4.2.0** : **Dynamic Soft Filtering** - Extraction de métadonnées configurable (`RAG_ALLOWED_FILTERS`) et pondération dynamique au reranking (`RAG_FILTER_WEIGHTS`), avec malus automatique pour les documents obsolètes.
 > 🚀 **v4.0.0** : **Architecture V4 (Enterprise RAG)** - Filtrage vectoriel RBAC strict, Parent-Child Retrieval (remontée du corps de l'email si une PJ matche), AI Query Router (Factuel vs Exploratoire), et Answerability Check strict (anti-hallucination).
 > 🆕 **v3.37.0** : **Soft Filtering & Contexte Avancé** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.10) anti-perte de données.
 > ✅ **v3.36.0** : **HyDE & Chunking Dynamique** - Hypothetical Document Embeddings pour les requêtes courtes et tailles de blocs dynamiques (emails vs PDFs).
@@ -672,7 +674,7 @@ Le système fonctionne en trois phases distinctes pour garantir des réponses d'
 
 #### 2. Phase de Recherche (RAG Proxy)
 - **AI Query Router** : Catégorise les requêtes (factuelles ou exploratoires) pour ajuster dynamiquement la stratégie de recherche.
-- **Soft Filtering & HyDE** : Le LLM extrait les métadonnées critiques. HyDE n'est activé que pour les requêtes exploratoires.
+- **Soft Filtering & HyDE** : Le LLM extrait les métadonnées critiques selon les filtres configurés (`RAG_ALLOWED_FILTERS`). HyDE n'est activé que pour les requêtes exploratoires.
 - **Recherche Hybride & RBAC Strict** : Qdrant croise la recherche sémantique et lexicale avec l'application stricte des ACL (Access Control Lists) dès la base de données.
 - **Cross-Encoder Reranking** : Un modèle spécialisé (`bge-reranker-v2-m3`) re-note très précisément les candidats.
 - **Parent-Child Retrieval** : Si un document sélectionné est une pièce jointe, le corps du mail parent est automatiquement récupéré pour enrichir le contexte.
