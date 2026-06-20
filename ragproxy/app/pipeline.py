@@ -56,12 +56,14 @@ Analyse la requête de l'utilisateur et détermine :
 1. L'intention : "factual" (recherche précise, chiffre, date, référence) ou "exploratory" (explication, procédure, comment faire).
 2. Les métadonnées : extrais les années, expéditeurs, {RAG_QUERY_ROUTER_EXTRA_PROMPT}.
 3. La confiance ("confidence") : "high" (mention claire/explicite), "probable" (déduite), "ambiguous" (vague ou contradictoire).
+4. La requête nettoyée ("clean_query") : Corrige impérativement les fautes d'orthographe (langage SMS, abréviations) et traduis la requête en français si elle est en anglais ou dans une autre langue.
 
 Renvoie UNIQUEMENT un JSON valide de ce format strict :
 {{
     "intent": "factual",
     "filters": {{"year": "2023", "doc_type": "procédure", "status": "validé"}},
-    "confidence": "high"
+    "confidence": "high",
+    "clean_query": "Requête corrigée et en français"
 }}
 Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 150}
@@ -77,6 +79,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
             intent = d.get("intent", "exploratory")
             filters = d.get("filters", {})
             confidence = d.get("confidence", "ambiguous")
+            clean_query = d.get("clean_query", query)
             
             clean_filters = {}
             y = filters.get("year") or filters.get("annee")
@@ -87,7 +90,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
                 if filters.get(key):
                     clean_filters[key] = str(filters.get(key)).lower()
                 
-            return {"intent": intent, "filters": clean_filters, "confidence": confidence}
+            return {"intent": intent, "filters": clean_filters, "confidence": confidence, "clean_query": clean_query}
         except Exception as e:
             logger.error(f"Query Router error: {e}")
             return {"intent": "exploratory", "filters": {}, "confidence": "ambiguous"}
@@ -118,6 +121,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         intent = routing_info.get("intent", "exploratory")
         filters = routing_info.get("filters", {})
         confidence = routing_info.get("confidence", "ambiguous")
+        clean_query = routing_info.get("clean_query", query)
         
         strict_filter = None
         if confidence == "high" and filters:
@@ -128,9 +132,12 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
             logger.info(f"Boost de métadonnées (confiance {confidence}) : {filters}")
             debug_info["boost_filters"] = filters
 
+        logger.info(f"Using Query: '{clean_query}' (Original: '{query}')")
+        debug_info["clean_query"] = clean_query
+
         # 1. Embeddings (Dense)
         t0 = time.time()
-        query_vector = self.embedder.embed(query)
+        query_vector = self.embedder.embed(clean_query)
         debug_info["timings"]["embedding"] = round(time.time() - t0, 3)
 
         # 2. Recherche Hybride (Qdrant) Multi-Collection
@@ -179,7 +186,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
             future_to_coll = {
                 executor.submit(
                     self.vdb.search,
-                    query_text=query,
+                    query_text=clean_query,
                     query_vector=query_vector,
                     limit=dynamic_top_k,
                     collection_name=coll,
@@ -204,7 +211,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         # 3. Reranking
         t0 = time.time()
         reranked_results = self.reranker.rerank(
-            query=query,
+            query=clean_query,
             passages=merged_candidates,
             filters=filters
         )

@@ -57,9 +57,12 @@ def rag_endpoint(req: RequestModel):
     if use_bm25 is None:
         use_bm25 = USE_BM25_DEFAULT
 
+    # Apply Query Router for intent, filters, and clean_query
+    routing_info = pipeline.query_router(req.query)
+
     results, debug_info = pipeline.run(
         query=req.query,
-        routing_info={"intent": "exploratory", "filters": {}},
+        routing_info=routing_info,
         top_k=req.top_k,
         final_k=req.final_k,
         use_bm25=use_bm25,

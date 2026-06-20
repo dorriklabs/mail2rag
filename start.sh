@@ -19,9 +19,9 @@ echo "🧠 Déchargement de tous les modeles de LM Studio"
 lms unload --all
 sleep 2
 
-echo "🧠 Chargement du modèle de langage (Qwen3-VL) avec un contexte de 6500 tokens..."
+echo "🧠 Chargement du modèle de langage (Qwen3-VL) avec un contexte de 5500 tokens..."
 # Le flag -c définit le contexte, -y valide automatiquement les choix
-lms load "qwen3-vl-4b" -c 6500 --gpu max --parallel 1 -y
+lms load "qwen3-vl-8b" -c 5500 --gpu max --parallel 1 -y
 
 echo "📚 Chargement du modèle d'embedding (BGE-M3)..."
 lms load "text-embedding-bge-m3" --gpu max -y

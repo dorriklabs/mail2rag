@@ -10,7 +10,7 @@ import logging
 import time
 
 import requests
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.config import (
     LM_STUDIO_URL,
@@ -118,7 +118,14 @@ async def chat(req: ChatRequest):
         
         # 0. Query Rewriting (Standalone Question Generator)
         standalone_query = req.query
+        
+        # Sanitisation de l'historique : bloquer toute injection de rôle système
         if req.history:
+            for msg in req.history:
+                if msg.get("role") == "system":
+                    from fastapi import HTTPException
+                    raise HTTPException(status_code=400, detail="Invalid role in history: system role is strictly forbidden.")
+                    
             rewrite_system_prompt = """Tu es un outil d'extraction de contexte. Ton SEUL but est de transformer une question dépendante du contexte en une question claire, complète et autonome.
 Remplace tous les pronoms ("il", "elle", "ce", "ça") et les références temporelles ("l'année prochaine", "avant") par les termes exacts de l'historique.
 NE DONNE JAMAIS LA RÉPONSE À LA QUESTION. Contente-toi de la reformuler.
@@ -163,11 +170,17 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
                 logger.warning(f"Failed to rewrite query, falling back to original: {e}")
         # 0.0 Prompt Injection Filter
         query_lower = standalone_query.lower()
-        is_injected = False
-        injection_keywords = ["ignore", "oublie", "instruction", "system", "prompt", "bypass", "override"]
-        if any(kw in query_lower for kw in injection_keywords) and len(standalone_query) > 15:
-            logger.warning(f"Possible prompt injection detected: {standalone_query}")
-            is_injected = True
+        injection_keywords = [
+            "ignore", "oublie", "instruction", "system", "prompt", 
+            "bypass", "override", "jailbreak", "hack", "réponds moi:",
+            "forget"
+        ]
+        # On calcule un score basique d'injection
+        injection_score = sum(1 for kw in injection_keywords if kw in query_lower)
+        if injection_score >= 1 or ("ignore" in query_lower and "instruction" in query_lower):
+            from fastapi import HTTPException
+            logger.warning(f"Prompt injection detected: {standalone_query}")
+            raise HTTPException(status_code=400, detail="Prompt injection detected. Request blocked.")
             
         # 0.1 Query Router
         routing_info = pipeline.query_router(standalone_query)
@@ -417,11 +430,14 @@ Instructions importantes :
             }
         )
         
+    except HTTPException as he:
+        # Relancer les exceptions HTTP (ex: 400 Bad Request pour injection/sécurité)
+        raise he
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}", exc_info=True)
         return ChatResponse(
             query=req.query,
-            answer=f"Une erreur s'est produite : {str(e)}",
+            answer="Désolé, je rencontre des difficultés techniques.",
             sources=[],
             debug_info={"error": str(e)}
         )
