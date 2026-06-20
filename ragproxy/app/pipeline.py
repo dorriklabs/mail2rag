@@ -49,22 +49,22 @@ class RAGPipeline:
         Classifie la requête (Factuelle vs Exploratoire) et extrait les filtres.
         """
         import json
-        from app.config import LLM_CHAT_MODEL
+        from app.config import LLM_CHAT_MODEL, RAG_ALLOWED_FILTERS, RAG_QUERY_ROUTER_EXTRA_PROMPT
         
-        prompt = """Tu es un Query Router pour un moteur RAG d'entreprise.
+        prompt = f"""Tu es un Query Router pour un moteur RAG d'entreprise.
 Analyse la requête de l'utilisateur et détermine :
 1. L'intention : "factual" (recherche précise, chiffre, date, référence) ou "exploratory" (explication, procédure, comment faire).
-2. Les métadonnées : extrais les années ou expéditeurs explicitement mentionnés.
+2. Les métadonnées : extrais les années, expéditeurs, {RAG_QUERY_ROUTER_EXTRA_PROMPT}.
 3. La confiance ("confidence") : "high" (mention claire/explicite), "probable" (déduite), "ambiguous" (vague ou contradictoire).
 
 Renvoie UNIQUEMENT un JSON valide de ce format strict :
-{
+{{
     "intent": "factual",
-    "filters": {"year": "2023"},
+    "filters": {{"year": "2023", "doc_type": "procédure", "status": "validé"}},
     "confidence": "high"
-}
-Si aucun filtre n'est trouvé, mets "filters": {}."""
-        payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 100}
+}}
+Si aucun filtre n'est trouvé, mets "filters": {{}}."""
+        payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 150}
         try:
             resp = self.embedder.http.post("/v1/chat/completions", payload)
             logger.info(f"Raw Query Router Response: {resp}")
@@ -78,11 +78,16 @@ Si aucun filtre n'est trouvé, mets "filters": {}."""
             filters = d.get("filters", {})
             confidence = d.get("confidence", "ambiguous")
             
+            clean_filters = {}
             y = filters.get("year") or filters.get("annee")
-            if y: filters = {"year": str(y)}
-            else: filters = {}
+            if y: clean_filters["year"] = str(y)
+            
+            # Application de la configuration dynamique pour les filtres autorisés
+            for key in RAG_ALLOWED_FILTERS:
+                if filters.get(key):
+                    clean_filters[key] = str(filters.get(key)).lower()
                 
-            return {"intent": intent, "filters": filters, "confidence": confidence}
+            return {"intent": intent, "filters": clean_filters, "confidence": confidence}
         except Exception as e:
             logger.error(f"Query Router error: {e}")
             return {"intent": "exploratory", "filters": {}, "confidence": "ambiguous"}

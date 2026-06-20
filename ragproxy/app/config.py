@@ -66,6 +66,29 @@ LLM_CHAT_SYSTEM_PROMPT = os.getenv(
 LLM_MAX_CONTEXT_TOKENS = int(os.getenv("LLM_MAX_CONTEXT_TOKENS", "6000"))
 
 # ---------------------------------------------------------------------------
+# SOFT FILTERING & METADATA CONFIGURATION
+# ---------------------------------------------------------------------------
+# Liste des filtres dynamiques supportés (séparés par des virgules)
+RAG_ALLOWED_FILTERS = [
+    f.strip() for f in os.getenv("RAG_ALLOWED_FILTERS", "doc_type,status").split(",") if f.strip()
+]
+
+# Instruction ajoutée au prompt du Query Router pour extraire ces métadonnées
+RAG_QUERY_ROUTER_EXTRA_PROMPT = os.getenv(
+    "RAG_QUERY_ROUTER_EXTRA_PROMPT",
+    "le type de document attendu (doc_type: facture, procédure, email, rapport, etc.) et le statut (status: validé, brouillon, officiel, obsolète)"
+)
+
+# Poids (bonus) accordés lors du reranking (format: key:weight,key:weight)
+_weights_str = os.getenv("RAG_FILTER_WEIGHTS", "doc_type:0.20,status:0.15,default:0.10")
+RAG_FILTER_WEIGHTS = {}
+for pair in _weights_str.split(","):
+    if ":" in pair:
+        k, v = pair.split(":")
+        RAG_FILTER_WEIGHTS[k.strip()] = float(v.strip())
+if "default" not in RAG_FILTER_WEIGHTS:
+    RAG_FILTER_WEIGHTS["default"] = 0.10
+# ---------------------------------------------------------------------------
 # LLM PROVIDER CONFIGURATION (LiteLLM Gateway)
 # ---------------------------------------------------------------------------
 # Provider: lmstudio (default), openai, anthropic
