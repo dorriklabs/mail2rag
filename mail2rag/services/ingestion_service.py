@@ -97,15 +97,16 @@ class IngestionService:
             # Corps nettoyé / éventuelle réécriture Q/R
             cleaned_body = self._prepare_body_for_ingestion(email, workspace)
 
-            # Résumé d'email (IA ou fallback simple)
-            email_summary = self._build_email_summary(email, cleaned_body)
+            # Intelligence documentaire (Résumé, Score, Type)
+            doc_intel = self._extract_document_intelligence(email, cleaned_body)
+            email_summary = doc_intel.get("summary")
 
             # Fichier texte principal (email) et document structuré
             body_path = self._write_email_body_file(
                 email=email,
                 workspace=workspace,
                 cleaned_body=cleaned_body,
-                email_summary=email_summary,
+                doc_intel=doc_intel,
                 secure_folder=secure_folder,
                 safe_subject=safe_subject,
                 secure_id=secure_id,
@@ -181,27 +182,34 @@ class IngestionService:
             )
             return self.cleaner.clean_body(email.body, subject=email.subject)
 
-    def _build_email_summary(
+    def _extract_document_intelligence(
         self,
         email: ParsedEmail,
         cleaned_body: str,
-    ) -> Optional[str]:
-        """Génère un résumé IA ou un aperçu simple."""
+    ) -> dict:
+        """Génère un résumé IA et qualifie la valeur métier du document."""
         if not cleaned_body:
-            return None
+            return {"summary": None, "business_value_score": 3, "document_type": "AUTRE"}
 
         if not self.config.enable_email_summary:
-            return self._extract_preview(cleaned_body)
+            return {
+                "summary": self._extract_preview(cleaned_body),
+                "business_value_score": 3,
+                "document_type": "AUTRE"
+            }
 
         try:
-            self.logger.info("📝 Génération résumé IA pour UID %s...", email.uid)
-            return self.support_qa_service.generate_email_summary(
+            return self.support_qa_service.analyze_document_intelligence(
                 subject=email.subject,
                 cleaned_body=cleaned_body,
             )
         except Exception as e:
-            self.logger.warning("⚠️ Échec génération résumé IA : %s", e)
-            return self._extract_preview(cleaned_body)
+            self.logger.warning("⚠️ Échec extraction intelligence documentaire : %s", e)
+            return {
+                "summary": self._extract_preview(cleaned_body),
+                "business_value_score": 3,
+                "document_type": "AUTRE"
+            }
 
     @staticmethod
     def _extract_preview(
@@ -273,7 +281,7 @@ class IngestionService:
         email: ParsedEmail,
         workspace: str,
         cleaned_body: str,
-        email_summary: Optional[str],
+        doc_intel: dict,
         secure_folder: Path,
         safe_subject: str,
         secure_id: str,
@@ -297,8 +305,10 @@ class IngestionService:
                 f.write(f"Message-ID : {email.message_id}\n")
             f.write(f"IMAP_UID : {email.uid}\n")
             f.write(f"Workspace : {workspace}\n")
-            if email_summary:
-                f.write(f"Résumé : {email_summary}\n")
+            if doc_intel.get("summary"):
+                f.write(f"Résumé : {doc_intel['summary']}\n")
+            f.write(f"Qualité Métier : {doc_intel.get('business_value_score', 3)}/5\n")
+            f.write(f"Type Document : {doc_intel.get('document_type', 'AUTRE')}\n")
             if email.is_synthetic:
                 f.write(
                     "Source : Email synthétique (Upload manuel)\n"
@@ -332,8 +342,12 @@ class IngestionService:
             metadata["cc"] = email.cc
         if email.message_id:
             metadata["message_id"] = email.message_id
-        if email_summary:
-            metadata["summary"] = email_summary
+        if doc_intel.get("summary"):
+            metadata["summary"] = doc_intel["summary"]
+            
+        metadata["business_value_score"] = doc_intel.get("business_value_score", 3)
+        metadata["document_type"] = doc_intel.get("document_type", "AUTRE")
+        
         if email.is_synthetic:
             metadata["is_synthetic"] = True
             

@@ -78,35 +78,11 @@ class SupportQAService:
         try:
             logger.info("🧠 Envoi de l'email de support au LLM pour réécriture Q/R...")
             
-            # Use LLMClient if gateway is enabled
-            if self.llm_client:
-                content = self.llm_client.chat(
-                    messages=messages,
-                    temperature=self.config.support_qa_temperature,
-                    max_tokens=self.config.support_qa_max_tokens,
-                    timeout=self.config.llm_timeout,
-                )
-            else:
-                # Direct HTTP for LM Studio
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.config.ai_api_key}",
-                }
-                payload = {
-                    "model": self.config.ai_model_name,
-                    "messages": messages,
-                    "temperature": self.config.support_qa_temperature,
-                    "max_tokens": self.config.support_qa_max_tokens,
-                }
-                resp = requests.post(
-                    self.config.ai_api_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=self.config.llm_timeout,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                content = data["choices"][0]["message"]["content"]
+            content = self._call_llm(
+                messages=messages,
+                temperature=self.config.support_qa_temperature,
+                max_tokens=self.config.support_qa_max_tokens,
+            )
             
             logger.info("✅ Réécriture Q/R support reçue.")
             return content
@@ -209,35 +185,11 @@ class SupportQAService:
         try:
             logger.info("📝 Génération résumé court de l'email...")
             
-            # Use LLMClient if gateway is enabled
-            if self.llm_client:
-                summary = self.llm_client.chat(
-                    messages=messages,
-                    temperature=0.1,
-                    max_tokens=self.config.summary_max_tokens,
-                    timeout=self.config.llm_timeout,
-                )
-            else:
-                # Direct HTTP for LM Studio
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.config.ai_api_key}",
-                }
-                payload = {
-                    "model": self.config.ai_model_name,
-                    "messages": messages,
-                    "temperature": 0.1,
-                    "max_tokens": self.config.summary_max_tokens,
-                }
-                resp = requests.post(
-                    self.config.ai_api_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=self.config.llm_timeout,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                summary = data["choices"][0]["message"]["content"].strip()
+            summary = self._call_llm(
+                messages=messages,
+                temperature=0.1,
+                max_tokens=self.config.summary_max_tokens,
+            ).strip()
             
             logger.info(f"✅ Résumé généré : {summary[:50]}...")
             return summary
@@ -247,3 +199,142 @@ class SupportQAService:
                 f"❌ Erreur lors de la génération du résumé : {e}", exc_info=True
             )
             raise
+
+    def analyze_document_intelligence(
+        self, subject: str, cleaned_body: str
+    ) -> dict:
+        """
+        Extrait l'intelligence documentaire d'un email (Résumé, Score, Type).
+
+        Returns:
+            dict: {
+                "summary": str,
+                "business_value_score": int (1-5),
+                "document_type": str
+            }
+        """
+        import json
+        logger.debug("SupportQAService.analyze_document_intelligence appelé.")
+
+        system_prompt = textwrap.dedent(
+            """
+        Tu es un expert en gestion documentaire. Ton rôle est d'analyser cet email et de l'indexer.
+        
+        RÈGLES :
+        - 'summary': Résume cet email en 2 phrases courtes et précises.
+        - 'business_value_score': Un entier entre 1 et 5.
+            5 = Document de référence officiel, procédure métier, arrêté
+            4 = Information importante, décision, note interne majeure
+            3 = Résolution de problème technique, discussion informative
+            2 = Échange courant, conversation métier sans grande valeur de référence
+            1 = Bruit, spam, remerciement, e-mail éphémère (ex: "Ok on se voit à 14h")
+        - 'document_type': Choisis exactement UNE catégorie parmi : PROCEDURE, DECISION, DISCUSSION, INFORMATIF, BRUIT, AUTRE.
+
+        FORMAT DE SORTIE :
+        Tu dois répondre UNIQUEMENT avec un objet JSON valide, sans markdown, avec la structure stricte suivante :
+        {
+          "summary": "...",
+          "business_value_score": 3,
+          "document_type": "DISCUSSION"
+        }
+        """
+        ).strip()
+
+        user_content = textwrap.dedent(
+            f"""
+        Analyse ce document :
+
+        Sujet : {subject or "Sans sujet"}
+
+        Corps :
+        {cleaned_body or "Aucun contenu"}
+        """
+        ).strip()
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
+
+        try:
+            logger.info("🧠 Extraction de l'intelligence documentaire (Qualité Métier)...")
+            
+            response = self._call_llm(
+                messages=messages,
+                temperature=0.1,
+                max_tokens=self.config.summary_max_tokens,
+                response_format={"type": "json_object"}
+            ).strip()
+            
+            # Clean possible markdown formatting
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+                
+            result = json.loads(response.strip())
+            
+            # Validation minimale
+            score = int(result.get("business_value_score", 3))
+            doc_type = str(result.get("document_type", "AUTRE")).upper()
+            summary = str(result.get("summary", ""))
+            
+            logger.info(f"✅ Intelligence documentaire extraite : Score={score}/5, Type={doc_type}")
+            return {
+                "summary": summary,
+                "business_value_score": score,
+                "document_type": doc_type
+            }
+
+        except Exception as e:
+            logger.error(
+                f"❌ Erreur lors de l'extraction de l'intelligence documentaire : {e}", exc_info=True
+            )
+            # Fallback sûr vers le résumé simple
+            return {
+                "summary": self.generate_email_summary(subject, cleaned_body),
+                "business_value_score": 3,
+                "document_type": "AUTRE"
+            }
+
+    def _call_llm(self, messages: list, temperature: float, max_tokens: int, response_format: dict = None) -> str:
+        """
+        Méthode centralisée pour appeler le LLM (Gateway ou LM Studio).
+        Respecte le principe DRY.
+        """
+        if self.llm_client:
+            kwargs = {
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "timeout": self.config.llm_timeout,
+            }
+            # Add response_format if provided and supported by LLMClient wrapper
+            if response_format:
+                # Assuming the LLMClient handles **kwargs passing for OpenAI compatibility
+                kwargs["response_format"] = response_format
+                
+            return self.llm_client.chat(**kwargs)
+        else:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.config.ai_api_key}",
+            }
+            payload = {
+                "model": self.config.ai_model_name,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if response_format:
+                payload["response_format"] = response_format
+                
+            resp = requests.post(
+                self.config.ai_api_url,
+                headers=headers,
+                json=payload,
+                timeout=self.config.llm_timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]

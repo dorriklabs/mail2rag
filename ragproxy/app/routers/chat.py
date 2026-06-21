@@ -277,7 +277,9 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
                 break
             
             filename = metadata.get("filename", "Inconnu")
-            context_parts.append(f"[Document {i+1} : {filename}]")
+            bvs = metadata.get("business_value_score", "N/A")
+            dtype = metadata.get("document_type", "AUTRE")
+            context_parts.append(f"[Document {i+1} : {filename} | Fiabilité: {bvs}/5 | Type: {dtype}]")
             context_parts.append(text)
             context_parts.append("")
             
@@ -297,7 +299,9 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
             text = first_chunk.get("text", "")[:max_chars]
             metadata = first_chunk.get("metadata", {})
             filename = metadata.get("filename", "Inconnu")
-            context_parts = [f"[Document 1 : {filename}]", text, ""]
+            bvs = metadata.get("business_value_score", "N/A")
+            dtype = metadata.get("document_type", "AUTRE")
+            context_parts = [f"[Document 1 : {filename} | Fiabilité: {bvs}/5 | Type: {dtype}]", text, ""]
             sources = [{
                 "text": text,
                 "score": first_chunk.get("score", 0.0),
@@ -427,7 +431,10 @@ Instructions importantes :
                 "usage": llm_usage,
                 "llm_duration": round(llm_duration, 2),
                 "tokens_per_sec": tokens_per_sec,
-                "max_context": LLM_MAX_CONTEXT_TOKENS
+                "max_context": LLM_MAX_CONTEXT_TOKENS,
+                "search_query": search_query,
+                "standalone_query": standalone_query,
+                "intent": intent
             }
         )
         

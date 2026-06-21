@@ -136,7 +136,7 @@ class SupportDraftService:
             query = self._build_query(email.subject, cleaned_body)
             
             # 3. Rechercher dans la KB
-            search_results, ai_response = self._search_and_generate(
+            search_results, ai_response, debug_info = self._search_and_generate(
                 query=query,
                 workspace=workspace,
                 ws_config=ws_config,
@@ -236,7 +236,7 @@ class SupportDraftService:
             cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
             query = self._build_query(email.subject, cleaned_body)
 
-            search_results, ai_response = self._search_and_generate(
+            search_results, ai_response, debug_info = self._search_and_generate(
                 query=query,
                 workspace=workspace,
                 ws_config=ws_config,
@@ -266,10 +266,28 @@ class SupportDraftService:
             import html
             import os
 
+            # Afficher la reformulation si elle existe
+            reformulation_html = ""
+            if debug_info:
+                standalone_query = debug_info.get("standalone_query")
+                search_query = debug_info.get("search_query")
+                
+                # Si le RAG Proxy a généré une standalone_query ou appliqué HyDE, le search_query peut différer
+                # On affiche la vraie question que le RAG a utilisé (standalone_query prioritaire, sinon search_query)
+                display_query = standalone_query if standalone_query else search_query
+                
+                if display_query and display_query != query:
+                    reformulation_html = f"""
+                    <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dotted #ced4da;">
+                        <strong>🔍 Question reformulée par l'IA :</strong> <em>"{html.escape(display_query)}"</em>
+                    </div>
+                    """
+
             # Construire l'encart HTML avec CSS inline
             html_content = f"""
             <div style="font-family: Arial, sans-serif; background-color: #f8f9fa; border: 1px solid #0d6efd; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
                 <h3 style="color: #0d6efd; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">🤖 Suggestion de réponse IA ({confidence_label})</h3>
+                {reformulation_html}
                 <div style="font-size: 14px; line-height: 1.5; color: #333; margin-bottom: 20px;">
                     {html.escape(ai_response.strip()).replace(chr(10), '<br>')}
                 </div>
@@ -389,7 +407,7 @@ class SupportDraftService:
         query: str,
         workspace: str,
         ws_config: Dict[str, Any],
-    ) -> Tuple[List[Dict], str]:
+    ) -> Tuple[List[Dict], str, Optional[Dict]]:
         """
         Recherche dans la KB et génère une réponse.
         
@@ -399,7 +417,7 @@ class SupportDraftService:
             ws_config: Configuration du workspace
             
         Returns:
-            (search_results, ai_response)
+            (search_results, ai_response, debug_info)
         """
         try:
             # Appeler le RAG Proxy pour recherche + génération
@@ -430,15 +448,16 @@ class SupportDraftService:
                 data = response.json()
                 sources = data.get("sources", [])
                 ai_response = data.get("answer", "")
+                debug_info = data.get("debug_info", {})
                 
-                return sources, ai_response
+                return sources, ai_response, debug_info
             else:
                 self.logger.warning(
                     "⚠️ RAG Proxy a répondu %s: %s",
                     response.status_code,
                     response.text[:200],
                 )
-                return [], ""
+                return [], "", None
                 
         except Exception as e:
             self.logger.error(
@@ -446,7 +465,7 @@ class SupportDraftService:
                 e,
                 exc_info=True,
             )
-            return [], ""
+            return [], "", None
 
     def _build_system_prompt(self, ws_config: Dict[str, Any]) -> str:
         """
