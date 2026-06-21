@@ -22,6 +22,7 @@ class MailInterceptor:
 
         def intercepted_forward_parsed_email(parsed_email, to_email, prefix_text=None, prefix_html=None, dynamic_attachments=None):
             sources = []
+            pure_ai_text = None
             if dynamic_attachments:
                 for filename, content, mimetype in dynamic_attachments:
                     if filename == "sources_ia.html" and content:
@@ -33,11 +34,27 @@ class MailInterceptor:
                             source_name = m[0] if m[0] else m[1]
                             if source_name and source_name not in sources:
                                 sources.append(source_name)
+                    elif filename == "reponse_ia.eml" and content:
+                        import email
+                        from email.policy import default
+                        eml_msg = email.message_from_bytes(content, policy=default)
+                        if eml_msg.is_multipart():
+                            for part in eml_msg.walk():
+                                if part.get_content_type() == 'text/plain':
+                                    pure_ai_text = part.get_content()
+                                    break
+                        else:
+                            pure_ai_text = eml_msg.get_content()
+
+            if pure_ai_text:
+                body_to_evaluate = pure_ai_text
+            else:
+                body_to_evaluate = f"Forwarded email with prefix: {prefix_text} / {prefix_html}"
 
             self.last_sent_email_data = {
                 "recipient": to_email,
                 "subject": parsed_email.subject,
-                "body": f"Forwarded email with prefix: {prefix_text} / {prefix_html}",
+                "body": body_to_evaluate,
                 "sources": sources
             }
             # Pour conserver les pièces jointes (le .msg/.eml et le html) tout en contournant 
