@@ -326,8 +326,8 @@ class SupportQAService:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
-            if response_format:
-                payload["response_format"] = response_format
+            # LM Studio returns 400 Bad Request for unsupported response_format with some models,
+            # so we only rely on the prompt instructions to enforce JSON output for the fallback.
                 
             resp = requests.post(
                 self.config.ai_api_url,
