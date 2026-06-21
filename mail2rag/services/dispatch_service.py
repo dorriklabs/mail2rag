@@ -51,7 +51,7 @@ class DispatchService:
 
         folders = list(mapping.keys())
         cleaned_body = self.cleaner.clean_body(email.body, subject=email.subject)
-        predicted_folder = self._predict_folder(email.subject, cleaned_body, folders)
+        predicted_folder = self._predict_folder(email.subject, cleaned_body, mapping)
         
         if not predicted_folder or predicted_folder.upper() == "INBOX":
             self.logger.debug("Dispatch IA : Email %s reste dans INBOX", email.uid)
@@ -61,7 +61,8 @@ class DispatchService:
         matched_folder = next((f for f in folders if f.lower() == predicted_folder.lower()), None)
             
         if matched_folder:
-            target_email = mapping[matched_folder]
+            target_data = mapping[matched_folder]
+            target_email = target_data.get("target") if isinstance(target_data, dict) else target_data
             self.logger.info("🎯 Dispatch IA : Transfert UID %s vers %s (%s)", email.uid, matched_folder, target_email)
             
             # 1. Générer une suggestion IA si le service est disponible
@@ -142,12 +143,20 @@ class DispatchService:
         )
         return False
 
-    def _predict_folder(self, subject: str, body: str, folders: list[str]) -> str:
+    def _predict_folder(self, subject: str, body: str, mapping: dict) -> str:
+        folders_desc = []
+        for f, data in mapping.items():
+            if isinstance(data, dict) and "description" in data:
+                folders_desc.append(f"- {f} : {data['description']}")
+            else:
+                folders_desc.append(f"- {f}")
+        folders_list = "\n".join(folders_desc)
+        
         prompt = (
             "Tu es un assistant de tri strict et précis.\n"
-            f"Ton rôle est de classer le mail suivant dans l'un de ces dossiers : {', '.join(folders)}, ou INBOX s'il ne correspond à aucun d'entre eux.\n"
+            f"Ton rôle est de classer le mail suivant dans l'un de ces dossiers :\n{folders_list}\n\n"
             "Tu dois répondre UNIQUEMENT avec le nom exact du dossier, sans guillemets, sans politesse et sans ponctuation.\n"
-            "(Indice: Les demandes liées aux élections et procurations vont dans Etat-Civil).\n\n"
+            "Si le mail ne correspond à aucun de ces dossiers, réponds INBOX.\n\n"
             f"Sujet : {subject}\n"
             f"Message : {body[:1500]}"
         )

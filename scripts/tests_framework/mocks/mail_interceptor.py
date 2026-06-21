@@ -21,10 +21,24 @@ class MailInterceptor:
             return self.original_send_reply(to_email, subject, body, is_html, original_message_id)
 
         def intercepted_forward_parsed_email(parsed_email, to_email, prefix_text=None, prefix_html=None, dynamic_attachments=None):
+            sources = []
+            if dynamic_attachments:
+                for filename, content, mimetype in dynamic_attachments:
+                    if filename == "sources_ia.html" and content:
+                        import re
+                        # Extract filenames from the generated sources_html
+                        html_str = content.decode("utf-8", errors="ignore")
+                        matches = re.findall(r"<span class='source-title'>([^<]+)</span>|<a[^>]+class='source-title'[^>]*>([^<]+)</a>", html_str)
+                        for m in matches:
+                            source_name = m[0] if m[0] else m[1]
+                            if source_name and source_name not in sources:
+                                sources.append(source_name)
+
             self.last_sent_email_data = {
                 "recipient": to_email,
                 "subject": parsed_email.subject,
-                "body": f"Forwarded email with prefix: {prefix_text} / {prefix_html}"
+                "body": f"Forwarded email with prefix: {prefix_text} / {prefix_html}",
+                "sources": sources
             }
             # Pour conserver les pièces jointes (le .msg/.eml et le html) tout en contournant 
             # l'anti-spam SMTP, on remplace temporairement l'adresse @gmail.com par une adresse locale.

@@ -4,39 +4,80 @@ class HtmlReporter:
 
     def generate_and_send(self, results):
         report_lines = []
-        report_lines.append("\n" + "="*140)
+        report_lines.append("\n" + "="*120)
         report_lines.append("📊 BILAN SYNTHETIQUE QA - MAIL2RAG")
-        report_lines.append("="*140)
+        report_lines.append("="*120)
+        
+        GREEN = "\033[92m"
+        RED = "\033[91m"
+        YELLOW = "\033[93m"
+        RESET = "\033[0m"
+        BOLD = "\033[1m"
         
         # Entête du tableau
-        header = f"| {'ID':<15} | {'Type':<15} | {'Sujet':<23} | {'Routage Cible':<25} | {'Latence':<10} | {'Note':<8} | {'Remarque':<20}"
+        header = f"| {'ID':<15} | {'Type':<13} | {'Sujet':<20} | {'Routage Cible':<25} | {'Latence':<8} | {'Note':<5} | {'Remarque':<40}"
         report_lines.append(header)
-        report_lines.append("-" * len(header))
+        report_lines.append("-" * 120)
         
         rag_tests = 0
         rag_success = 0
         total_score = 0
+        failures = []
         
         for r in results:
-            row = f"| {r['id']:<15} | {r['type']:<15} | {r['subject']:<23} | {r['target']:<25} | {r['latency']:<10} | {r['note']:<8} | {r['remarque']:<20}"
-            report_lines.append(row)
+            note_str = str(r['note']).strip()
+            color = RESET
             
-            # Calcul des statistiques (uniquement pour les tests qui ont reçu une note)
-            if r['note'] != "N/A" and r['note'] != "-":
+            if note_str != "N/A" and note_str != "-":
                 try:
-                    score = int(r['note'].split('/')[0])
+                    score = int(note_str.split('/')[0])
                     rag_tests += 1
                     total_score += score
                     if score >= 7:
                         rag_success += 1
+                        color = GREEN
+                    elif score >= 4:
+                        color = YELLOW
+                    else:
+                        color = RED
+                        failures.append(r)
                 except:
                     pass
-        
-        report_lines.append("="*140)
+            elif note_str == "-":
+                color = "\033[94m" # Blue for ingestion
+            
+            subj = str(r['subject'])[:20].ljust(20)
+            target = str(r['target'])[:25].ljust(25)
+            remarque = str(r['remarque'])[:38].ljust(38) + (".." if len(str(r['remarque'])) > 38 else "")
+            note_val = note_str[:5].ljust(5)
+            lat = str(r['latency'])[:8].ljust(8)
+            
+            row = f"| {r['id']:<15} | {r['type']:<13} | {subj} | {target} | {lat} | {color}{note_val}{RESET} | {remarque}"
+            report_lines.append(row)
+            
+        report_lines.append("="*120)
+        if failures:
+            report_lines.append(f"\n{RED}{BOLD}❌ SCÉNARIOS EN ÉCHEC (À ANALYSER POUR AMÉLIORATION){RESET}")
+            report_lines.append("-" * 120)
+            for f in failures:
+                report_lines.append(f"🔴 {BOLD}{f['id']}{RESET} ({f['type']})")
+                report_lines.append(f"   Sujet    : {f['subject']}")
+                report_lines.append(f"   Cible    : {f['target']}")
+                report_lines.append(f"   Note     : {RED}{f['note']}{RESET}")
+                
+                sources_str = ", ".join(f.get('sources', [])) if f.get('sources') else "Aucune"
+                report_lines.append(f"   Sources  : {sources_str}")
+                
+                report_lines.append(f"   Remarque : {f['remarque']}")
+                report_lines.append("-" * 80)
+            report_lines.append("="*120)
+            
         if rag_tests > 0:
-            report_lines.append(f"🎯 TAUX DE RÉUSSITE RAG : {rag_success}/{rag_tests} scénarios valides ({(rag_success/rag_tests)*100:.1f}%)")
-            report_lines.append(f"⭐ NOTE MOYENNE : {total_score/rag_tests:.1f}/10")
-        report_lines.append("="*140 + "\n")
+            success_rate = (rag_success/rag_tests)*100
+            rate_color = GREEN if success_rate >= 80 else YELLOW if success_rate >= 50 else RED
+            report_lines.append(f"🎯 TAUX DE RÉUSSITE RAG : {rate_color}{rag_success}/{rag_tests} scénarios valides ({success_rate:.1f}%){RESET}")
+            report_lines.append(f"⭐ NOTE MOYENNE : {rate_color}{total_score/rag_tests:.1f}/10{RESET}")
+        report_lines.append("="*120 + "\n")
         
         report_text = "\n".join(report_lines)
         print(report_text)

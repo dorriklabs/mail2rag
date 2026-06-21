@@ -61,12 +61,30 @@
     "semantic_dispatch": {
         "enabled": true,
         "mapping": {
-            "Urbanisme": "urba@dsiatlantic.com",
-            "Etat-Civil": "etat-civil@dsiatlantic.com",
-            "Police": "police@dsiatlantic.com",
-            "Social": "social@dsiatlantic.com",
-            "Associations": "social@dsiatlantic.com",
-            "Voirie": "voirie@dsiatlantic.com"
+            "Urbanisme": {
+                "target": "urba@dsiatlantic.com",
+                "description": "Permis de construire, PLU, abris de jardin, piscines privées, règles d'urbanisme"
+            },
+            "Etat-Civil": {
+                "target": "etat-civil@dsiatlantic.com",
+                "description": "Passeports, cartes d'identité, naissances, mariages, procurations élections"
+            },
+            "Police": {
+                "target": "police@dsiatlantic.com",
+                "description": "Sécurité, ordre public, infractions, tapage nocturne, nuisances sonores, bruit, stationnement"
+            },
+            "Social": {
+                "target": "social@dsiatlantic.com",
+                "description": "Aides sociales, CCAS, logement HLM, petite enfance, cantine, crèche"
+            },
+            "Associations": {
+                "target": "social@dsiatlantic.com",
+                "description": "Réservation de salles, subventions, vie associative"
+            },
+            "Voirie": {
+                "target": "voirie@dsiatlantic.com",
+                "description": "Routes, nids de poule, trottoirs, propreté urbaine, ramassage ordures et encombrants"
+            }
         }
     }
 }

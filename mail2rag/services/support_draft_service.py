@@ -169,7 +169,11 @@ class SupportDraftService:
             message_id = self._extract_message_id(email.email_data)
             
             # Récupérer l'adresse du service cible depuis le ws_config ou routing.json
-            service_email = ws_config.get("target_email") or self.router.semantic_dispatch_mapping.get(workspace)
+            mapping_val = self.router.semantic_dispatch_mapping.get(workspace)
+            if isinstance(mapping_val, dict):
+                service_email = ws_config.get("target_email") or mapping_val.get("target")
+            else:
+                service_email = ws_config.get("target_email") or mapping_val
             
             success = self.draft_service.create_draft(
                 to_email=email.sender,

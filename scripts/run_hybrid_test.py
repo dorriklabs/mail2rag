@@ -27,14 +27,29 @@ from tests_framework.mocks.mail_interceptor import MailInterceptor
 from tests_framework.evaluation.evaluator import Evaluator
 from tests_framework.reporting.html_reporter import HtmlReporter
 
+class IndentFormatter(logging.Formatter):
+    def format(self, record):
+        msg = record.getMessage()
+        return "\n".join(f"  ├─ {line}" for line in msg.split("\n"))
+
 class HybridTester:
     def __init__(self):
         self.config = Config()
+        # Désactiver les notifications sortantes pendant les tests
+        self.config.teams_webhook_url = None
+        self.config.slack_webhook_url = None
+        self.config.google_chat_webhook_url = None
         
         # Mettre un log level moins bavard pour le test
         self.logger = logging.getLogger("HybridTest")
         self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False  # Évite la duplication des logs
+        
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
+            
         handler = logging.StreamHandler()
+        handler.setFormatter(IndentFormatter())
         self.logger.addHandler(handler)
         
         # Construire le contexte interne de l'application
@@ -100,32 +115,28 @@ class HybridTester:
                 ingest = self.context["ingestion_service"]
                 
                 target_ws = router.determine_workspace(parsed.email_data) or "default-workspace"
-                print(f"DEBUG: target_workspace = {target_ws}")
-                print(f"DEBUG: semantic_dispatch_enabled = {router.semantic_dispatch_enabled}")
                 
                 if email_data["type"] == "Ingestion":
                     # Force l'ingestion sans passer par le Dispatch Sémantique
                     ingest.ingest_email(parsed)
                     ingested_uids[uid_counter] = target_ws
-                    print("⏳ Pause de 2s pour laisser le temps à Qdrant d'indexer...")
+                    print("  ├─ ⏳ Pause de 2s pour laisser le temps à Qdrant d'indexer...")
                     time.sleep(2)
                 elif is_diagnostic_email(parsed.subject):
                     diag.run_diagnostic(parsed)
                 elif is_chat_email(parsed.subject):
                     chat.handle_chat(parsed)
                 elif router.semantic_dispatch_enabled and dispatch and dispatch.handle_dispatch(parsed):
-                    print("DEBUG: handled by dispatch")
+                    pass # Handled by semantic dispatch
                 elif support and is_support_draft_mode(parsed, router, self.config):
-                    print("DEBUG: handled by support_draft_mode")
                     support.handle_support_request(parsed)
                 else:
-                    print("DEBUG: fallback to ingest")
                     ingest.ingest_email(parsed)
                     ingested_uids[uid_counter] = target_ws
-                    
+            
             except Exception as e:
                 self.logger.error(f"Erreur lors du traitement : {e}")
-                print(f"EXCEPTION SWALLOWED: {e}")
+                print(f"  ├─ EXCEPTION SWALLOWED: {e}")
                 
             latency = time.time() - start_time
             
@@ -133,6 +144,7 @@ class HybridTester:
             target_email = "Non intercepté"
             note = "N/A"
             remarque = "Pas d'envoi SMTP détecté"
+            sources = []
             
             if email_data["type"] == "Ingestion":
                 note = "-"
@@ -140,6 +152,7 @@ class HybridTester:
             
             if self.interceptor.last_sent_email_data:
                 target_email = self.interceptor.last_sent_email_data['recipient']
+                sources = self.interceptor.last_sent_email_data.get('sources', [])
                 eval_result = Evaluator.evaluate_with_llm(email_data['id'], email_data['body'], self.interceptor.last_sent_email_data['body'])
                 note = eval_result['note']
                 remarque = eval_result['remarque']
@@ -151,10 +164,11 @@ class HybridTester:
                 "target": target_email,
                 "latency": f"{latency:.2f}s",
                 "note": note,
-                "remarque": remarque
+                "remarque": remarque,
+                "sources": sources
             })
             
-            print(f"✅ Terminé en {latency:.2f}s\n")
+            print(f"  └─ ✅ Terminé en {latency:.2f}s\n")
             
         # Appel du reporter
         reporter = HtmlReporter(self.interceptor.original_send_reply)
@@ -166,17 +180,19 @@ class HybridTester:
 
             def cleanup_test_documents():
                 print("\n" + "="*80)
-                print("🧹 NETTOYAGE DES DOCUMENTS DE TEST")
-                print("="*80)
+                print(f"🧹 NETTOYAGE DE {len(ingested_uids)} DOCUMENTS DE TEST...")
                 
+                success_count = 0
+                error_count = 0
                 for uid, ws in ingested_uids.items():
                     try:
-                        print(f"🧹 Suppression du document de test UID {uid} dans {ws}...")
                         rag_proxy.delete_document(str(uid), ws)
-                        print(f"✅ Document UID {uid} supprimé avec succès.")
+                        success_count += 1
                     except Exception as e:
-                        print(f"Erreur suppression UID {uid} : {e}")
+                        print(f"❌ Erreur suppression UID {uid} : {e}")
+                        error_count += 1
                         
+                print(f"✅ Nettoyage terminé : {success_count} supprimés, {error_count} erreurs.")
                 print("="*80)
                 
             # Enregistrement du gestionnaire de signaux pour nettoyage propre en cas de Ctrl+C
