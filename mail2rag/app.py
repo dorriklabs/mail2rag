@@ -95,6 +95,18 @@ def is_sender_allowed(sender: str, allowed_domains: set) -> bool:
     return domain in allowed_domains
 
 
+def is_internal_sender(sender: str, imap_user: str) -> bool:
+    """Retourne True si l'expéditeur appartient au même domaine que l'adresse de réception (interne)."""
+    if not sender or not imap_user or '@' not in sender or '@' not in imap_user:
+        return False
+    try:
+        sender_domain = sender.rsplit('@', 1)[1].lower()
+        internal_domain = imap_user.rsplit('@', 1)[1].lower()
+        return sender_domain == internal_domain
+    except IndexError:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -378,8 +390,11 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                     # Mode Support Draft : génère un brouillon
                     support_draft_service.handle_support_request(parsed_email)
                 else:
-                    # Mode Ingestion standard
-                    ingestion_service.ingest_email(parsed_email)
+                    # Mode Ingestion standard restreint aux internes
+                    if is_internal_sender(parsed_email.sender, config.imap_user):
+                        ingestion_service.ingest_email(parsed_email)
+                    else:
+                        logger.info("Email non routable d'un expéditeur externe (%s) ignoré pour l'ingestion.", parsed_email.sender)
             except Exception as e:
                 # Les services internes gèrent déjà la plupart des exceptions
                 logger.error(

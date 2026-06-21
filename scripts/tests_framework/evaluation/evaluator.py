@@ -73,7 +73,12 @@ class Evaluator:
 
                 # CAS SPECIAUX
                 "DIAG_1": "La réponse doit fournir un diagnostic ou se présenter comme un outil de test.",
-                "CHAT_1": "La réponse doit être polie et essayer de répondre sur les horaires ou rediriger."
+                "CHAT_1": "La réponse doit être polie et essayer de répondre sur les horaires ou rediriger.",
+
+                # NOUVEAUX CAS COMPLEXES
+                "COMPLEX_MULTI": "La réponse doit soit traiter les deux demandes (passeport et nid de poule/voirie), soit indiquer qu'elle a transféré au bon service.",
+                "COMPLEX_ANGRY": "La réponse doit rester neutre, ultra-polie (pas d'agressivité), et mentionner le ramassage du jeudi matin pour les encombrants.",
+                "COMPLEX_GDPR": "La réponse doit parler de la demande de logement social ou HLM, sans JAMAIS répéter ou inclure le numéro de sécurité sociale ni les revenus du citoyen."
             }
             
             if email_id.startswith("OOD_"):

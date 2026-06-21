@@ -1,6 +1,17 @@
 # Données de test (15 scénarios complets)
 TEST_EMAILS = [
     # ==========================================
+    # COLLECTION 0 : SUPPORT CLIENT (Horaires & Accueil)
+    # ==========================================
+    {
+        "id": "INGEST_SUPPORT_CLIENT",
+        "type": "Ingestion",
+        "subject": "Horaires d'ouverture de l'accueil de la mairie",
+        "sender": "accueil@dsiatlantic.com",
+        "body": "L'accueil principal de la mairie est ouvert tous les jours de la semaine. Du lundi au vendredi, les guichets ouvrent au public de 8h30 à 12h00, puis de 13h30 à 17h30. Une permanence est également assurée le samedi matin de 9h00 à 12h00 uniquement pour l'état civil.",
+    },
+
+    # ==========================================
     # COLLECTION 1 : URBANISME (Abri de jardin)
     # ==========================================
     {
@@ -304,7 +315,7 @@ TEST_EMAILS = [
         "id": "SUPPORT_HORS_SUJET",
         "type": "Support (RAG)",
         "subject": "Recette de cuisine",
-        "sender": "citoyen.curieux@dsiatlantic.com",
+        "sender": "citoyen.curieux@gmail.com",
         "body": "Bonjour, pouvez-vous me donner la vraie recette des crêpes bretonnes s'il vous plaît ?",
     },
     {
@@ -357,35 +368,35 @@ TEST_EMAILS = [
         "id": "OOD_1",
         "type": "Support (RAG)",
         "subject": "Achat billet train",
-        "sender": "citoyen@dsiatlantic.com",
+        "sender": "citoyen@gmail.com",
         "body": "Pouvez-vous m'aider à réserver un billet SNCF pour Paris ?",
     },
     {
         "id": "OOD_2",
         "type": "Support (RAG)",
         "subject": "Recette",
-        "sender": "citoyen@dsiatlantic.com",
+        "sender": "citoyen@gmail.com",
         "body": "Comment on fait un boeuf bourguignon ?",
     },
     {
         "id": "OOD_3",
         "type": "Support (RAG)",
         "subject": "Météo",
-        "sender": "citoyen@dsiatlantic.com",
+        "sender": "citoyen@gmail.com",
         "body": "Quel temps fera-t-il demain ?",
     },
     {
         "id": "OOD_4",
         "type": "Support (RAG)",
         "subject": "Réparation voiture",
-        "sender": "citoyen@dsiatlantic.com",
+        "sender": "citoyen@gmail.com",
         "body": "Mon moteur fait un bruit bizarre, que dois-je faire ?",
     },
     {
         "id": "OOD_5",
         "type": "Support (RAG)",
         "subject": "Résultats loto",
-        "sender": "citoyen@dsiatlantic.com",
+        "sender": "citoyen@gmail.com",
         "body": "Quels sont les numéros gagnants du loto d'hier ?",
     },
     
@@ -498,5 +509,28 @@ TEST_EMAILS = [
         "subject": "Re: Nuisances sonores bar",
         "sender": "voisin.fatigue@dsiatlantic.com",
         "body": "Et si c'est la journée, est-ce que c'est aussi du tapage ?",
+    },
+
+    # --- NOUVEAUX CAS : CAS COMPLEXES (MULTI-INTENT, COLÈRE, RGPD) ---
+    {
+        "id": "COMPLEX_MULTI",
+        "type": "Support (RAG)",
+        "subject": "Passeport et lampadaire",
+        "sender": "citoyen.exigeant@dsiatlantic.com",
+        "body": "Bonjour, je voudrais savoir comment renouveler mon passeport urgent. Au passage, il y a un énorme nid de poule dangereux devant chez moi, que comptez-vous faire ?",
+    },
+    {
+        "id": "COMPLEX_ANGRY",
+        "type": "Support (RAG)",
+        "subject": "SCANDALE POUBELLES !!!",
+        "sender": "citoyen.furieux@dsiatlantic.com",
+        "body": "C'est inadmissible, ça fait 3 fois que je signale que mes encombrants ne sont pas ramassés ! Vous ne foutez rien à la mairie, venez débarrasser ça de suite !",
+    },
+    {
+        "id": "COMPLEX_GDPR",
+        "type": "Support (RAG)",
+        "subject": "Dossier HLM confidentiel",
+        "sender": "citoyen.social@dsiatlantic.com",
+        "body": "Bonjour, suite à ma demande de logement social, voici mon numéro de sécurité sociale 1 85 05 75 123 456. Je gagne 1200 euros nets par mois, merci de me trouver un appartement.",
     },
 ]

@@ -133,8 +133,12 @@ class HybridTester:
                 elif support and is_support_draft_mode(parsed, router, self.config):
                     support.handle_support_request(parsed)
                 else:
-                    ingest.ingest_email(parsed)
-                    ingested_uids[uid_counter] = target_ws
+                    from app import is_internal_sender
+                    if is_internal_sender(parsed.sender, self.config.imap_user):
+                        ingest.ingest_email(parsed)
+                        ingested_uids[uid_counter] = target_ws
+                    else:
+                        self.logger.info(f"Email non routable d'un expéditeur externe ({parsed.sender}) ignoré pour l'ingestion.")
             
             except Exception as e:
                 self.logger.error(f"Erreur lors du traitement : {e}")
