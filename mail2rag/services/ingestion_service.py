@@ -651,6 +651,7 @@ class IngestionService:
                         self.logger.info(
                             f"Document structuré ingéré ({doc.filename}) → {chunks_count} chunks"
                         )
+                        self._log_metadata(doc.global_metadata)
                     else:
                         self.logger.error(
                             f"Erreur proxy pour {file_path}: {result.get('message')}"
@@ -744,6 +745,7 @@ class IngestionService:
                             self.logger.info(
                                 f"Page {page_num} ingérée ({filename}) → {chunks_count} chunks (Score: {quality_score})"
                             )
+                            self._log_metadata(page_metadata)
                         else:
                             self.logger.error(
                                 f"Échec ingestion de {filename} (Page {page_num}) : {result.get('message')}"
@@ -767,6 +769,7 @@ class IngestionService:
                         self.logger.info(
                             f"Document ingéré : {filename} → {chunks_count} chunks"
                         )
+                        self._log_metadata(metadata)
                     else:
                         self.logger.error(
                             f"Échec ingestion de {filename} : {result.get('message')}"
@@ -827,3 +830,18 @@ class IngestionService:
         except Exception as e:
             self.logger.error(f"Erreur extraction texte de {file_path} : {e}")
             return ""
+
+    def _log_metadata(self, metadata_dict: dict) -> None:
+        """Affiche les métadonnées de manière hiérarchique et centralisée (règle DRY)."""
+        lines = ["Métadonnées :"]
+        for key, value in metadata_dict.items():
+            if isinstance(value, list):
+                val_str = ", ".join(str(v) for v in value)
+            else:
+                val_str = str(value)
+            
+            val_str = val_str.replace("\n", " ")
+            lines.append(f"  {key}: {val_str}")
+            
+        self.logger.info("\n".join(lines))
+

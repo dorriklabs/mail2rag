@@ -41,13 +41,47 @@ class Evaluator:
                 "SUPPORT_SECU": "La réponse doit mentionner la limite de 22h, caractériser la situation de tapage nocturne/nuisances, et avertir d'une contravention/verbalisation de la police.",
                 "SUPPORT_ELEC": "La réponse doit rediriger vers le commissariat/police/gendarmerie avec une pièce d'identité.",
                 "SUPPORT_HORS_SUJET": "La réponse doit poliment refuser de répondre ou indiquer qu'elle n'a pas l'information dans sa base de connaissances, sans inventer de recette.",
-                "SUPPORT_CONVERSATION": "La réponse doit mentionner que pour une piscine, le permis de construire est obligatoire si le bassin excède 20m2."
+                "SUPPORT_CONVERSATION": "La réponse doit mentionner que pour une piscine, le permis de construire est obligatoire si le bassin excède 20m2.",
+                
+                # NOUVEAUX CAS : AMBIGUS
+                "AMBIGUOUS_1": "La réponse doit soit mentionner la règle des 20m2 pour un abri de jardin, soit demander de préciser la nature du projet.",
+                "AMBIGUOUS_2": "La réponse doit demander de préciser s'il s'agit d'un passeport ou renvoyer vers le portail citoyen.",
+                "AMBIGUOUS_3": "La réponse doit demander de préciser s'il s'agit des ordures ménagères ou des encombrants.",
+                "AMBIGUOUS_4": "La réponse doit demander de préciser s'il s'agit de la cantine scolaire ou de la crèche.",
+                "AMBIGUOUS_5": "La réponse doit orienter vers le CCAS ou demander de préciser la nature de l'aide demandée.",
+
+                # NOUVEAUX CAS : FAUTES / LANGAGE FAMILIER
+                "TYPO_1": "La réponse doit comprendre 'passeport' et mentionner le portail citoyen (ou le délai de 2 semaines).",
+                "TYPO_2": "La réponse doit comprendre 'tapage/nuisances', mentionner la limite de 22h et la police municipale.",
+                "TYPO_3": "La réponse doit comprendre 'cantine' et mentionner le justificatif de domicile.",
+                "TYPO_4": "La réponse doit comprendre 'piscine' et mentionner les 20m2 / déclaration préalable / permis.",
+                "TYPO_5": "La réponse doit comprendre 'encombrants' et mentionner le jeudi matin.",
+
+                # NOUVEAUX CAS : ANGLAIS
+                "EN_1": "La réponse doit idéalement être en anglais et mentionner les règles de 20m2 ou la déclaration préalable.",
+                "EN_2": "La réponse doit idéalement être en anglais et mentionner le portail citoyen ou les 2 semaines de délai.",
+                "EN_3": "La réponse doit idéalement être en anglais et mentionner la limite de 22h et la police.",
+                "EN_4": "La réponse doit idéalement être en anglais et mentionner le justificatif de domicile pour la cantine.",
+                "EN_5": "La réponse doit idéalement être en anglais et mentionner le ramassage du jeudi matin.",
+
+                # NOUVEAUX CAS : CONVERSATIONNELS / SUITE
+                "CONV_1": "La réponse doit mentionner la crèche et la nécessité d'un dossier avant le 30 avril.",
+                "CONV_2": "La réponse doit mentionner que la copie d'acte de naissance se fait par courrier ou sur service-public.fr.",
+                "CONV_3": "La réponse doit confirmer l'intervention sous 48h.",
+                "CONV_4": "La réponse doit confirmer la nécessité de formuler la demande un mois à l'avance.",
+                "CONV_5": "La réponse doit traiter la notion de tapage de jour ou se référer à l'arrêté de la commune.",
+
+                # CAS SPECIAUX
+                "DIAG_1": "La réponse doit fournir un diagnostic ou se présenter comme un outil de test.",
+                "CHAT_1": "La réponse doit être polie et essayer de répondre sur les horaires ou rediriger."
             }
             
-            if email_id not in expected_concepts:
+            if email_id.startswith("OOD_"):
+                criteria = "La réponse doit poliment indiquer que ce sujet ne concerne pas les services de la mairie."
+            elif email_id in expected_concepts:
+                criteria = expected_concepts[email_id]
+            else:
                 return {"note": "8/10", "remarque": "Réponse pertinente générée (Pas de critères stricts)."}
-
-            criteria = expected_concepts[email_id]
             
             # 3. Appel au LLM-as-a-judge
             lm_studio_url = os.getenv("LM_STUDIO_URL", "http://host.docker.internal:1234").rstrip("/")

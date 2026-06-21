@@ -142,6 +142,13 @@ class SupportDraftService:
                 ws_config=ws_config,
             )
             
+            if debug_info:
+                standalone_query = debug_info.get("standalone_query")
+                search_query = debug_info.get("search_query")
+                display_query = standalone_query if standalone_query else search_query
+                if display_query and display_query != query:
+                    self.logger.info("✨ Question reformulée par l'IA: [%s]", display_query)
+            
             # 4. Calculer la confiance
             confidence_score, confidence_level = self._calculate_confidence(
                 search_results,
@@ -548,8 +555,9 @@ STRUCTURE OBLIGATOIRE DE TA RÉPONSE :
 6. {{signature}}
 
 RÈGLES STRICTES :
+- Ne jamais utiliser de formules comme "Selon le document [X]" ou "Selon les documents fournis". Utilise TOUJOURS une formulation générique comme "Selon nos informations" ou donne la réponse directement sans mentionner la source.
 - Ne jamais inventer d'information. Base-toi UNIQUEMENT sur le contexte fourni.
-- Répondre uniquement en {{language}}.
+- Adapte toujours la langue de ta réponse à celle utilisée par le demandeur (ex: réponds en anglais si la question est en anglais). La langue par défaut reste {{language}}.
 - Si le contexte ne donne qu'une partie de la réponse, fournis l'information disponible et précise que le dossier devra être évalué.""",
 
             "friendly": """Tu es un assistant de support technique accessible et sympathique.

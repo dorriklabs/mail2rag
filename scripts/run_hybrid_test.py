@@ -70,10 +70,14 @@ class HybridTester:
         ingested_uids = {}
         ingestion_phase = True
         
-        for email_data in TEST_EMAILS:
+        total_emails = len(TEST_EMAILS)
+        for idx, email_data in enumerate(TEST_EMAILS, 1):
             if ingestion_phase and email_data["type"] != "Ingestion":
                 ingestion_phase = False
                 print("\n" + "="*80)
+                print("⏳ Fin de l'ingestion, pause de 3s pour indexation Qdrant...")
+                time.sleep(3)
+                print("="*80)
                 print("🔄 RECONSTRUCTION GLOBALE BM25 (Synchronisation)")
                 print("="*80)
                 print("✅ BM25 rebuild n'est plus nécessaire : géré nativement par Qdrant (Sparse Vectors).")
@@ -82,7 +86,7 @@ class HybridTester:
             uid_counter += 1
             self.interceptor.reset()
             
-            print(f"🔄 Traitement : [{email_data['id']}] - {email_data['subject']}")
+            print(f"🔄 Traitement [{idx}/{total_emails}] : [{email_data['id']}] - {email_data['subject']}")
             
             # Création du faux message IMAP
             msg = Message()
@@ -120,8 +124,6 @@ class HybridTester:
                     # Force l'ingestion sans passer par le Dispatch Sémantique
                     ingest.ingest_email(parsed)
                     ingested_uids[uid_counter] = target_ws
-                    print("  ├─ ⏳ Pause de 2s pour laisser le temps à Qdrant d'indexer...")
-                    time.sleep(2)
                 elif is_diagnostic_email(parsed.subject):
                     diag.run_diagnostic(parsed)
                 elif is_chat_email(parsed.subject):
@@ -168,11 +170,29 @@ class HybridTester:
                 "sources": sources
             })
             
-            print(f"  └─ ✅ Terminé en {latency:.2f}s\n")
+            if email_data["type"] != "Ingestion":
+                print(f"  ├─ 🎯 Cible : {target_email}")
+                if sources:
+                    print(f"  ├─ 📚 Sources RAG : {len(sources)} document(s)")
+                
+                try:
+                    score = float(note)
+                    note_str = f"{score}/10"
+                    icon = "✅" if score >= 8.0 else ("⚠️" if score >= 5.0 else "❌")
+                except ValueError:
+                    note_str = str(note)
+                    icon = "ℹ️"
+                
+                print(f"  ├─ {icon}  Note LLM : {note_str}")
+                print(f"  ├─ 📝 Remarque : {remarque}")
+                print(f"  └─ ⏱️  Terminé en {latency:.2f}s\n")
+            else:
+                print(f"  ├─ 📥 Action : Document indexé")
+                print(f"  └─ ⏱️  Terminé en {latency:.2f}s\n")
             
         # Appel du reporter
         reporter = HtmlReporter(self.interceptor.original_send_reply)
-        reporter.generate_and_send(self.results)
+        success_rate, avg_score = reporter.generate_and_send(self.results)
         
         # --- NETTOYAGE ---
         if ingested_uids:
@@ -202,6 +222,13 @@ class HybridTester:
             # Appel manuel immédiat
             cleanup_test_documents()
             atexit.unregister(cleanup_test_documents)
+            
+        if success_rate < 90.0 or avg_score < 8.0:
+            print(f"\n❌ CRITÈRES NON ATTEINTS (Taux: {success_rate:.1f}%, Note: {avg_score:.1f}/10) -> EXIT 1")
+            sys.exit(1)
+        else:
+            print(f"\n✅ TOUS LES CRITÈRES SONT ATTEINTS (Taux: {success_rate:.1f}%, Note: {avg_score:.1f}/10) -> EXIT 0")
+            sys.exit(0)
 
 if __name__ == "__main__":
     tester = HybridTester()

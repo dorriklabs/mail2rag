@@ -14,10 +14,15 @@ class HtmlReporter:
         RESET = "\033[0m"
         BOLD = "\033[1m"
         
-        # Entête du tableau
-        header = f"| {'ID':<15} | {'Type':<13} | {'Sujet':<20} | {'Routage Cible':<25} | {'Latence':<8} | {'Note':<5} | {'Remarque':<40}"
+        ingest_count = sum(1 for r in results if r['type'] == 'Ingestion')
+        if ingest_count > 0:
+            report_lines.append(f"📥 {ingest_count} documents d'ingestion traités (masqués dans ce tableau pour la lisibilité).")
+            report_lines.append("-" * 120)
+        
+        # Entête du tableau optimisé
+        header = f"| {'ID':<20} | {'Sujet':<22} | {'Cible (Routage)':<15} | {'Docs':<4} | {'Lat.':<6} | {'Note':<5} | {'Remarque':<42}"
         report_lines.append(header)
-        report_lines.append("-" * 120)
+        report_lines.append("-" * 125)
         
         rag_tests = 0
         rag_success = 0
@@ -46,13 +51,28 @@ class HtmlReporter:
             elif note_str == "-":
                 color = "\033[94m" # Blue for ingestion
             
-            subj = str(r['subject'])[:20].ljust(20)
-            target = str(r['target'])[:25].ljust(25)
-            remarque = str(r['remarque'])[:38].ljust(38) + (".." if len(str(r['remarque'])) > 38 else "")
-            note_val = note_str[:5].ljust(5)
-            lat = str(r['latency'])[:8].ljust(8)
+            # Filtrer les ingestions de l'affichage console sauf si en erreur
+            if r['type'] == 'Ingestion' and color != RED:
+                continue
+                
+            r_id = str(r['id'])[:20].ljust(20)
+            subj = str(r['subject'])[:22].ljust(22)
             
-            row = f"| {r['id']:<15} | {r['type']:<13} | {subj} | {target} | {lat} | {color}{note_val}{RESET} | {remarque}"
+            target_str = str(r['target']).replace('@dsiatlantic.com', '')
+            if target_str == "Non intercepté":
+                target_str = "-"
+            target = target_str[:15].ljust(15)
+            
+            docs_count = str(len(r.get('sources', []))) if r.get('sources') else "0"
+            if r['type'] not in ['Support (RAG)', 'Ingestion']:
+                docs_count = "-"
+            docs = docs_count.ljust(4)
+            
+            remarque = str(r['remarque'])[:40].ljust(40) + (".." if len(str(r['remarque'])) > 40 else "")
+            note_val = note_str[:5].ljust(5)
+            lat = str(r['latency'])[:6].ljust(6)
+            
+            row = f"| {r_id} | {subj} | {target} | {docs} | {lat} | {color}{note_val}{RESET} | {remarque}"
             report_lines.append(row)
             
         report_lines.append("="*120)
@@ -160,3 +180,5 @@ class HtmlReporter:
             print("✅ Rapport HTML envoyé avec succès.")
         except Exception as e:
             print(f"⚠️ Échec de l'envoi du rapport par email : {e}")
+            
+        return success_rate, avg_score
