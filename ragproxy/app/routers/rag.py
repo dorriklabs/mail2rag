@@ -60,13 +60,15 @@ def rag_endpoint(req: RequestModel):
     # Apply Query Router for intent, filters, and clean_query
     routing_info = pipeline.query_router(req.query)
 
+    workspace = req.workspace if req.workspace else req.collection
+
     results, debug_info = pipeline.run(
         query=req.query,
         routing_info=routing_info,
         top_k=req.top_k,
         final_k=req.final_k,
         use_bm25=use_bm25,
-        workspace=req.workspace,
+        workspace=workspace,
         acl_groups=[]
     )
 

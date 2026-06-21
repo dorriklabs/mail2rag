@@ -17,6 +17,7 @@ class RequestModel(BaseModel):
     final_k: int = 5
     use_bm25: Optional[bool] = None
     workspace: Optional[str] = None
+    collection: Optional[str] = None  # Alias for workspace
 
 
 class Chunk(BaseModel):

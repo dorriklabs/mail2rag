@@ -80,7 +80,7 @@ def test_lm_studio():
             expected_embed = None
             with open(env_file, "r") as f:
                 for line in f:
-                    if line.startswith("AI_MODEL_NAME="):
+                    if line.startswith("LLM_CHAT_MODEL="):
                         expected_chat = line.strip().split("=")[1]
                     elif line.startswith("EMBED_MODEL="):
                         expected_embed = line.strip().split("=")[1]

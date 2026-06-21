@@ -210,7 +210,7 @@ def run_benchmark():
     query = "Quelles sont les règles d'urbanisme pour construire un abri de jardin ?"
     print(f"Envoi au LLM : '{query}'...")
     chat_payload = {
-        "query": query + " N'oublie pas de citer le document source à la fin avec la syntaxe [Document X].",
+        "query": query + " Merci de citer le document source à la fin avec la syntaxe [Document X].",
         "top_k": 5,
         "final_k": 3,
         "collection": "urba",

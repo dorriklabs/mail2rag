@@ -144,6 +144,10 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         t0 = time.time()
         merged_candidates = []
         
+        # Fallback to default collection if no workspace is provided
+        if not workspace:
+            workspace = self.vdb.collection_name
+
         if workspace and "," in workspace:
             collections = [w.strip() for w in workspace.split(",") if w.strip()]
         else:
