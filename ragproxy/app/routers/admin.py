@@ -59,6 +59,31 @@ def ingest_document(req: IngestRequest):
                 collection=req.collection,
                 message="Text content is empty"
             )
+            
+        # 0. Anti-duplicate mechanism (DRY)
+        # Supprime les anciens chunks du même document avant d'insérer les nouveaux
+        cleanup_filter = {}
+        if "document_key" in req.metadata:
+            cleanup_filter = {"document_key": req.metadata["document_key"]}
+        elif "file_hash" in req.metadata:
+            cleanup_filter = {"file_hash": req.metadata["file_hash"]}
+        elif "filename" in req.metadata:
+            cleanup_filter = {"filename": req.metadata["filename"]}
+            if "message_id" in req.metadata:
+                cleanup_filter["message_id"] = req.metadata["message_id"]
+            elif "source" in req.metadata:
+                cleanup_filter["source"] = req.metadata["source"]
+
+        if cleanup_filter:
+            try:
+                deleted_count = pipeline.vdb.delete_by_metadata(
+                    collection_name=req.collection,
+                    metadata_filter=cleanup_filter,
+                )
+                if deleted_count > 0:
+                    logger.info(f"Anti-duplicate: Deleted {deleted_count} existing chunks matching {cleanup_filter}")
+            except Exception as e:
+                logger.warning(f"Anti-duplicate cleanup failed: {e}")
         
         # 1. Chunking
         chunker = TextChunker(

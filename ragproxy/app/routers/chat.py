@@ -329,7 +329,7 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
                     debug_info={"answerability": "failed_low_score"}
                 )
             
-            ans_prompt = f"Le contexte suivant contient-il la réponse à la question '{standalone_query}' ? Réponds UNIQUEMENT par OUI ou NON.\n\nContexte:\n{context[:3000]}"
+            ans_prompt = f"Le contexte suivant contient-il la réponse à la question '{standalone_query}' ? Réponds UNIQUEMENT par OUI ou NON.\n\nContexte:\n{context[:16000]}"
             try:
                 ans_check, _, _, _ = await _call_llm([{"role": "user", "content": ans_prompt}], temperature=0.0, max_tokens=10)
                 if "NON" in ans_check.upper() and "OUI" not in ans_check.upper():
