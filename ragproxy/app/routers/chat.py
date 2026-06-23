@@ -125,7 +125,6 @@ async def chat(req: ChatRequest):
         if req.history:
             for msg in req.history:
                 if msg.get("role") == "system":
-                    from fastapi import HTTPException
                     raise HTTPException(status_code=400, detail="Invalid role in history: system role is strictly forbidden.")
                     
             rewrite_system_prompt = """Tu es un outil d'extraction de contexte. Ton SEUL but est de transformer une question dépendante du contexte en une question claire, complète et autonome.
@@ -180,7 +179,6 @@ Applique ce format strict. Ne génère que la ligne commençant par R:"""
         # On calcule un score basique d'injection
         injection_score = sum(1 for kw in injection_keywords if kw in query_lower)
         if injection_score >= 1 or ("ignore" in query_lower and "instruction" in query_lower):
-            from fastapi import HTTPException
             logger.warning(f"Prompt injection detected: {standalone_query}")
             raise HTTPException(status_code=400, detail="Prompt injection detected. Request blocked.")
             

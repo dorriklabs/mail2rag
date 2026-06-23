@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union
 
 from fastapi import HTTPException
 
@@ -35,6 +35,7 @@ class RAGPipeline:
         self.vdb = VectorDBService(VECTOR_DB_HOST, VECTOR_DB_PORT, VECTOR_DB_COLLECTION)
         
         # Reranker : local (cross-encoder) ou LM Studio
+        self.reranker: Union[LocalReranker, RerankerService]
         if USE_LOCAL_RERANKER:
             logger.info(f"Using LOCAL reranker: {LOCAL_RERANKER_MODEL}")
             self.reranker = LocalReranker(LOCAL_RERANKER_MODEL)
@@ -110,7 +111,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         Retourne (chunks, debug_info).
         """
         start_time = time.time()
-        debug_info = {
+        debug_info: Dict[str, Any] = {
             "query": query,
             "timings": {},
             "counts": {},
@@ -270,7 +271,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         """
         Retourne le statut de préparation du pipeline.
         """
-        result = {
+        result: Dict[str, Any] = {
             "deps": {
                 "qdrant": self.vdb.is_ready(),
                 "bm25": self.vdb.is_ready(), # BM25 is now native in Qdrant
