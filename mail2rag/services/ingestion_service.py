@@ -85,8 +85,8 @@ class IngestionService:
                             break
                             
                 if not has_attachments:
-                    if not self._is_knowledge_worthy(email.subject, email.body):
-                        self.logger.info("♻️ Filtre IA : Email ignoré (sans valeur documentaire). UID %s", email.uid)
+                    if not self._is_knowledge_worthy(email.subject, email.body, is_agent_reply=is_agent_reply):
+                        self.logger.info("♻️ Filtre IA : Email ignoré (sans valeur ou exception). UID %s", email.uid)
                         # Archiver l'email ignoré
                         archive_folder = getattr(self.config, "smart_filter_archive_folder", "Archive-Filtre")
                         self.mail_service.move_message(email.uid, archive_folder)
@@ -264,7 +264,7 @@ class IngestionService:
             preview = preview[:max_chars].rstrip() + "..."
         return preview
 
-    def _is_knowledge_worthy(self, subject: str, body: str) -> bool:
+    def _is_knowledge_worthy(self, subject: str, body: str, is_agent_reply: bool = False) -> bool:
         """
         Demande au LLM si l'email contient une connaissance utile à archiver.
         Retourne True par défaut en cas de doute ou d'erreur.
@@ -276,13 +276,25 @@ class IngestionService:
         prompt = (
             "Tu es un bibliothécaire IA responsable d'une base de connaissances d'entreprise. "
             "Ton rôle est de filtrer les e-mails entrants.\n\n"
+        )
+        
+        if is_agent_reply:
+            prompt += (
+                "ATTENTION : Cet e-mail est une réponse d'un agent de support. "
+                "Vérifie bien qu'il s'agit d'une procédure standard, réutilisable pour d'autres clients. "
+                "Si l'e-mail contient une exception, un geste commercial unique, ou une dérogation ponctuelle, "
+                "tu DOIS répondre 'NON' pour ne pas polluer la base de connaissances avec un cas particulier.\n\n"
+            )
+            
+        prompt += (
             f"Sujet de l'e-mail: {subject}\n"
             f"Corps de l'e-mail:\n{body}\n\n"
             "Question : Cet e-mail contient-il des informations utiles, des procédures, des règles "
             "ou des connaissances factuelles qui méritent d'être indexées et archivées ? "
             "Réponds UNIQUEMENT par le mot 'OUI' ou 'NON'. "
             "Au moindre doute ou s'il s'agit d'une demande métier claire, réponds 'OUI'. "
-            "Si c'est juste un e-mail de politesse ('merci', 'ok', 'bonne journée'), une newsletter inutile ou un spam, réponds 'NON'."
+            "Si c'est juste un e-mail de politesse ('merci', 'ok', 'bonne journée'), une newsletter inutile, "
+            "un spam, ou un cas exceptionnel (geste commercial), réponds 'NON'."
         )
         
         try:
