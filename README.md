@@ -195,6 +195,14 @@ Automatically generate response drafts for support teams:
 }
 ```
 
+### 🧠 Auto-Correction IA (Self-Reflection) & Ingestion BCC (NEW in v4.10.0)
+
+Mail2RAG is now capable of continuously learning from its mistakes through an autonomous feedback loop:
+
+- **BCC Auto-Ingestion**: When a support agent replies to a client, they can simply put the Mail2RAG ingestion address in `BCC`. Mail2RAG automatically ingests the agent's validated response with the highest business value score (`Score: 5`), bypassing the standard routing. This permanently adds the agent's knowledge to the Vector DB.
+- **Self-Reflection (Feedback Analyzer)**: When the agent corrects an AI-generated draft, Mail2RAG compares the original AI suggestion with the final agent reply. A background Cron task (`analyze_feedback`) analyzes this gap using the LLM to filter out noise (politeness) and extract strict business rules. 
+- **Dynamic Prompt Injection**: These deducted rules are saved in `dynamic_rules.json` and automatically injected into the AI's System Prompt during the next draft generation. The AI learns the company's implicit constraints and will never make the same behavioral mistake twice.
+
 ### 🧠 Semantic Router / Dispatch IA (NEW in v3.15.0)
 
 Automatically forward public inbox emails (e.g. `contact@...`) to the right department email addresses based on AI semantic understanding. The original email is then archived in IMAP.
