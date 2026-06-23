@@ -498,6 +498,20 @@ class RAGProxyClient:
                 "message": str(e),
             }
 
+    def delete_by_thread_id(
+        self,
+        collection: str,
+        thread_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Supprime tous les documents (chunks) associés à un thread_id donné.
+        Utile pour mettre à jour la réponse d'un agent sur le même fil de discussion.
+        """
+        return self.delete_by_metadata(
+            collection=collection,
+            filters={"thread_id": thread_id}
+        )
+
     def rebuild_bm25(self, collection: str) -> bool:
         """
         Déclenche un rebuild de l'index BM25 pour une collection.

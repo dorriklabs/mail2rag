@@ -31,6 +31,7 @@ class DispatchService:
         router: "RouterService",
         notification_service=None,
         support_draft_service=None,
+        feedback_service=None,
     ):
         self.config = config
         self.logger = logger_instance
@@ -39,6 +40,7 @@ class DispatchService:
         self.router = router
         self.notification_service = notification_service
         self.support_draft_service = support_draft_service
+        self.feedback_service = feedback_service
 
     def handle_dispatch(self, email: "ParsedEmail") -> bool:
         """
@@ -76,6 +78,15 @@ class DispatchService:
                 
                 self.logger.info("🤖 Dispatch IA : Génération d'une suggestion IA pour %s (workspace: %s)...", matched_folder, target_workspace)
                 ai_suggestion_html, ai_text, sources_bytes, confidence_label = self.support_draft_service.generate_ai_suggestion_html(email, target_workspace)
+                
+                if ai_text and self.feedback_service:
+                    thread_id = email.thread_id or email.message_id
+                    metadata = {
+                        "workspace": target_workspace,
+                        "subject": email.subject,
+                        "confidence_label": confidence_label
+                    }
+                    self.feedback_service.save_pending_suggestion(thread_id, email.body, ai_text, metadata)
 
                 dynamic_attachments = []
 
@@ -87,6 +98,9 @@ class DispatchService:
                     eml = EmailMessage()
                     eml["Subject"] = f"Re: {email.subject}"
                     eml["To"] = email.sender
+                    
+                    if getattr(self.config, "enable_bcc_ingestion", False) and getattr(self.config, "ingestion_email_address", None):
+                        eml["Bcc"] = self.config.ingestion_email_address
                     
                     from email.utils import formatdate
                     date_str = email.date or formatdate(localtime=True)

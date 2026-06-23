@@ -125,6 +125,9 @@ class SupportQAService:
 
         CONTEXTE_SUPPLÉMENTAIRE :
         <liste des conditions, restrictions, cas particuliers s'ils existent, sinon "Aucun contexte supplémentaire.">
+        
+        SOURCE :
+        Réponse Agent Validée
 
         IMPORTANT :
         - Si l'email ne contient pas de question claire, explique-le dans QUESTION_CLIENT.

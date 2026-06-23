@@ -18,5 +18,9 @@ def calculate_metadata_bonus(meta: Dict, filters: Optional[Dict]) -> float:
             doc_v = meta.get(k)
             if doc_v is not None and str(doc_v).lower() == str(v).lower():
                 bonus += RAG_FILTER_WEIGHTS.get(k, RAG_FILTER_WEIGHTS["default"])
+                
+    # 3. Bonus pour les documents validés "Golden Q&A" (ex: Support Draft)
+    if meta and str(meta.get("business_value_score", "")) == "5":
+        bonus += 0.15
     
     return bonus

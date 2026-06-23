@@ -135,6 +135,9 @@ class DraftService:
             msg["Date"] = formatdate(localtime=True)
             msg["Message-ID"] = make_msgid(domain=self._get_domain())
             
+            if getattr(self.config, "enable_bcc_ingestion", False) and getattr(self.config, "ingestion_email_address", None):
+                msg["Bcc"] = self.config.ingestion_email_address
+            
             # Headers de threading pour réponse correcte
             if in_reply_to:
                 msg["In-Reply-To"] = in_reply_to

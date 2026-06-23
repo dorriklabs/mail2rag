@@ -32,6 +32,11 @@ class SchedulerManager:
                 "active": False,
                 "hour": "03",
                 "minute": "00"
+            },
+            "analyze_feedback": {
+                "active": False,
+                "hour": "02",
+                "minute": "00"
             }
         }
         self._save_config(default_config)
@@ -64,8 +69,24 @@ class SchedulerManager:
                 replace_existing=True
             )
             logger.info(f"Scheduled rgpd_purge at {hour}:{minute} daily")
-        else:
             logger.info("rgpd_purge is disabled")
+
+        # Register Analyze Feedback
+        analyze_config = self.tasks_config.get("analyze_feedback", {})
+        if analyze_config.get("active", False):
+            hour = analyze_config.get("hour", "02")
+            minute = analyze_config.get("minute", "00")
+            
+            # Add job
+            self.scheduler.add_job(
+                self.run_analyze_feedback,
+                trigger=CronTrigger(hour=int(hour), minute=int(minute)),
+                id="analyze_feedback",
+                replace_existing=True
+            )
+            logger.info(f"Scheduled analyze_feedback at {hour}:{minute} daily")
+        else:
+            logger.info("analyze_feedback is disabled")
 
     def start(self):
         if not self.scheduler.running:
@@ -129,6 +150,18 @@ class SchedulerManager:
                 
         except Exception as e:
             logger.error(f"Error running RGPD Purge: {e}")
+
+    async def run_analyze_feedback(self):
+        """Run the analyze feedback task by creating a trigger file for mail2rag."""
+        logger.info("Starting Analyze Feedback trigger task...")
+        try:
+            trigger_file = "/app/state/trigger_analyze.json"
+            os.makedirs(os.path.dirname(trigger_file), exist_ok=True)
+            with open(trigger_file, "w") as f:
+                json.dump({"trigger": "analyze_feedback", "timestamp": datetime.now().isoformat()}, f)
+            logger.info("Trigger file for analyze_feedback created successfully.")
+        except Exception as e:
+            logger.error(f"Error creating trigger file for analyze_feedback: {e}")
 
 # Global instance
 scheduler_manager = SchedulerManager()

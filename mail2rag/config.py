@@ -244,6 +244,22 @@ class Config:
             os.getenv("SUPPORT_QA_TEMPERATURE", "0.1")
         )
         self.support_qa_max_tokens = int(os.getenv("SUPPORT_QA_MAX_TOKENS", "1200"))
+        
+        # ------------------------------------------------------------------
+        # BCC INGESTION (Alimentation RAG automatique via BCC)
+        # ------------------------------------------------------------------
+        self.enable_bcc_ingestion = self._get_bool("ENABLE_BCC_INGESTION", False)
+        
+        bcc_allowed_str = os.getenv("BCC_ALLOWED_DOMAINS", "")
+        self.bcc_allowed_domains: Set[str] = {
+            d.strip().lower() for d in bcc_allowed_str.split(",") if d.strip()
+        }
+        
+        # L'adresse email d'ingestion à utiliser pour le BCC auto
+        self.ingestion_email_address = os.getenv("INGESTION_EMAIL_ADDRESS", self.imap_user or "")
+        
+        # Seuil de similarité pour écraser une ancienne réponse Q/A (défaut 0.95)
+        self.bcc_deduplication_threshold = float(os.getenv("BCC_DEDUPLICATION_THRESHOLD", "0.95"))
 
         # ------------------------------------------------------------------
         # RAG PROXY

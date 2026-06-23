@@ -132,6 +132,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Supprime tout le contenu de l'archive locale puis s'arrête.",
     )
+    parser.add_argument(
+        "--analyze-feedback",
+        action="store_true",
+        help="Analyse les logs de feedback et met à jour les règles dynamiques.",
+    )
     return parser.parse_args()
 
 
@@ -175,6 +180,20 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         logger.debug("Rebuild BM25 ignoré : Le BM25 est géré nativement par Qdrant en temps réel.")
         return
 
+    from services.feedback_service import FeedbackService
+    feedback_service = FeedbackService(
+        state_dir=config.state_path,
+        log_dir=config.logs_path if hasattr(config, 'logs_path') else Path("logs")
+    )
+    
+    from services.feedback_analyzer import FeedbackAnalyzerService
+    feedback_analyzer = FeedbackAnalyzerService(
+        config=config,
+        state_dir=config.state_path,
+        log_dir=config.logs_path if hasattr(config, 'logs_path') else Path("logs"),
+        support_qa_service=support_qa,
+    )
+
     ingestion_service = IngestionService(
         config=config,
         logger=logger,
@@ -186,6 +205,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         email_renderer=email_renderer,
         get_secure_id=get_secure_id,
         trigger_bm25_rebuild=trigger_bm25_rebuild,
+        feedback_service=feedback_service,
     )
 
     chat_service = ChatService(
@@ -239,6 +259,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         router=router,
         notification_service=notification_service,
         support_draft_service=support_draft_service,
+        feedback_service=feedback_service,
     )
 
     return {
@@ -256,6 +277,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "support_draft_service": support_draft_service,
         "dispatch_service": dispatch_service,
         "usage_tracker": usage_tracker,
+        "feedback_analyzer": feedback_analyzer,
     }
 
 
@@ -288,6 +310,11 @@ def handle_maintenance_actions(
     if args.apply_workspace_config:
         did_something = True
         maintenance.apply_workspace_configuration()
+
+    if getattr(args, "analyze_feedback", False):
+        did_something = True
+        logger.info("Début de l'analyse des feedbacks (--analyze-feedback)")
+        context["feedback_analyzer"].process_new_feedbacks()
 
     if did_something:
         logger.info("Opérations de maintenance terminées, arrêt du processus.")
@@ -322,6 +349,16 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
     logger.info("Dernier UID connu au démarrage : %s", last_uid)
 
     while True:
+        # Check for remote cron trigger
+        trigger_file = Path(config.state_path).parent / "trigger_analyze.json"
+        if trigger_file.exists():
+            try:
+                logger.info("⏳ Déclencheur cron détecté : exécution de l'analyse des feedbacks...")
+                context["feedback_analyzer"].process_new_feedbacks()
+                trigger_file.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error("❌ Erreur lors de l'analyse des feedbacks déclenchée par cron : %s", e)
+
         # Reload routing config if changed
         router: RouterService = context["router"]
         router.reload_if_changed()

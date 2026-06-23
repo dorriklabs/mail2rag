@@ -34,6 +34,7 @@ class IngestionService:
         email_renderer: EmailRenderer,
         get_secure_id: Callable[[int], str],
         trigger_bm25_rebuild: Callable[[Optional[str]], None],
+        feedback_service=None,
     ) -> None:
         self.config = config
         self.logger = logger
@@ -45,6 +46,7 @@ class IngestionService:
         self.email_renderer = email_renderer
         self.get_secure_id = get_secure_id
         self.trigger_bm25_rebuild = trigger_bm25_rebuild
+        self.feedback_service = feedback_service
         
         # RAG Proxy client
         self.ragproxy_client = RAGProxyClient(
@@ -65,8 +67,16 @@ class IngestionService:
     def ingest_email(self, email: ParsedEmail) -> None:
         """Pipeline complet d'ingestion RAG pour un email non-CHAT."""
         try:
+            is_agent_reply = False
+            if getattr(self.config, "enable_bcc_ingestion", False):
+                sender_domain = email.sender.split('@')[-1].lower() if '@' in email.sender else ""
+                allowed_domains = [d.lower().strip() for d in getattr(self.config, "bcc_allowed_domains", "").split(",") if d.strip()]
+                if sender_domain in allowed_domains:
+                    is_agent_reply = True
+                    self.logger.info("📩 Ingestion BCC détectée pour l'agent: %s", email.sender)
+
             # --- SMART INGESTION FILTER ---
-            if getattr(self.config, "enable_smart_ingestion_filter", False):
+            if getattr(self.config, "enable_smart_ingestion_filter", False) or is_agent_reply:
                 has_attachments = False
                 if email.msg.is_multipart():
                     for part in email.msg.walk():
@@ -85,6 +95,10 @@ class IngestionService:
             
             workspace = self.router.determine_workspace(email.email_data)
 
+            if is_agent_reply and email.thread_id:
+                self.logger.info("🗑️ Ingestion BCC : Suppression de l'ancien historique pour le thread %s", email.thread_id)
+                self.ragproxy_client.delete_by_thread_id(workspace, email.thread_id)
+
             safe_subject = sanitize_filename(
                 email.subject, self.config.max_filename_length
             ) or self.config.default_subject
@@ -95,10 +109,15 @@ class IngestionService:
             secure_folder.mkdir(parents=True, exist_ok=True)
 
             # Corps nettoyé / éventuelle réécriture Q/R
-            cleaned_body = self._prepare_body_for_ingestion(email, workspace)
+            cleaned_body = self._prepare_body_for_ingestion(email, workspace, is_agent_reply)
+
+            if is_agent_reply and self.feedback_service:
+                thread_id = email.thread_id or email.message_id
+                final_metadata = {"ingested_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+                self.feedback_service.log_final_feedback(thread_id, cleaned_body, final_metadata)
 
             # Intelligence documentaire (Résumé, Score, Type)
-            doc_intel = self._extract_document_intelligence(email, cleaned_body)
+            doc_intel = self._extract_document_intelligence(email, cleaned_body, is_agent_reply)
             email_summary = doc_intel.get("summary")
 
             # Fichier texte principal (email) et document structuré
@@ -153,10 +172,11 @@ class IngestionService:
         self,
         email: ParsedEmail,
         workspace: str,
+        is_agent_reply: bool = False,
     ) -> str:
         """Nettoyage ou réécriture Q/R du corps selon la config."""
         ws_cfg = self.config.workspace_settings.get(workspace, {})
-        use_qa_rewrite = bool(ws_cfg.get("qa_rewrite", False))
+        use_qa_rewrite = bool(ws_cfg.get("qa_rewrite", False)) or is_agent_reply
 
         if not use_qa_rewrite:
             return self.cleaner.clean_body(email.body, subject=email.subject)
@@ -186,10 +206,24 @@ class IngestionService:
         self,
         email: ParsedEmail,
         cleaned_body: str,
+        is_agent_reply: bool = False,
     ) -> dict:
         """Génère un résumé IA et qualifie la valeur métier du document."""
         if not cleaned_body:
             return {"summary": None, "business_value_score": 3, "document_type": "AUTRE"}
+
+        if is_agent_reply:
+            intel = {
+                "summary": self._extract_preview(cleaned_body),
+                "business_value_score": 5,
+                "document_type": "PROCEDURE"
+            }
+            if self.config.enable_email_summary:
+                try:
+                    intel["summary"] = self.support_qa_service.generate_email_summary(email.subject, cleaned_body)
+                except Exception as e:
+                    self.logger.warning("⚠️ Échec génération résumé pour BCC : %s", e)
+            return intel
 
         if not self.config.enable_email_summary:
             return {

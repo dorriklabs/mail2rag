@@ -430,8 +430,8 @@ class SupportDraftService:
             # Appeler le RAG Proxy pour recherche + génération
             rag_url = self.config.rag_proxy_url.rstrip("/")
             
-            # Construire le prompt système avec le style
-            system_prompt = self._build_system_prompt(ws_config)
+            # Construire le prompt système avec le style et les règles dynamiques
+            system_prompt = self._build_system_prompt(ws_config, workspace)
             
             payload = {
                 "query": query,
@@ -474,12 +474,13 @@ class SupportDraftService:
             )
             return [], "", None
 
-    def _build_system_prompt(self, ws_config: Dict[str, Any]) -> str:
+    def _build_system_prompt(self, ws_config: Dict[str, Any], workspace: str = "default") -> str:
         """
-        Construit le prompt système avec le style configuré.
+        Construit le prompt système avec le style configuré et les règles apprises.
         
         Args:
             ws_config: Configuration du workspace
+            workspace: Nom du workspace
             
         Returns:
             Prompt système complet
@@ -495,13 +496,33 @@ class SupportDraftService:
         signature = style_config.get("signature", DEFAULT_RESPONSE_STYLE["signature"])
         language = style_config.get("language", DEFAULT_RESPONSE_STYLE["language"])
         
-        return style_prompt.replace(
+        base_prompt = style_prompt.replace(
             "{{greeting}}", greeting
         ).replace(
             "{{signature}}", signature
         ).replace(
             "{{language}}", language
         )
+        
+        dynamic_rules = self._get_dynamic_rules(workspace)
+        if dynamic_rules:
+            base_prompt += f"\n\n[RÈGLES MÉTIERS APPRISES PAR EXPÉRIENCE]\nTu dois impérativement respecter les règles suivantes :\n{dynamic_rules}"
+            
+        return base_prompt
+
+    def _get_dynamic_rules(self, workspace: str) -> str:
+        import json
+        rules_file = getattr(self.config, "logs_path", Path("logs")) / "dynamic_rules.json"
+        if rules_file.exists():
+            try:
+                with open(rules_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    rules = data.get(workspace, [])
+                    if rules:
+                        return "\n".join([f"- {r}" for r in rules])
+            except Exception as e:
+                self.logger.warning("Erreur lecture rules dynamiques : %s", e)
+        return ""
 
     def _load_style_prompt(self, tone: str) -> str:
         """
