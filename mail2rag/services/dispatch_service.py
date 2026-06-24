@@ -41,6 +41,7 @@ class DispatchService:
         self.notification_service = notification_service
         self.support_draft_service = support_draft_service
         self.feedback_service = feedback_service
+        self.sla_service = sla_service
 
     def handle_dispatch(self, email: "ParsedEmail") -> bool:
         """
@@ -144,6 +145,16 @@ class DispatchService:
                             "Sujet": email.subject,
                             "Service Cible": matched_folder
                         }
+                    )
+                    
+                # 4. Log SLA (Start Timer)
+                if getattr(self, "sla_service", None):
+                    thread_id = email.thread_id or email.message_id
+                    self.sla_service.log_dispatch(
+                        thread_id=thread_id,
+                        sender=email.sender,
+                        subject=email.subject,
+                        target_service=matched_folder
                     )
                 return True
             else:

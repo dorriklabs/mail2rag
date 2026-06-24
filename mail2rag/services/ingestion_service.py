@@ -35,6 +35,7 @@ class IngestionService:
         get_secure_id: Callable[[int], str],
         trigger_bm25_rebuild: Callable[[Optional[str]], None],
         feedback_service=None,
+        sla_service=None,
     ) -> None:
         self.config = config
         self.logger = logger
@@ -47,6 +48,7 @@ class IngestionService:
         self.get_secure_id = get_secure_id
         self.trigger_bm25_rebuild = trigger_bm25_rebuild
         self.feedback_service = feedback_service
+        self.sla_service = sla_service
         
         # RAG Proxy client
         self.ragproxy_client = RAGProxyClient(
@@ -98,6 +100,10 @@ class IngestionService:
             if is_agent_reply and email.thread_id:
                 self.logger.info("🗑️ Ingestion BCC : Suppression de l'ancien historique pour le thread %s", email.thread_id)
                 self.ragproxy_client.delete_by_thread_id(workspace, email.thread_id)
+                
+                # Stop the SLA Timer
+                if getattr(self, "sla_service", None):
+                    self.sla_service.mark_replied(email.thread_id)
 
             safe_subject = sanitize_filename(
                 email.subject, self.config.max_filename_length

@@ -29,6 +29,8 @@ from services.draft_service import DraftService
 from services.support_draft_service import SupportDraftService
 from services.dispatch_service import DispatchService
 from services.usage_tracker import UsageTracker
+from services.feedback_service import FeedbackService
+from services.sla_service import SlaService
 from models import ParsedEmail
 
 
@@ -187,6 +189,16 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     )
     
     from services.feedback_analyzer import FeedbackAnalyzerService
+    # SLA Service (Suivi des temps de réponse)
+    sla_service = SlaService(
+        state_dir=Path(config.state_path).parent
+    )
+
+    # Clean up old SLA records on startup
+    sla_service.cleanup_old_records()
+
+    # 4. Initialisation des services métier
+    # FeedbackAnalyzerService
     feedback_analyzer = FeedbackAnalyzerService(
         config=config,
         state_dir=config.state_path,
@@ -260,6 +272,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         notification_service=notification_service,
         support_draft_service=support_draft_service,
         feedback_service=feedback_service,
+        sla_service=sla_service
     )
 
     return {
@@ -278,6 +291,9 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "dispatch_service": dispatch_service,
         "usage_tracker": usage_tracker,
         "feedback_analyzer": feedback_analyzer,
+        "notification_service": notification_service,
+        "feedback_service": feedback_service,
+        "sla_service": sla_service
     }
 
 
