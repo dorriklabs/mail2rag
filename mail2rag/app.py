@@ -72,8 +72,8 @@ def is_support_draft_mode(
     Returns:
         True si le mode Support Draft doit être activé
     """
-    workspace = router.determine_workspace(email.email_data)
-    ws_cfg = config.workspace_settings.get(workspace, {})
+    workspace = router.determine_workspace(email.email_data) or ""
+    ws_cfg = config.workspace_settings.get(workspace, {})  # type: ignore
     
     if not ws_cfg.get("support_draft", False):
         return False
@@ -175,7 +175,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         """Retourne un ID opaque et stable pour le dossier d'archive de cet UID."""
         return state_manager.get_or_create_secure_id(state, uid)
 
-    def trigger_bm25_rebuild(workspace: str = None) -> None:
+    def trigger_bm25_rebuild(workspace: str | None = None) -> None:
         """
         Obsolète : Le BM25 est maintenant natif dans Qdrant via les vecteurs sparses (SPLADE/BM25).
         Plus besoin de reconstruction manuelle.
@@ -428,8 +428,8 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                 return uid
 
             router: RouterService = context["router"]
-            support_draft_service: SupportDraftService = context.get("support_draft_service")
-            dispatch_service: DispatchService = context.get("dispatch_service")
+            support_draft_service: SupportDraftService | None = context.get("support_draft_service")
+            dispatch_service: DispatchService | None = context.get("dispatch_service")
 
             if not is_sender_allowed(parsed_email.sender, config.allowed_domains):
                 logger.warning("[UID %s] Bloqué: Expéditeur '%s' non autorisé par ALLOWED_DOMAINS. Email ignoré.", uid, parsed_email.sender)
@@ -451,13 +451,13 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                     diagnostic_service.run_diagnostic(parsed_email)
                 elif is_chat_email(parsed_email.subject):
                     chat_service.handle_chat(parsed_email)
-                elif router.semantic_dispatch_enabled and dispatch_service.handle_dispatch(parsed_email):
+                elif router.semantic_dispatch_enabled and dispatch_service and dispatch_service.handle_dispatch(parsed_email):
                     logger.info("[UID %s] Email classé par le Dispatch IA. Fin du traitement.", uid)
                     pass
                 elif support_draft_service and is_support_draft_mode(parsed_email, router, config):
                     support_draft_service.handle_support_request(parsed_email)
                 else:
-                    if is_internal_sender(parsed_email.sender, config.imap_user):
+                    if is_internal_sender(parsed_email.sender, str(config.imap_user)):
                         ingestion_service.ingest_email(parsed_email)
                     else:
                         logger.info("[UID %s] Email non routable d'un expéditeur externe (%s) ignoré pour l'ingestion.", uid, parsed_email.sender)

@@ -102,7 +102,7 @@ class MailInterceptor:
                 return self.original_send_combined_email(service_email, client_email, subject, body_html, original_message_id)
             return True
 
-        def intercepted_send_generated_email(eml: "EmailMessage", dynamic_attachments: list = None) -> bool:
+        def intercepted_send_generated_email(eml, dynamic_attachments=None):
             self.last_sent_email_data = {
                 "recipient": eml["To"],
                 "subject": eml["Subject"],

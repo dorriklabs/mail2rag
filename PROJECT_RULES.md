@@ -28,6 +28,12 @@ They override or refine global defaults from `GEMINI.md`, except for explicit us
 * Do not add dependencies globally if only one service needs them.
 * Avoid broad dependency upgrades unless explicitly requested.
 
+### Typage Strict (Pylance/Pyright)
+L'analyseur statique est configuré avec des règles de typage très strictes. Pour éviter les faux positifs et les soulignements rouges dans l'IDE :
+* **Variables d'environnement (`os.getenv`)** : Elles retournent un type `Optional[str]`. S'il faut les passer à des fonctions exigeant une chaîne stricte (`str`), forcez la conversion via `str(var)` ou `var or ""`.
+* **Retours de dictionnaires (`.get()`)** : Étant donné que `.get()` peut retourner `None`, annotez explicitement vos variables avec `| None` (ex: `service: MonService | None = ...`) et vérifiez leur existence (`if service:`) avant d'en utiliser les méthodes.
+* **Imports dynamiques ou conflictuels** : Lors d'injections dans le `sys.path` ou en cas de conflits de noms de modules inter-dossiers (ex: plusieurs `app.py`), l'analyse statique peut échouer. Utilisez le commentaire `# type: ignore` en fin de ligne pour faire taire l'analyseur sur ces imports précis.
+
 ## Service Rules
 
 * `ragproxy`:

@@ -98,15 +98,17 @@ class IngestionService:
                         return
             # ------------------------------
             
-            workspace = self.router.determine_workspace(email.email_data)
+            workspace_raw = self.router.determine_workspace(email.email_data)
+            workspace = workspace_raw[0] if isinstance(workspace_raw, tuple) else workspace_raw
+            workspace = workspace or ""
 
             if is_agent_reply and email.thread_id:
                 self.logger.info("🗑️ Ingestion BCC : Suppression de l'ancien historique pour le thread %s", email.thread_id)
-                self.ragproxy_client.delete_by_thread_id(workspace, email.thread_id)
+                self.ragproxy_client.delete_by_thread_id(collection=workspace, thread_id=str(email.thread_id))
                 
                 # Stop the SLA Timer
-                if getattr(self, "sla_service", None):
-                    self.sla_service.mark_replied(email.thread_id)
+                if self.sla_service:
+                    self.sla_service.mark_replied(str(email.thread_id))
 
             safe_subject = sanitize_filename(
                 email.subject, self.config.max_filename_length
@@ -118,7 +120,7 @@ class IngestionService:
             secure_folder.mkdir(parents=True, exist_ok=True)
 
             # Corps nettoyé / éventuelle réécriture Q/R
-            cleaned_body = self._prepare_body_for_ingestion(email, workspace, is_agent_reply)
+            cleaned_body = self._prepare_body_for_ingestion(email, workspace, is_agent_reply)  # type: ignore
 
             if is_agent_reply and self.feedback_service:
                 thread_id = email.thread_id or email.message_id
@@ -376,7 +378,7 @@ class IngestionService:
         page_hash = hashlib.sha256(cleaned_body.encode('utf-8')).hexdigest()
         thread_id = email.thread_id
         
-        metadata = {
+        metadata: Dict[str, Any] = {
             "uid": str(email.uid),
             "subject": email.subject,
             "sender": email.sender,
@@ -474,7 +476,7 @@ class IngestionService:
             content = part.get_payload(decode=True)
 
             # Filtrage via CleanerService
-            if not self.cleaner.is_valid_attachment(filename, content):
+            if not isinstance(content, bytes) or not self.cleaner.is_valid_attachment(filename, content):
                 continue
 
             safe_pj_name = (
@@ -490,7 +492,8 @@ class IngestionService:
             )
 
             with filepath.open("wb") as f:
-                f.write(content)
+                if isinstance(content, bytes):
+                    f.write(content)
 
             public_link = (
                 f"{self.config.archive_base_url}/{secure_id}/{filepath.name}"
@@ -516,7 +519,7 @@ class IngestionService:
                 cache_key = self.cache_service.get_cache_key(filepath, extraction_params)
                 cached_data = self.cache_service.get_cached_extraction(cache_key)
                 
-                if cached_data and ("extracted_text" in cached_data or isinstance(cached_data, ExtractedDocument)):
+                if cached_data and (isinstance(cached_data, ExtractedDocument) or (isinstance(cached_data, dict) and "extracted_text" in cached_data)):
                     self.logger.info("♻️ Réutilisation de l'extraction en cache pour %s", filename)
                     analysis_result = cached_data.get("extracted_text") if isinstance(cached_data, dict) else cached_data
                 else:
@@ -659,7 +662,7 @@ class IngestionService:
         email: ParsedEmail,
         workspace: str,
         files_to_upload: List[str],
-        secure_id: str = None,
+        secure_id: str | None = None,
     ) -> tuple[bool, int]:
         """
         Upload et indexation via RAG Proxy avec chunking intelligent.
@@ -728,7 +731,7 @@ class IngestionService:
                 # Extraction du thread_id
                 thread_id = email.thread_id
 
-                metadata = {
+                metadata: Dict[str, Any] = {
                     "uid": str(email.uid),
                     "subject": email.subject,
                     "sender": email.sender,

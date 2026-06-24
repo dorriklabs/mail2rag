@@ -73,8 +73,8 @@ def send_advanced_test(files):
     print(f"\n📧 Préparation de l'email de test...")
     
     msg = MIMEMultipart()
-    msg['From'] = smtp_from
-    msg['To'] = imap_user
+    msg['From'] = str(smtp_from)
+    msg['To'] = str(imap_user)
     msg['Subject'] = f"[TEST MULTIMEDIA] Mail2RAG Vision & Docs - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     
     body = """Bonjour,
@@ -102,9 +102,9 @@ Le système doit pouvoir extraire le texte de tous ces formats.
 
     try:
         print(f"\n📤 Envoi en cours...")
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        server = smtplib.SMTP(str(smtp_server), smtp_port)
         server.starttls()
-        server.login(smtp_user, smtp_password)
+        server.login(str(smtp_user), str(smtp_password))
         server.send_message(msg)
         server.quit()
         print(f"✅ Email multimédia envoyé avec succès !")

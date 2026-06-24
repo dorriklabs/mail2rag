@@ -18,7 +18,7 @@ mail2rag_dir = os.path.join(parent_dir, "mail2rag")
 sys.path.insert(0, mail2rag_dir if os.path.exists(mail2rag_dir) else parent_dir)
 
 from config import Config
-from app import build_context, is_diagnostic_email, is_chat_email, is_support_draft_mode
+from app import build_context, is_diagnostic_email, is_chat_email, is_support_draft_mode  # type: ignore
 from models import ParsedEmail
 
 # Import des nouveaux modules (tests_framework)
@@ -98,7 +98,7 @@ class HybridTester:
             msg = Message()
             msg['Subject'] = email_data['subject']
             msg['From'] = email_data['sender']
-            msg['To'] = self.config.imap_user
+            msg['To'] = str(self.config.imap_user)
             
             message_id = email_data.get('message_id', f"<test-mock-id-{uid_counter}@dsiatlantic.com>")
             msg['Message-ID'] = message_id
@@ -113,7 +113,7 @@ class HybridTester:
                 subject=email_data['subject'],
                 sender=email_data['sender'],
                 body=email_data['body'],
-                to=self.config.imap_user,
+                to=str(self.config.imap_user),
                 cc="",
                 date="",
                 message_id=message_id,
@@ -151,7 +151,7 @@ class HybridTester:
                 elif support and is_support_draft_mode(parsed, router, self.config):
                     support.handle_support_request(parsed)
                 else:
-                    from app import is_internal_sender
+                    from app import is_internal_sender  # type: ignore
                     if is_internal_sender(parsed.sender, self.config.imap_user):
                         ingest.ingest_email(parsed)
                         ingested_uids[uid_counter] = target_ws

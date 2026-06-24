@@ -1,24 +1,22 @@
 {
   "venvPath": ".",
   "venv": ".venv",
-  "extraPaths": [
-    "ragproxy",
-    "streamlit_admin",
-    "mail2rag",
-    "scripts"
-  ],
   "executionEnvironments": [
     {
-      "root": "ragproxy"
+      "root": "ragproxy",
+      "extraPaths": ["ragproxy"]
     },
     {
-      "root": "streamlit_admin"
+      "root": "streamlit_admin",
+      "extraPaths": ["streamlit_admin"]
     },
     {
-      "root": "mail2rag"
+      "root": "mail2rag",
+      "extraPaths": ["mail2rag"]
     },
     {
-      "root": "scripts"
+      "root": "scripts",
+      "extraPaths": ["mail2rag", "scripts"]
     }
   ]
 }

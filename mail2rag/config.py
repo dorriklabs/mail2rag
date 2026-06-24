@@ -38,6 +38,7 @@ class Config:
 
         # Dossier + critères de recherche IMAP
         self.imap_folder = os.getenv("IMAP_FOLDER", "INBOX")
+        self.imap_folder_archive = os.getenv("IMAP_FOLDER_ARCHIVE", "Archive")
         # Utilisé surtout lors de la première synchro (last_uid <= 0)
         self.imap_search_criteria = os.getenv("IMAP_SEARCH_CRITERIA", "UNSEEN")
 
