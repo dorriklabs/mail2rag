@@ -20,6 +20,8 @@ class SlaService:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with sqlite3.connect(self.db_path) as conn:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                conn.execute("PRAGMA synchronous=NORMAL;")
                 cursor = conn.cursor()
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS dispatch_sla (

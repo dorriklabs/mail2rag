@@ -272,7 +272,7 @@ class Config:
 
         # Timeouts RAG Proxy / LLM (utilisés par les appels HTTP dans les services)
         self.rag_proxy_timeout = int(os.getenv("RAG_PROXY_TIMEOUT", "30"))
-        self.llm_timeout = int(os.getenv("LLM_TIMEOUT", "60"))
+        self.llm_timeout = int(os.getenv("LLM_TIMEOUT", "300"))
         
         # ------------------------------------------------------------------
         # CHUNKING (pour RAG Proxy ingestion)

@@ -415,86 +415,69 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
             time.sleep(config.poll_interval)
             continue
 
-        for uid in sorted(messages.keys()):
-            msg_data = messages[uid]
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        state_lock = threading.Lock()
 
+        def process_single_email(uid, msg_data):
             try:
                 parsed_email = email_parser.parse(uid, msg_data)
             except Exception as e:
-                logger.error(
-                    "Erreur lors du parsing de l'email UID %s : %s",
-                    uid,
-                    e,
-                    exc_info=True,
-                )
-                # On avance malgré tout pour ne pas rester bloqué
-                last_uid = max(last_uid, uid)
-                state["last_uid"] = last_uid
-                state_manager.save_state(state)
-                continue
+                logger.error("[UID %s] Erreur lors du parsing de l'email : %s", uid, e, exc_info=True)
+                return uid
 
-            # Services additionnels du context
             router: RouterService = context["router"]
             support_draft_service: SupportDraftService = context.get("support_draft_service")
             dispatch_service: DispatchService = context.get("dispatch_service")
 
             if not is_sender_allowed(parsed_email.sender, config.allowed_domains):
-                logger.warning(
-                    "Bloqué: Expéditeur '%s' non autorisé par ALLOWED_DOMAINS. Email ignoré.",
-                    parsed_email.sender
-                )
-                last_uid = max(last_uid, uid)
-                state["last_uid"] = last_uid
-                state_manager.save_state(state)
-                continue
+                logger.warning("[UID %s] Bloqué: Expéditeur '%s' non autorisé par ALLOWED_DOMAINS. Email ignoré.", uid, parsed_email.sender)
+                return uid
 
             # Flow SLA Report (Pull manuel)
             lower_subject = parsed_email.subject.lower()
             if lower_subject.startswith("sla:") or lower_subject.startswith("rapport sla"):
                 if parsed_email.sender == config.admin_email:
-                    logger.info("Demande manuelle de rapport SLA de la part de %s", parsed_email.sender)
+                    logger.info("[UID %s] Demande manuelle de rapport SLA de la part de %s", uid, parsed_email.sender)
                     context["sla_report_service"].send_report_to_admin(trigger_type="Demande Manuelle")
                 else:
-                    logger.warning("Demande SLA refusée (Expéditeur non autorisé : %s)", parsed_email.sender)
+                    logger.warning("[UID %s] Demande SLA refusée (Expéditeur non autorisé : %s)", uid, parsed_email.sender)
                 mail_service.move_message(uid, config.imap_folder_archive)
-                last_uid = max(last_uid, uid)
-                state["last_uid"] = last_uid
-                state_manager.save_state(state)
-                continue
+                return uid
 
             try:
                 if is_diagnostic_email(parsed_email.subject):
-                    # Mode diagnostic : test : all
                     diagnostic_service.run_diagnostic(parsed_email)
                 elif is_chat_email(parsed_email.subject):
-                    # Mode Chat : Chat: / Question:
                     chat_service.handle_chat(parsed_email)
                 elif router.semantic_dispatch_enabled and dispatch_service.handle_dispatch(parsed_email):
-                    # Le Routeur Sémantique a déplacé l'email dans un sous-dossier, on s'arrête là.
-                    logger.info("Email UID %s classé par le Dispatch IA. Fin du traitement.", uid)
+                    logger.info("[UID %s] Email classé par le Dispatch IA. Fin du traitement.", uid)
                     pass
                 elif support_draft_service and is_support_draft_mode(parsed_email, router, config):
-                    # Mode Support Draft : génère un brouillon
                     support_draft_service.handle_support_request(parsed_email)
                 else:
-                    # Mode Ingestion standard restreint aux internes
                     if is_internal_sender(parsed_email.sender, config.imap_user):
                         ingestion_service.ingest_email(parsed_email)
                     else:
-                        logger.info("Email non routable d'un expéditeur externe (%s) ignoré pour l'ingestion.", parsed_email.sender)
+                        logger.info("[UID %s] Email non routable d'un expéditeur externe (%s) ignoré pour l'ingestion.", uid, parsed_email.sender)
             except Exception as e:
-                # Les services internes gèrent déjà la plupart des exceptions
-                logger.error(
-                    "Erreur non gérée lors du traitement UID %s : %s",
-                    uid,
-                    e,
-                    exc_info=True,
-                )
+                logger.error("[UID %s] Erreur non gérée lors du traitement : %s", uid, e, exc_info=True)
 
-            # Mise à jour de l'UID après traitement
-            last_uid = max(last_uid, uid)
-            state["last_uid"] = last_uid
-            state_manager.save_state(state)
+            return uid
+
+        # Exécution concurrente avec ThreadPoolExecutor
+        uids_to_process = sorted(messages.keys())
+        logger.info("Traitement concurrent de %d e-mail(s) via ThreadPoolExecutor...", len(uids_to_process))
+        
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(process_single_email, uid, messages[uid]): uid for uid in uids_to_process}
+            
+            for future in as_completed(futures):
+                completed_uid = future.result()
+                with state_lock:
+                    last_uid = max(last_uid, completed_uid)
+                    state["last_uid"] = last_uid
+                    state_manager.save_state(state)
 
         if once:
             logger.info("Mode --once actif : boucle terminée après ce cycle.")
