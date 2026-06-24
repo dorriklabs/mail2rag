@@ -50,13 +50,14 @@ def get_cron_config():
         st.error(f"Erreur de connexion au proxy: {e}")
     return {}
 
-def update_cron_config(task_name, active, hour, minute):
+def update_cron_config(task_name, active, hour, minute, day_of_week="*"):
     try:
         payload = {
             "task_name": task_name,
             "active": active,
             "hour": str(hour).zfill(2),
-            "minute": str(minute).zfill(2)
+            "minute": str(minute).zfill(2),
+            "day_of_week": str(day_of_week)
         }
         response = requests.post(f"{RAG_PROXY_URL}/admin/cron", json=payload, timeout=5)
         if response.status_code == 200:
@@ -125,5 +126,55 @@ st.markdown("---")
 st.markdown("**Actions manuelles**")
 if st.button("▶️ Lancer maintenant", key="run_rgpd"):
     run_task_now("rgpd_purge")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Task 2: SLA Report
+st.markdown('<div class="task-card">', unsafe_allow_html=True)
+st.markdown('<div class="task-header">', unsafe_allow_html=True)
+st.subheader("📊 Rapport SLA & Délais (E-mail)")
+
+sla_config = config.get("sla_report", {})
+is_sla_active = sla_config.get("active", True)
+
+if is_sla_active:
+    st.markdown('<span class="status-active">● ACTIF</span>', unsafe_allow_html=True)
+else:
+    st.markdown('<span class="status-inactive">● INACTIF</span>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("""
+Génère un e-mail contenant le résumé IA et l'export CSV des délais de réponse, envoyé à l'adresse administrateur configurée.
+""")
+
+col1_s, col2_s, col3_s = st.columns([2, 3, 1])
+
+days_map = {"0": "Dimanche", "1": "Lundi", "2": "Mardi", "3": "Mercredi", "4": "Jeudi", "5": "Vendredi", "6": "Samedi"}
+
+with col1_s:
+    new_sla_active = st.toggle("Activer la tâche", value=is_sla_active, key="toggle_sla")
+
+with col2_s:
+    current_day = str(sla_config.get("day_of_week", "1"))
+    current_hour_s = int(sla_config.get("hour", "08"))
+    
+    time_col1_s, time_col2_s = st.columns(2)
+    with time_col1_s:
+        day_options = list(days_map.keys())
+        new_day = st.selectbox("Jour", options=day_options, format_func=lambda x: days_map[x], index=day_options.index(current_day) if current_day in day_options else 1, key="day_sla")
+    with time_col2_s:
+        new_hour_s = st.selectbox("Heure", options=list(range(24)), index=current_hour_s, format_func=lambda x: f"{x:02d}h00", key="hour_sla")
+
+with col3_s:
+    st.write("") # Spacing
+    st.write("")
+    if st.button("💾 Sauvegarder", key="save_sla", use_container_width=True):
+        if update_cron_config("sla_report", new_sla_active, new_hour_s, "00", new_day):
+            st.rerun()
+
+st.markdown("---")
+st.markdown("**Actions manuelles**")
+if st.button("▶️ Envoyer le rapport maintenant", key="run_sla"):
+    run_task_now("sla_report")
 
 st.markdown('</div>', unsafe_allow_html=True)

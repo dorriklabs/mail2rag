@@ -31,6 +31,7 @@ from services.dispatch_service import DispatchService
 from services.usage_tracker import UsageTracker
 from services.feedback_service import FeedbackService
 from services.sla_service import SlaService
+from services.sla_report_service import SlaReportService
 from models import ParsedEmail
 
 
@@ -197,6 +198,14 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
     # Clean up old SLA records on startup
     sla_service.cleanup_old_records()
 
+    # SLA Report Service
+    sla_report_service = SlaReportService(
+        config=config,
+        logger_instance=logger,
+        mail_service=mail_service,
+        sla_service=sla_service
+    )
+
     # 4. Initialisation des services métier
     # FeedbackAnalyzerService
     feedback_analyzer = FeedbackAnalyzerService(
@@ -293,7 +302,8 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         "feedback_analyzer": feedback_analyzer,
         "notification_service": notification_service,
         "feedback_service": feedback_service,
-        "sla_service": sla_service
+        "sla_service": sla_service,
+        "sla_report_service": sla_report_service
     }
 
 
@@ -375,6 +385,16 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
             except Exception as e:
                 logger.error("❌ Erreur lors de l'analyse des feedbacks déclenchée par cron : %s", e)
 
+        # Check for remote SLA report trigger
+        sla_trigger_file = Path(config.state_path).parent / "trigger_sla_report.json"
+        if sla_trigger_file.exists():
+            try:
+                logger.info("⏳ Déclencheur cron détecté : exécution du Rapport SLA...")
+                context["sla_report_service"].send_report_to_admin(trigger_type="Cron Hebdo")
+                sla_trigger_file.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error("❌ Erreur lors de l'envoi du Rapport SLA déclenché par cron : %s", e)
+
         # Reload routing config if changed
         router: RouterService = context["router"]
         router.reload_if_changed()
@@ -423,6 +443,20 @@ def run_poller(context: Dict[str, Any], once: bool = False) -> None:
                     "Bloqué: Expéditeur '%s' non autorisé par ALLOWED_DOMAINS. Email ignoré.",
                     parsed_email.sender
                 )
+                last_uid = max(last_uid, uid)
+                state["last_uid"] = last_uid
+                state_manager.save_state(state)
+                continue
+
+            # Flow SLA Report (Pull manuel)
+            lower_subject = parsed_email.subject.lower()
+            if lower_subject.startswith("sla:") or lower_subject.startswith("rapport sla"):
+                if parsed_email.sender == config.admin_email:
+                    logger.info("Demande manuelle de rapport SLA de la part de %s", parsed_email.sender)
+                    context["sla_report_service"].send_report_to_admin(trigger_type="Demande Manuelle")
+                else:
+                    logger.warning("Demande SLA refusée (Expéditeur non autorisé : %s)", parsed_email.sender)
+                mail_service.move_message(uid, config.imap_folder_archive)
                 last_uid = max(last_uid, uid)
                 state["last_uid"] = last_uid
                 state_manager.save_state(state)

@@ -491,15 +491,21 @@ def get_cron_config():
 def update_cron_config(req: CronConfigRequest):
     """Update cron configuration."""
     from app.scheduler_manager import scheduler_manager
-    config = scheduler_manager.update_config(req.task_name, req.active, req.hour, req.minute)
+    config = scheduler_manager.update_config(req.task_name, req.active, req.hour, req.minute, req.day_of_week)
     return CronConfigResponse(status="ok", config={req.task_name: config})
 
 @router.post("/cron/{task_name}/run")
 async def run_cron_task(task_name: str):
     """Run a specific cron task immediately."""
-    from app.scheduler_manager import scheduler_manager
+    from app.scheduler_manager import scheduler_manager, trigger_remote_task
     if task_name == "rgpd_purge":
         import asyncio
         asyncio.create_task(scheduler_manager.run_rgpd_purge())
         return {"status": "ok", "message": "Task 'rgpd_purge' started in background."}
+    elif task_name == "sla_report":
+        trigger_remote_task("sla_report", "trigger_sla_report.json")
+        return {"status": "ok", "message": "Task 'sla_report' triggered."}
+    elif task_name == "analyze_feedback":
+        trigger_remote_task("analyze_feedback", "trigger_analyze.json")
+        return {"status": "ok", "message": "Task 'analyze_feedback' triggered."}
     return {"status": "error", "message": f"Unknown task: {task_name}"}

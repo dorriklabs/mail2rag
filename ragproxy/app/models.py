@@ -161,6 +161,7 @@ class CronConfigRequest(BaseModel):
     active: bool
     hour: str
     minute: str
+    day_of_week: Optional[str] = "*"
 
 class CronConfigResponse(BaseModel):
     status: str

@@ -12,6 +12,18 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = os.environ.get("CRON_CONFIG_PATH", "/app/state/cron_config.json")
 SCRIPTS_PATH = os.environ.get("SCRIPTS_PATH", "/app/scripts")
 
+def trigger_remote_task(task_name: str, trigger_filename: str):
+    """Crée un fichier déclencheur pour déléguer une tâche à Mail2Rag (ex: cron)."""
+    logger.info(f"⏰ Cron : Déclenchement de la tâche '{task_name}'...")
+    try:
+        trigger_file = Path(os.getenv("STATE_PATH", "/app/state/state.json")).parent / trigger_filename
+        trigger_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(trigger_file, "w") as f:
+            json.dump({"timestamp": datetime.now().isoformat(), "source": "cron"}, f)
+        logger.info(f"Fichier déclencheur '{trigger_filename}' créé avec succès.")
+    except Exception as e:
+        logger.error(f"❌ Erreur lors de la création du déclencheur {task_name} : {e}")
+
 class SchedulerManager:
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
@@ -37,6 +49,12 @@ class SchedulerManager:
                 "active": False,
                 "hour": "02",
                 "minute": "00"
+            },
+            "sla_report": {
+                "active": True,
+                "hour": "08",
+                "minute": "00",
+                "day_of_week": "1"
             }
         }
         self._save_config(default_config)
@@ -55,38 +73,49 @@ class SchedulerManager:
         for job in self.scheduler.get_jobs():
             job.remove()
             
-        # Register RGPD Purge
-        purge_config = self.tasks_config.get("rgpd_purge", {})
-        if purge_config.get("active", False):
-            hour = purge_config.get("hour", "03")
-            minute = purge_config.get("minute", "00")
-            
-            # Add job
-            self.scheduler.add_job(
-                self.run_rgpd_purge,
-                trigger=CronTrigger(hour=int(hour), minute=int(minute)),
-                id="rgpd_purge",
-                replace_existing=True
-            )
-            logger.info(f"Scheduled rgpd_purge at {hour}:{minute} daily")
-            logger.info("rgpd_purge is disabled")
+        # Register tasks
+        for task_name, task_config in self.tasks_config.items():
+            if not task_config.get("active", False):
+                logger.info(f"{task_name} is disabled")
+                continue
 
-        # Register Analyze Feedback
-        analyze_config = self.tasks_config.get("analyze_feedback", {})
-        if analyze_config.get("active", False):
-            hour = analyze_config.get("hour", "02")
-            minute = analyze_config.get("minute", "00")
-            
-            # Add job
-            self.scheduler.add_job(
-                self.run_analyze_feedback,
-                trigger=CronTrigger(hour=int(hour), minute=int(minute)),
-                id="analyze_feedback",
-                replace_existing=True
-            )
-            logger.info(f"Scheduled analyze_feedback at {hour}:{minute} daily")
-        else:
-            logger.info("analyze_feedback is disabled")
+            try:
+                if task_name == "rgpd_purge":
+                    self.scheduler.add_job(
+                        self.run_rgpd_purge,
+                        trigger=CronTrigger(hour=int(task_config.get("hour", "03")), minute=int(task_config.get("minute", "00"))),
+                        id='rgpd_purge',
+                        name='Purge RGPD Automatique',
+                        replace_existing=True
+                    )
+                    logger.info(f"Scheduled rgpd_purge at {task_config.get('hour')}:{task_config.get('minute')} daily")
+                
+                elif task_name == "analyze_feedback":
+                    self.scheduler.add_job(
+                        trigger_remote_task,
+                        args=["analyze_feedback", "trigger_analyze.json"],
+                        trigger=CronTrigger(hour=int(task_config.get("hour", "02")), minute=int(task_config.get("minute", "00"))),
+                        id="analyze_feedback",
+                        replace_existing=True
+                    )
+                    logger.info(f"Scheduled analyze_feedback at {task_config.get('hour')}:{task_config.get('minute')} daily")
+
+                elif task_name == "sla_report":
+                    day_of_week = task_config.get("day_of_week", "1")
+                    hour = task_config.get("hour", "08")
+                    minute = task_config.get("minute", "00")
+                    self.scheduler.add_job(
+                        trigger_remote_task,
+                        args=["sla_report", "trigger_sla_report.json"],
+                        trigger=CronTrigger(hour=int(hour), minute=int(minute), day_of_week=day_of_week),
+                        id='send_weekly_sla_report',
+                        name='Rapport SLA par E-mail',
+                        replace_existing=True
+                    )
+                    logger.info(f"Scheduled sla_report at {hour}:{minute} (day {day_of_week})")
+
+            except Exception as e:
+                logger.error(f"Error scheduling {task_name}: {e}")
 
     def start(self):
         if not self.scheduler.running:
@@ -101,14 +130,16 @@ class SchedulerManager:
     def get_config(self):
         return self.tasks_config
 
-    def update_config(self, task_name: str, active: bool, hour: str, minute: str):
+    def update_config(self, task_name: str, active: bool, hour: str, minute: str, day_of_week: str = "*"):
+        """Met à jour la configuration d'une tâche et la replanifie si nécessaire."""
         if task_name not in self.tasks_config:
             self.tasks_config[task_name] = {}
             
         self.tasks_config[task_name] = {
             "active": active,
             "hour": hour.zfill(2),
-            "minute": minute.zfill(2)
+            "minute": minute.zfill(2),
+            "day_of_week": day_of_week
         }
         self._save_config(self.tasks_config)
         self._setup_jobs()
@@ -151,17 +182,7 @@ class SchedulerManager:
         except Exception as e:
             logger.error(f"Error running RGPD Purge: {e}")
 
-    async def run_analyze_feedback(self):
-        """Run the analyze feedback task by creating a trigger file for mail2rag."""
-        logger.info("Starting Analyze Feedback trigger task...")
-        try:
-            trigger_file = "/app/state/trigger_analyze.json"
-            os.makedirs(os.path.dirname(trigger_file), exist_ok=True)
-            with open(trigger_file, "w") as f:
-                json.dump({"trigger": "analyze_feedback", "timestamp": datetime.now().isoformat()}, f)
-            logger.info("Trigger file for analyze_feedback created successfully.")
-        except Exception as e:
-            logger.error(f"Error creating trigger file for analyze_feedback: {e}")
+
 
 # Global instance
 scheduler_manager = SchedulerManager()

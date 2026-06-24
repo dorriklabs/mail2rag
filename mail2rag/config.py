@@ -261,8 +261,8 @@ class Config:
         # Seuil de similarité pour écraser une ancienne réponse Q/A (défaut 0.95)
         self.bcc_deduplication_threshold = float(os.getenv("BCC_DEDUPLICATION_THRESHOLD", "0.95"))
 
-        # ------------------------------------------------------------------
-        # RAG PROXY
+        # SLA Report
+        self.admin_email = os.getenv("ADMIN_EMAIL", "")
         # ------------------------------------------------------------------
         self.rag_proxy_url = os.getenv("RAG_PROXY_URL", "http://rag_proxy:8000")
         self.use_rag_proxy_for_search = self._get_bool(
