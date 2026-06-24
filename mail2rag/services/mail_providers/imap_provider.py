@@ -150,26 +150,16 @@ class ImapSmtpProvider(BaseMailProvider):
             body += parsed_email.body
             msg.attach(MIMEText(body, "plain", "utf-8"))
             
-        if dynamic_attachments:
+        # Pièces jointes de l'email d'origine
+        for att in parsed_email.attachments:
             from email.mime.application import MIMEApplication
-            from email.mime.message import MIMEMessage
-            import email
-            for filename, content, mime_type in dynamic_attachments:
-                if mime_type == "message/rfc822":
-                    attached_msg = email.message_from_bytes(content)
-                    part = MIMEMessage(attached_msg)
-                elif mime_type == "text/html":
-                    part = MIMEText(content.decode("utf-8"), "html", "utf-8")
-                else:
-                    part = MIMEApplication(content)
-                part.add_header("Content-Disposition", f"attachment; filename={filename}")
-                msg.attach(part)
-                
-        if parsed_email.msg.is_multipart():
-            for part in parsed_email.msg.walk():
-                if part.get_content_maintype() == "multipart" or part.get("Content-Disposition") is None:
-                    continue
-                msg.attach(part)
+            part = MIMEApplication(att['content'])
+            part.add_header("Content-Disposition", f"attachment; filename={att['filename']}")
+            msg.attach(part)
+            
+        # Pièces jointes dynamiques (ex: sources PDF générées)
+        self._attach_dynamic_files(msg, dynamic_attachments)
+            
         return self._send_message_smtp(msg, "forward_parsed_email")
 
     def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
@@ -201,7 +191,11 @@ class ImapSmtpProvider(BaseMailProvider):
                 msg.attach(part)
         return self._send_message_smtp(msg, "send_synthetic_email")
 
-    def _send_message_smtp(self, msg: MIMEMultipart, log_context: str) -> bool:
+    def send_generated_email(self, eml: "EmailMessage", dynamic_attachments: List[tuple] = None) -> bool:
+        self._attach_dynamic_files(eml, dynamic_attachments)
+        return self._send_message_smtp(eml, "send_generated_email")
+
+    def _send_message_smtp(self, msg, log_context: str) -> bool:
         try:
             with smtplib.SMTP(
                 self.config.smtp_server, 

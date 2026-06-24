@@ -55,6 +55,9 @@ class MailService:
     def send_synthetic_email(self, to_email: str, subject: str, text_content: str, attachment_paths: List[str] = None) -> bool:
         return self.provider.send_synthetic_email(to_email, subject, text_content, attachment_paths)
 
+    def send_generated_email(self, eml: "EmailMessage", dynamic_attachments: List[tuple] = None) -> bool:
+        return self.provider.send_generated_email(eml, dynamic_attachments)
+
     def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
         return self.provider.append_message_to_folder(folder, msg, flags)
 

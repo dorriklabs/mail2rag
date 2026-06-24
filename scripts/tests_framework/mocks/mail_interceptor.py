@@ -6,6 +6,7 @@ class MailInterceptor:
         self.original_send_synthetic_email = mail_service.send_synthetic_email
         self.original_send_combined_email = mail_service.send_combined_email
         self.original_send_generated_email = getattr(mail_service, 'send_generated_email', None)
+        self.original_append_message_to_folder = getattr(mail_service, 'append_message_to_folder', None)
         self.last_sent_email_data = None
         self._apply_mocks()
 
@@ -94,14 +95,17 @@ class MailInterceptor:
                 return self.original_send_combined_email(service_email, client_email, subject, body_html, original_message_id)
             return True
 
-        def intercepted_send_generated_email(to_email, subject, html_content, original_message_id=None):
+        def intercepted_send_generated_email(eml: "EmailMessage", dynamic_attachments: list = None) -> bool:
             self.last_sent_email_data = {
-                "recipient": to_email,
-                "subject": subject,
-                "body": html_content
+                "recipient": eml["To"],
+                "subject": eml["Subject"],
+                "body": str(eml)
             }
             if self.original_send_generated_email:
-                return self.original_send_generated_email(to_email, subject, html_content, original_message_id)
+                return self.original_send_generated_email(eml=eml, dynamic_attachments=dynamic_attachments)
+            return True
+
+        def intercepted_append_message_to_folder(folder, msg, flags=()):
             return True
 
         self.mail_service.send_reply = intercepted_send_reply
@@ -109,3 +113,4 @@ class MailInterceptor:
         self.mail_service.send_synthetic_email = intercepted_send_synthetic_email
         self.mail_service.send_combined_email = intercepted_send_combined_email
         self.mail_service.send_generated_email = intercepted_send_generated_email
+        self.mail_service.append_message_to_folder = intercepted_append_message_to_folder

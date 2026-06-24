@@ -232,11 +232,7 @@ class MicrosoftGraphProvider(BaseMailProvider):
             msg.attach(part)
             
         # Attacher les pièces jointes dynamiques (ex: sources PDF)
-        if dynamic_attachments:
-            for filename, content, mime_type in dynamic_attachments:
-                part = MIMEApplication(content)
-                part.add_header('Content-Disposition', 'attachment', filename=filename)
-                msg.attach(part)
+        self._attach_dynamic_files(msg, dynamic_attachments)
                 
         return self._send_mime_message(msg)
 
@@ -256,6 +252,10 @@ class MicrosoftGraphProvider(BaseMailProvider):
                         msg.attach(part)
                         
         return self._send_mime_message(msg)
+
+    def send_generated_email(self, eml: "EmailMessage", dynamic_attachments: List[tuple] = None) -> bool:
+        self._attach_dynamic_files(eml, dynamic_attachments)
+        return self._send_mime_message(eml)
 
     def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
         if MOCK_MODE: return True

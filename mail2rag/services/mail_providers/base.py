@@ -60,6 +60,21 @@ class BaseMailProvider(ABC):
         pass
 
     @abstractmethod
+    def send_generated_email(self, eml: "EmailMessage", dynamic_attachments: List[tuple] = None) -> bool:
+        """Envoie un objet EmailMessage pré-généré, avec d'éventuelles pièces jointes supplémentaires."""
+        pass
+
+    def _attach_dynamic_files(self, msg, dynamic_attachments: List[tuple]) -> None:
+        """Helper DRY pour ajouter des pièces jointes dynamiques à un objet MIME/EmailMessage."""
+        if not dynamic_attachments:
+            return
+        from email.mime.application import MIMEApplication
+        for filename, content, mimetype in dynamic_attachments:
+            part = MIMEApplication(content)
+            part.add_header("Content-Disposition", f"attachment; filename={filename}")
+            msg.attach(part)
+
+    @abstractmethod
     def append_message_to_folder(self, folder: str, msg: bytes, flags: tuple = ()) -> bool:
         """Ajoute manuellement un message dans un dossier (ex: pour les brouillons)."""
         pass

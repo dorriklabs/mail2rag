@@ -158,14 +158,15 @@ class SlaReportService:
         
         html_body, csv_bytes = self.generate_html_report()
         
-        eml = EmailMessage()
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        
+        eml = MIMEMultipart()
         eml["Subject"] = f"[Mail2Rag] Rapport SLA & Délais ({trigger_type})"
         eml["To"] = self.config.admin_email
         eml["From"] = self.config.imap_user
         
-        eml.set_content("Veuillez consulter la version HTML de ce message.", subtype='html')
-        eml.replace_header('Content-Type', 'text/html')
-        eml.set_payload(html_body, charset='utf-8')
+        eml.attach(MIMEText(html_body, "html", "utf-8"))
         
         dynamic_attachments = []
         if csv_bytes:
