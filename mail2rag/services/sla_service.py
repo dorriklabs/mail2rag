@@ -44,6 +44,20 @@ class SlaService:
         except Exception as e:
             logger.error(f"Erreur initialisation SlaService SQLite : {e}")
 
+    def get_status(self, thread_id: str) -> str:
+        """Récupère le statut actuel d'un ticket (Test/Helper)."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT status FROM dispatch_sla WHERE thread_id = ?", (thread_id,))
+                result = cursor.fetchone()
+                if result:
+                    return result[0]
+                return "UNKNOWN"
+        except Exception as e:
+            logger.error(f"Erreur lors de la lecture du statut SLA pour {thread_id} : {e}")
+            return "ERROR"
+
     def log_dispatch(self, thread_id: str, sender: str, subject: str, target_service: str):
         if not thread_id:
             return

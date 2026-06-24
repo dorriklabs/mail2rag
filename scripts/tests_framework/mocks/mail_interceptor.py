@@ -5,6 +5,7 @@ class MailInterceptor:
         self.original_forward_parsed_email = mail_service.forward_parsed_email
         self.original_send_synthetic_email = mail_service.send_synthetic_email
         self.original_send_combined_email = mail_service.send_combined_email
+        self.original_send_generated_email = getattr(mail_service, 'send_generated_email', None)
         self.last_sent_email_data = None
         self._apply_mocks()
 
@@ -89,9 +90,22 @@ class MailInterceptor:
                 "subject": subject,
                 "body": body_html
             }
-            return self.original_send_combined_email(service_email, client_email, subject, body_html, original_message_id)
+            if self.original_send_combined_email:
+                return self.original_send_combined_email(service_email, client_email, subject, body_html, original_message_id)
+            return True
+
+        def intercepted_send_generated_email(to_email, subject, html_content, original_message_id=None):
+            self.last_sent_email_data = {
+                "recipient": to_email,
+                "subject": subject,
+                "body": html_content
+            }
+            if self.original_send_generated_email:
+                return self.original_send_generated_email(to_email, subject, html_content, original_message_id)
+            return True
 
         self.mail_service.send_reply = intercepted_send_reply
         self.mail_service.forward_parsed_email = intercepted_forward_parsed_email
         self.mail_service.send_synthetic_email = intercepted_send_synthetic_email
         self.mail_service.send_combined_email = intercepted_send_combined_email
+        self.mail_service.send_generated_email = intercepted_send_generated_email

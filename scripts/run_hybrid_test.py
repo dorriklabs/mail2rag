@@ -35,6 +35,12 @@ class IndentFormatter(logging.Formatter):
 class HybridTester:
     def __init__(self):
         self.config = Config()
+        
+        # Forcer la configuration pour les tests E2E
+        self.config.admin_email = "admin@dsiatlantic.com"
+        self.config.enable_bcc_ingestion = True
+        self.config.bcc_allowed_domains = {"dsiatlantic.com"}
+        
         # Désactiver les notifications sortantes pendant les tests
         self.config.teams_webhook_url = None
         self.config.slack_webhook_url = None
@@ -94,6 +100,13 @@ class HybridTester:
             msg['From'] = email_data['sender']
             msg['To'] = self.config.imap_user
             
+            message_id = email_data.get('message_id', f"<test-mock-id-{uid_counter}@dsiatlantic.com>")
+            msg['Message-ID'] = message_id
+            
+            if 'thread_id' in email_data:
+                msg['In-Reply-To'] = email_data['thread_id']
+                msg['References'] = email_data['thread_id']
+            
             parsed = ParsedEmail(
                 uid=uid_counter,
                 msg=msg,
@@ -103,7 +116,7 @@ class HybridTester:
                 to=self.config.imap_user,
                 cc="",
                 date="",
-                message_id="<test-mock-id@dsiatlantic.com>",
+                message_id=message_id,
                 is_synthetic=True
             )
             
@@ -120,8 +133,13 @@ class HybridTester:
                 
                 target_ws = router.determine_workspace(parsed.email_data) or "default-workspace"
                 
-                if email_data["type"] == "Ingestion":
-                    # Force l'ingestion sans passer par le Dispatch Sémantique
+                lower_subject = parsed.subject.lower()
+                if lower_subject.startswith("sla:") or lower_subject.startswith("rapport sla"):
+                    if parsed.sender == self.config.admin_email:
+                        self.context["sla_report_service"].send_report_to_admin(trigger_type="Test")
+                    else:
+                        self.logger.warning(f"Demande SLA refusée (Expéditeur non autorisé : {parsed.sender})")
+                elif email_data["type"] in ["Ingestion", "BCC Feedback"]:
                     ingest.ingest_email(parsed)
                     ingested_uids[uid_counter] = target_ws
                 elif is_diagnostic_email(parsed.subject):
@@ -155,13 +173,29 @@ class HybridTester:
             if email_data["type"] == "Ingestion":
                 note = "-"
                 remarque = "Document indexé"
+            elif email_data["type"] == "BCC Feedback":
+                thread_id = email_data.get('thread_id')
+                sla_status = self.context["sla_service"].get_status(thread_id) if thread_id else "UNKNOWN"
+                feedback_logged = self.context["feedback_service"].has_feedback(thread_id) if thread_id else False
+                
+                if sla_status == "REPLIED" and feedback_logged:
+                    note = "10/10"
+                    remarque = "[Succès] SLA arrêté et Feedback enregistré avec succès."
+                else:
+                    note = "0/10"
+                    remarque = f"[Erreur Critique : Boucle BCC défaillante] SLA={sla_status}, Feedback={feedback_logged}"
+            elif email_data["type"] == "SLA Report":
+                note = "10/10" if target_email != "Non intercepté" else "0/10"
+                remarque = "Rapport SLA intercepté avec succès" if target_email != "Non intercepté" else "Action SLA refusée (attendu si test fail)"
             
-            if self.interceptor.last_sent_email_data:
+            if self.interceptor.last_sent_email_data and email_data["type"] not in ["SLA Report", "BCC Feedback"]:
                 target_email = self.interceptor.last_sent_email_data['recipient']
                 sources = self.interceptor.last_sent_email_data.get('sources', [])
                 eval_result = Evaluator.evaluate_with_llm(email_data['id'], email_data['body'], self.interceptor.last_sent_email_data['body'])
                 note = eval_result['note']
                 remarque = eval_result['remarque']
+            elif self.interceptor.last_sent_email_data and email_data["type"] == "SLA Report":
+                target_email = self.interceptor.last_sent_email_data['recipient']
                 
             self.results.append({
                 "id": email_data["id"],

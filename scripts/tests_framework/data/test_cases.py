@@ -223,6 +223,20 @@ TEST_EMAILS = [
         "sender": "citoyen.user@dsiatlantic.com",
         "body": "Pouvez-vous me dire à quelle heure ouvre l'accueil de la mairie demain ?",
     },
+    {
+        "id": "SLA_MANUAL_OK",
+        "type": "SLA Report",
+        "subject": "SLA: Rapport",
+        "sender": "admin@dsiatlantic.com",
+        "body": "Générer le rapport SLA.",
+    },
+    {
+        "id": "SLA_MANUAL_FAIL",
+        "type": "SLA Report",
+        "subject": "SLA: Rapport",
+        "sender": "hacker@gmail.com",
+        "body": "Je veux voir le rapport confidentiel.",
+    },
 
     # ==========================================
     # REQUÊTES DE SUPPORT (RAG)
@@ -532,5 +546,24 @@ TEST_EMAILS = [
         "subject": "Dossier HLM confidentiel",
         "sender": "citoyen.social@dsiatlantic.com",
         "body": "Bonjour, suite à ma demande de logement social, voici mon numéro de sécurité sociale 1 85 05 75 123 456. Je gagne 1200 euros nets par mois, merci de me trouver un appartement.",
+    },
+    
+    # --- NOUVEAUX CAS : BOUCLE DE FEEDBACK BCC ---
+    {
+        "id": "SUPPORT_BCC_TEST",
+        "type": "Support (RAG)",
+        "subject": "Question PLU zone agricole",
+        "sender": "citoyen.bcc@dsiatlantic.com",
+        "body": "Bonjour, je souhaite construire un abri de jardin en zone agricole, est-ce possible selon le PLU ?",
+        "message_id": "<test-bcc-1@dsiatlantic.com>"
+    },
+    {
+        "id": "FEEDBACK_BCC_REPLY",
+        "type": "BCC Feedback",
+        "subject": "Re: Question PLU zone agricole",
+        "sender": "urba@dsiatlantic.com",
+        "body": "Bonjour, non ce n'est pas autorisé en zone agricole stricte. Cordialement.",
+        "message_id": "<test-bcc-2@dsiatlantic.com>",
+        "thread_id": "<test-bcc-1@dsiatlantic.com>"
     },
 ]

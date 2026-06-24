@@ -32,15 +32,17 @@ class DispatchService:
         notification_service=None,
         support_draft_service=None,
         feedback_service=None,
+        sla_service=None,
     ):
         self.config = config
-        self.logger = logger_instance
+        self.logger = logger_instance.getChild("services.dispatch")
         self.mail_service = mail_service
         self.cleaner = cleaner
         self.router = router
         self.notification_service = notification_service
         self.support_draft_service = support_draft_service
         self.feedback_service = feedback_service
+        self.sla_service = sla_service
         self.sla_service = sla_service
 
     def handle_dispatch(self, email: "ParsedEmail") -> bool:

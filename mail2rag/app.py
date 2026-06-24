@@ -185,8 +185,8 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
 
     from services.feedback_service import FeedbackService
     feedback_service = FeedbackService(
-        state_dir=config.state_path,
-        log_dir=config.logs_path if hasattr(config, 'logs_path') else Path("logs")
+        state_dir=Path(config.state_path).parent,
+        log_dir=Path(config.logs_path) if hasattr(config, 'logs_path') else Path("logs")
     )
     
     from services.feedback_analyzer import FeedbackAnalyzerService

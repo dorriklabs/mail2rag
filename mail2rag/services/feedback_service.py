@@ -87,3 +87,20 @@ class FeedbackService:
                     logger.debug(f"No pending feedback found for thread: {thread_id}")
         except Exception as e:
             logger.error(f"Erreur log_final_feedback : {e}")
+
+    def has_feedback(self, thread_id: str) -> bool:
+        """Vérifie si un feedback a été logué pour ce thread (Test/Helper)."""
+        if not self.log_file.exists():
+            return False
+        try:
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    data = json.loads(line)
+                    if data.get("thread_id") == thread_id:
+                        return True
+            return False
+        except Exception as e:
+            logger.error(f"Erreur has_feedback : {e}")
+            return False
