@@ -250,6 +250,7 @@ class SupportDraftService:
             )
 
             if not ai_response:
+                self.logger.warning("⚠️ [DEBUG RAG] ai_response est vide après _search_and_generate. Abandon de la suggestion.")
                 return None, None, None, None
 
             confidence_score, confidence_level = self._calculate_confidence(
@@ -445,17 +446,23 @@ class SupportDraftService:
             
             self.logger.debug("📡 Appel RAG Proxy: %s/chat", rag_url)
             
+            self.logger.info("📡 [DEBUG RAG] Envoi de la requête avec payload: %s", {k: v for k, v in payload.items() if k != "system_prompt"})
+            
             response = requests.post(
                 f"{rag_url}/chat",
                 json=payload,
                 timeout=self.config.rag_proxy_timeout,
             )
             
+            self.logger.info("📡 [DEBUG RAG] Statut HTTP: %s", response.status_code)
+            
             if response.ok:
                 data = response.json()
                 sources = data.get("sources", [])
                 ai_response = data.get("answer", "")
                 debug_info = data.get("debug_info", {})
+                
+                self.logger.info("📡 [DEBUG RAG] Réponse décodée. Clés: %s, Taille 'answer': %d", list(data.keys()), len(ai_response) if ai_response else 0)
                 
                 return sources, ai_response, debug_info
             else:

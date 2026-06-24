@@ -227,6 +227,7 @@ def build_context(config: Config, logger: logging.Logger) -> Dict[str, Any]:
         get_secure_id=get_secure_id,
         trigger_bm25_rebuild=trigger_bm25_rebuild,
         feedback_service=feedback_service,
+        sla_service=sla_service,
     )
 
     chat_service = ChatService(

@@ -226,10 +226,11 @@ class MicrosoftGraphProvider(BaseMailProvider):
         msg.attach(MIMEText(body, "html", "utf-8"))
         
         # Attacher les pièces jointes d'origine
-        for att in parsed_email.attachments:
-            part = MIMEApplication(att['content'])
-            part.add_header('Content-Disposition', 'attachment', filename=att['filename'])
-            msg.attach(part)
+        if parsed_email.msg.is_multipart():
+            for part in parsed_email.msg.walk():
+                if part.get_content_maintype() == "multipart" or part.get("Content-Disposition") is None:
+                    continue
+                msg.attach(part)
             
         # Attacher les pièces jointes dynamiques (ex: sources PDF)
         self._attach_dynamic_files(msg, dynamic_attachments)

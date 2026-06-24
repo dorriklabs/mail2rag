@@ -72,8 +72,11 @@ class IngestionService:
             is_agent_reply = False
             if getattr(self.config, "enable_bcc_ingestion", False):
                 sender_domain = email.sender.split('@')[-1].lower() if '@' in email.sender else ""
-                allowed_domains = [d.lower().strip() for d in getattr(self.config, "bcc_allowed_domains", "").split(",") if d.strip()]
-                if sender_domain in allowed_domains:
+                raw_domains = getattr(self.config, "bcc_allowed_domains", [])
+                if isinstance(raw_domains, str):
+                    raw_domains = raw_domains.split(",")
+                allowed_domains = [d.lower().strip() for d in raw_domains if d.strip()]
+                if allowed_domains and sender_domain in allowed_domains:
                     is_agent_reply = True
                     self.logger.info("📩 Ingestion BCC détectée pour l'agent: %s", email.sender)
 

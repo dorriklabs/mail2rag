@@ -263,6 +263,12 @@ class Config:
 
         # SLA Report
         self.admin_email = os.getenv("ADMIN_EMAIL", "")
+        self.sla_business_start_hour = int(os.getenv("SLA_BUSINESS_START_HOUR", "8"))
+        self.sla_business_end_hour = int(os.getenv("SLA_BUSINESS_END_HOUR", "18"))
+        # 0=Lundi, 4=Vendredi
+        days_str = os.getenv("SLA_BUSINESS_DAYS", "0,1,2,3,4")
+        self.sla_business_days = [int(d.strip()) for d in days_str.split(",") if d.strip().isdigit()]
+        self.sla_critical_hours = int(os.getenv("SLA_CRITICAL_HOURS", "20"))
         # ------------------------------------------------------------------
         self.rag_proxy_url = os.getenv("RAG_PROXY_URL", "http://rag_proxy:8000")
         self.use_rag_proxy_for_search = self._get_bool(

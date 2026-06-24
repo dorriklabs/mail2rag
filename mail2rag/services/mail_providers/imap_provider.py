@@ -151,11 +151,11 @@ class ImapSmtpProvider(BaseMailProvider):
             msg.attach(MIMEText(body, "plain", "utf-8"))
             
         # Pièces jointes de l'email d'origine
-        for att in parsed_email.attachments:
-            from email.mime.application import MIMEApplication
-            part = MIMEApplication(att['content'])
-            part.add_header("Content-Disposition", f"attachment; filename={att['filename']}")
-            msg.attach(part)
+        if parsed_email.msg.is_multipart():
+            for part in parsed_email.msg.walk():
+                if part.get_content_maintype() == "multipart" or part.get("Content-Disposition") is None:
+                    continue
+                msg.attach(part)
             
         # Pièces jointes dynamiques (ex: sources PDF générées)
         self._attach_dynamic_files(msg, dynamic_attachments)

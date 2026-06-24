@@ -2,6 +2,11 @@
     "rules": [
         {
             "type": "sender",
+            "value": "accueil@dsiatlantic.com",
+            "workspace": "support-client"
+        },
+        {
+            "type": "sender",
             "value": "urba@dsiatlantic.com",
             "workspace": "urba",
             "allowed_workspaces": ["urba", "support-client"]

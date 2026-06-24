@@ -40,6 +40,39 @@ class SlaReportService:
             self.logger.error("Erreur _get_sla_data : %s", e)
             return pd.DataFrame()
 
+    def _calculate_business_hours(self, start_time, end_time) -> float:
+        import pandas as pd
+        if pd.isna(start_time) or pd.isna(end_time) or start_time > end_time:
+            return 0.0
+
+        start_hour = self.config.sla_business_start_hour
+        end_hour = self.config.sla_business_end_hour
+        business_days = self.config.sla_business_days
+        
+        def clamp_time(dt):
+            return max(start_hour, min(end_hour, dt.hour + dt.minute / 60.0 + dt.second / 3600.0))
+
+        if start_time.date() == end_time.date():
+            if start_time.weekday() not in business_days:
+                return 0.0
+            return max(0.0, clamp_time(end_time) - clamp_time(start_time))
+
+        total_hours = 0.0
+        
+        if start_time.weekday() in business_days:
+            total_hours += max(0.0, end_hour - clamp_time(start_time))
+            
+        current_date = start_time.date() + pd.Timedelta(days=1)
+        while current_date < end_time.date():
+            if current_date.weekday() in business_days:
+                total_hours += (end_hour - start_hour)
+            current_date += pd.Timedelta(days=1)
+            
+        if end_time.weekday() in business_days:
+            total_hours += max(0.0, clamp_time(end_time) - start_hour)
+            
+        return total_hours
+
     def _generate_ai_summary(self, total_pending: int, avg_response: float, critical_count: int, top_critical_service: str) -> str:
         if not self.config.ai_api_url:
             return ""
@@ -80,23 +113,89 @@ class SlaReportService:
         if df.empty:
             return "<p>Aucune donnée SLA n'est disponible.</p>", None
             
+        now = datetime.utcnow()
+        # Calculer les heures absolues et ouvrées pour tous
+        df['delay_hours_absolute'] = df.apply(
+            lambda r: (now - r['dispatched_at']).total_seconds() / 3600.0 if r['status'] == 'PENDING' else 0.0, axis=1
+        )
+        df['delay_business_hours'] = df.apply(
+            lambda r: self._calculate_business_hours(r['dispatched_at'], now) if r['status'] == 'PENDING' else 0.0, axis=1
+        )
+        df['response_business_hours'] = df.apply(
+            lambda r: self._calculate_business_hours(r['dispatched_at'], r['replied_at']) if r['status'] == 'REPLIED' else 0.0, axis=1
+        )
+        
         pending_df = df[df['status'] == 'PENDING'].copy()
         replied_df = df[df['status'] == 'REPLIED'].copy()
 
-        now = datetime.utcnow()
-        if not pending_df.empty:
-            pending_df['delay_hours'] = (now - pending_df['dispatched_at']).dt.total_seconds() / 3600.0
-        else:
-            pending_df['delay_hours'] = []
-
         total_pending = len(pending_df)
-        avg_response = replied_df['response_time_hours'].mean() if not replied_df.empty else 0.0
-        critical_df = pending_df[pending_df['delay_hours'] > 48].sort_values(by='delay_hours', ascending=False)
+        avg_response_bh = replied_df['response_business_hours'].mean() if not replied_df.empty else 0.0
+        
+        # Seuil critique depuis config
+        critical_threshold = getattr(self.config, 'sla_critical_hours', 20)
+        critical_df = pending_df[pending_df['delay_business_hours'] > critical_threshold].sort_values(by='delay_business_hours', ascending=False)
         critical_count = len(critical_df)
         top_critical_service = critical_df['target_service'].value_counts().idxmax() if not critical_df.empty else ""
 
+        # Groupby par service
+        service_stats_html = ""
+        service_stats_text = ""
+        if not df.empty:
+            stats = []
+            for service, group in df.groupby('target_service'):
+                s_pending = len(group[group['status'] == 'PENDING'])
+                s_replied = group[group['status'] == 'REPLIED']
+                s_avg_bh = s_replied['response_business_hours'].mean() if not s_replied.empty else 0.0
+                stats.append({"Service": service, "En Attente": s_pending, "Temps Moyen (Ouvré)": s_avg_bh})
+            
+            stats_df = pd.DataFrame(stats).sort_values(by="En Attente", ascending=False)
+            
+            service_stats_html += "<table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>"
+            service_stats_html += "<tr><th style='border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;'>Service</th>"
+            service_stats_html += "<th style='border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;'>En Attente</th>"
+            service_stats_html += "<th style='border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;'>Temps Moyen (Ouvré)</th></tr>"
+            
+            for _, row in stats_df.iterrows():
+                service_stats_html += "<tr>"
+                service_stats_html += f"<td style='border: 1px solid #ddd; padding: 8px;'>{row['Service']}</td>"
+                service_stats_html += f"<td style='border: 1px solid #ddd; padding: 8px;'>{row['En Attente']}</td>"
+                service_stats_html += f"<td style='border: 1px solid #ddd; padding: 8px;'>{row['Temps Moyen (Ouvré)']:.1f} h</td>"
+                service_stats_html += "</tr>"
+                service_stats_text += f"- {row['Service']}: {row['En Attente']} en attente, temps moyen {row['Temps Moyen (Ouvré)']:.1f}h.\n"
+            service_stats_html += "</table>"
+
         # 1. Executive Summary IA
-        ai_summary = self._generate_ai_summary(total_pending, avg_response, critical_count, top_critical_service)
+        prompt = (
+            "Tu es l'assistant de direction (IA) de la mairie/entreprise. "
+            "Rédige un court paragraphe (2-3 phrases) de synthèse poli et exécutif à l'attention de la Direction pour résumer l'état des temps de réponse (SLA).\n"
+            f"Faits actuels :\n"
+            f"- {total_pending} e-mails en attente au total.\n"
+            f"- Temps de réponse moyen global : {avg_response_bh:.1f} heures ouvrées.\n"
+            f"- Il y a {critical_count} urgences (>{critical_threshold}h ouvrées).\n"
+            f"Détail par service :\n{service_stats_text}\n"
+            "Identifie le service le plus sous pression et formule une recommandation opérationnelle. Sois concis, professionnel et direct. Pas d'objet ni de signature."
+        )
+        
+        ai_summary = ""
+        if self.config.ai_api_url:
+            try:
+                payload = {
+                    "model": self.config.ai_model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.5,
+                    "max_tokens": 150,
+                }
+                resp = requests.post(
+                    self.config.llm_api_url,
+                    json=payload,
+                    timeout=self.config.llm_timeout,
+                    headers={"Authorization": f"Bearer {self.config.ai_api_key}"}
+                )
+                if resp.ok:
+                    data = resp.json()
+                    ai_summary = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            except Exception as e:
+                self.logger.error("Erreur génération AI summary: %s", e)
         
         # 2. Construction du CSV
         csv_bytes = df.to_csv(index=False).encode('utf-8')
@@ -117,32 +216,37 @@ class SlaReportService:
             """
             
         html += f"""
-            <h3>Indicateurs Clés</h3>
+            <h3>Indicateurs Clés Globaux</h3>
             <ul>
                 <li><strong>E-mails en attente :</strong> {total_pending}</li>
-                <li><strong>Temps de réponse moyen :</strong> {avg_response:.1f} h</li>
-                <li><strong>Dossiers critiques (>48h) :</strong> <span style="color: {'red' if critical_count > 0 else 'green'}; font-weight: bold;">{critical_count}</span></li>
+                <li><strong>Temps de réponse moyen :</strong> {avg_response_bh:.1f} heures ouvrées</li>
+                <li><strong>Dossiers critiques (>{critical_threshold}h ouvrées) :</strong> <span style="color: {'red' if critical_count > 0 else 'green'}; font-weight: bold;">{critical_count}</span></li>
             </ul>
         """
         
+        html += "<h3>📈 Santé par Service</h3>"
+        html += service_stats_html
+        
         if not critical_df.empty:
-            html += "<h3>🚨 Dossiers Critiques (Top 10)</h3>"
+            html += f"<h3>🚨 Dossiers Critiques (Top 10 - >{critical_threshold}h ouvrées)</h3>"
             html += "<table style='width: 100%; border-collapse: collapse;'>"
             html += "<tr><th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f2f2f2;'>Service</th>"
             html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f2f2f2;'>Citoyen</th>"
-            html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f2f2f2;'>En attente depuis</th></tr>"
+            html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f2f2f2;'>Heures Ouvrées</th>"
+            html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f2f2f2;'>Heures Absolues</th></tr>"
             
             for _, row in critical_df.head(10).iterrows():
                 html += "<tr>"
                 html += f"<td style='border: 1px solid #ddd; padding: 8px;'>{row['target_service']}</td>"
                 html += f"<td style='border: 1px solid #ddd; padding: 8px;'>{row['sender']}</td>"
-                html += f"<td style='border: 1px solid #ddd; padding: 8px; color: red;'>{row['delay_hours']:.1f} h</td>"
+                html += f"<td style='border: 1px solid #ddd; padding: 8px; color: red; font-weight: bold;'>{row['delay_business_hours']:.1f} h</td>"
+                html += f"<td style='border: 1px solid #ddd; padding: 8px; color: #888;'>{row['delay_hours_absolute']:.1f} h</td>"
                 html += "</tr>"
             html += "</table>"
             
         html += """
             <p style="margin-top: 30px; font-size: 0.9em; color: #666;">
-                <i>Le rapport complet est attaché en format CSV. Pour consulter tous les détails, veuillez vous rendre sur le Dashboard Streamlit.</i>
+                <i>Le rapport complet est attaché en format CSV. Les heures ouvrées sont calculées sur la plage horaire définie en configuration.</i>
             </p>
         </body>
         </html>

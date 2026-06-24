@@ -170,6 +170,10 @@ class HybridTester:
             remarque = "Pas d'envoi SMTP détecté"
             sources = []
             
+            if self.interceptor.last_sent_email_data:
+                target_email = self.interceptor.last_sent_email_data['recipient']
+                sources = self.interceptor.last_sent_email_data.get('sources', [])
+            
             if email_data["type"] == "Ingestion":
                 note = "-"
                 remarque = "Document indexé"
@@ -188,14 +192,10 @@ class HybridTester:
                 note = "10/10" if target_email != "Non intercepté" else "0/10"
                 remarque = "Rapport SLA intercepté avec succès" if target_email != "Non intercepté" else "Action SLA refusée (attendu si test fail)"
             
-            if self.interceptor.last_sent_email_data and email_data["type"] not in ["SLA Report", "BCC Feedback"]:
-                target_email = self.interceptor.last_sent_email_data['recipient']
-                sources = self.interceptor.last_sent_email_data.get('sources', [])
+            if self.interceptor.last_sent_email_data and email_data["type"] not in ["SLA Report", "BCC Feedback", "Ingestion"]:
                 eval_result = Evaluator.evaluate_with_llm(email_data['id'], email_data['body'], self.interceptor.last_sent_email_data['body'])
                 note = eval_result['note']
                 remarque = eval_result['remarque']
-            elif self.interceptor.last_sent_email_data and email_data["type"] == "SLA Report":
-                target_email = self.interceptor.last_sent_email_data['recipient']
                 
             self.results.append({
                 "id": email_data["id"],

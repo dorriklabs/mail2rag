@@ -47,6 +47,13 @@ class MailInterceptor:
                                     break
                         else:
                             pure_ai_text = eml_msg.get_content()
+                        
+                        if pure_ai_text:
+                            import re
+                            # Supprimer la citation de l'email d'origine pour ne garder que la réponse de l'IA
+                            match = re.search(r"Le .*?, .*? a écrit :", pure_ai_text)
+                            if match:
+                                pure_ai_text = pure_ai_text[:match.start()].strip()
 
             if pure_ai_text:
                 body_to_evaluate = pure_ai_text

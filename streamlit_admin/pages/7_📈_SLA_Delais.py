@@ -64,6 +64,69 @@ with col3:
 
 st.divider()
 
+with st.expander("⚙️ Configuration des Heures Ouvrées SLA"):
+    st.markdown("Ces paramètres définissent la plage horaire pour le calcul des heures ouvrées dans les rapports SLA. Seuls les administrateurs devraient modifier ces valeurs.")
+    
+    # Lecture simplifiée du .env
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+    
+    current_start = 8
+    current_end = 18
+    current_crit = 20
+    current_days = "0,1,2,3,4"
+    
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                if line.startswith("SLA_BUSINESS_START_HOUR="): current_start = int(line.strip().split("=")[1])
+                elif line.startswith("SLA_BUSINESS_END_HOUR="): current_end = int(line.strip().split("=")[1])
+                elif line.startswith("SLA_CRITICAL_HOURS="): current_crit = int(line.strip().split("=")[1])
+                elif line.startswith("SLA_BUSINESS_DAYS="): current_days = line.strip().split("=")[1]
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        new_start = st.number_input("Heure de début (ex: 8)", min_value=0, max_value=23, value=current_start)
+    with c2:
+        new_end = st.number_input("Heure de fin (ex: 18)", min_value=0, max_value=23, value=current_end)
+    with c3:
+        new_crit = st.number_input("Seuil Critique (en heures ouvrées)", min_value=1, value=current_crit)
+    with c4:
+        new_days = st.text_input("Jours (0=Lun, 4=Ven)", value=current_days, help="Ex: 0,1,2,3,4")
+        
+    if st.button("💾 Sauvegarder la configuration SLA"):
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+                
+            env_dict = {
+                "SLA_BUSINESS_START_HOUR": str(new_start),
+                "SLA_BUSINESS_END_HOUR": str(new_end),
+                "SLA_CRITICAL_HOURS": str(new_crit),
+                "SLA_BUSINESS_DAYS": new_days
+            }
+            
+            new_lines = []
+            for line in lines:
+                matched = False
+                for k in env_dict.keys():
+                    if line.startswith(f"{k}="):
+                        new_lines.append(f"{k}={env_dict[k]}\n")
+                        del env_dict[k]
+                        matched = True
+                        break
+                if not matched:
+                    new_lines.append(line)
+                    
+            for k, v in env_dict.items():
+                new_lines.append(f"{k}={v}\n")
+                
+            with open(env_path, "w") as f:
+                f.writelines(new_lines)
+            st.success("✅ Configuration SLA mise à jour ! (Redémarrez Mail2RAG pour appliquer)")
+
+st.divider()
+
 # Onglets
 tab1, tab2 = st.tabs(["🔴 En Souffrance (PENDING)", "🟢 Historique (REPLIED)"])
 
