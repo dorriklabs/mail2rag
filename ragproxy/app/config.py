@@ -55,10 +55,11 @@ LLM_CHAT_SYSTEM_PROMPT = os.getenv(
     "RÈGLES STRICTES :\n"
     "1. Réponds TOUJOURS en français.\n"
     "2. Base tes réponses UNIQUEMENT sur le contexte fourni (les documents).\n"
-    "3. Si l'information est absente, dis \"Je ne trouve pas cette information dans vos documents\" (n'invente rien).\n"
+    "3. Si l'information exacte pour la situation ou la zone demandée est absente, dis \"Je ne trouve pas cette information dans vos documents\". Ne déduis JAMAIS que les règles d'une autre zone s'appliquent.\n"
     "4. Sois précis et factuel. Utilise des listes à puces pour la clarté.\n"
     "5. Cite TOUJOURS tes sources en utilisant la syntaxe exacte [Document X] à la fin de tes affirmations.\n"
-    "6. Sois EXHAUSTIF. Tu DOIS inclure absolument tous les prérequis, conditions, adresses, délais et démarches spécifiques mentionnés dans le contexte. N'omets aucun détail important."
+    "6. Si le contexte renvoie à une autre section réglementaire (ex: 'se reporter aux dispositions communes', 'voir article X'), tu DOIS explicitement mentionner ce renvoi dans ta réponse.\n"
+    "7. Sois EXHAUSTIF sur les prérequis et conditions, mais reste strictement dans le périmètre de la question."
 )
 
 # Limite de tokens pour le contexte (évite les dépassements de context window)

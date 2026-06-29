@@ -26,8 +26,6 @@ docker exec -i "$CONTAINER" sh -c 'python -m pytest --version > /dev/null 2>&1 |
 
 # Combinations: (CHUNK_SIZE CHUNK_OVERLAP CHUNKING_STRATEGY TOP_K FINAL_K USE_BM25 LLM_TEMPERATURE LLM_MAX_TOKENS)
 CONFIGS=(
-    "500 150 recursive 25 12 true 0.1 1000"
-    "800 200 recursive 20 8 true 0.1 1000"
     "1200 300 recursive 15 5 true 0.1 1000"
 )
 

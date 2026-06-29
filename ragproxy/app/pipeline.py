@@ -52,19 +52,27 @@ class RAGPipeline:
         import json
         from app.config import LLM_CHAT_MODEL, RAG_ALLOWED_FILTERS, RAG_QUERY_ROUTER_EXTRA_PROMPT
         
-        prompt = f"""Tu es un Query Router pour un moteur RAG d'entreprise.
+        prompt = f"""Tu es un Query Router pour un moteur RAG d'entreprise spécialisé dans l'urbanisme et le juridique.
 Analyse la requête de l'utilisateur et détermine :
 1. L'intention : "factual" (recherche précise, chiffre, date, référence) ou "exploratory" (explication, procédure, comment faire).
 2. Les métadonnées : extrais les années, expéditeurs, {RAG_QUERY_ROUTER_EXTRA_PROMPT}.
 3. La confiance ("confidence") : "high" (mention claire/explicite), "probable" (déduite), "ambiguous" (vague ou contradictoire).
-4. La requête nettoyée ("clean_query") : Corrige impérativement les fautes d'orthographe (langage SMS, abréviations) et traduis la requête en français si elle est en anglais ou dans une autre langue.
+4. L'expansion RAG-Fusion ("expanded_queries") : Le LLM doit comprendre qu'un terme hyper-spécifique (ex: "Zone UA") cache souvent des règles générales.
+Au lieu de renvoyer une seule requête, renvoie une liste de 3 variantes stratégiques :
+  - Variante 1 : La question stricte et corrigée (fautes, traduction si nécessaire).
+  - Variante 2 : Une question "Dé-contextualisée" (axée sur le thème de fond, ex: "aspect extérieur clôture rue").
+  - Variante 3 : Une question "Règles Générales" (ex: "dispositions communes et règles applicables à toutes les zones").
 
 Renvoie UNIQUEMENT un JSON valide de ce format strict :
 {{
     "intent": "factual",
     "filters": {{"year": "2023", "doc_type": "procédure", "status": "validé"}},
     "confidence": "high",
-    "clean_query": "Requête corrigée et en français"
+    "expanded_queries": [
+        "Requête corrigée et en français",
+        "Thème de fond de la requête",
+        "Règles générales et dispositions communes"
+    ]
 }}
 Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         payload = {"model": LLM_CHAT_MODEL, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": query}], "temperature": 0.0, "max_tokens": 150}
@@ -80,7 +88,8 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
             intent = d.get("intent", "exploratory")
             filters = d.get("filters", {})
             confidence = d.get("confidence", "ambiguous")
-            clean_query = d.get("clean_query", query)
+            expanded_queries = d.get("expanded_queries", [query])
+            clean_query = expanded_queries[0] if expanded_queries else query
             
             clean_filters = {}
             y = filters.get("year") or filters.get("annee")
@@ -91,10 +100,10 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
                 if filters.get(key):
                     clean_filters[key] = str(filters.get(key)).lower()
                 
-            return {"intent": intent, "filters": clean_filters, "confidence": confidence, "clean_query": clean_query}
+            return {"intent": intent, "filters": clean_filters, "confidence": confidence, "clean_query": clean_query, "expanded_queries": expanded_queries}
         except Exception as e:
             logger.error(f"Query Router error: {e}")
-            return {"intent": "exploratory", "filters": {}, "confidence": "ambiguous"}
+            return {"intent": "exploratory", "filters": {}, "confidence": "ambiguous", "clean_query": query, "expanded_queries": [query]}
 
     def run(
         self,
@@ -122,6 +131,7 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         intent = routing_info.get("intent", "exploratory")
         filters = routing_info.get("filters", {})
         confidence = routing_info.get("confidence", "ambiguous")
+        expanded_queries = routing_info.get("expanded_queries", [query])
         clean_query = routing_info.get("clean_query", query)
         
         strict_filter = None
@@ -131,12 +141,13 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
             logger.info(f"Boost de métadonnées (confiance {confidence}) : {filters}")
             debug_info["boost_filters"] = filters
 
-        logger.info(f"Using Query: '{clean_query}' (Original: '{query}')")
+        logger.info(f"Using Queries: {expanded_queries} (Original: '{query}')")
         debug_info["clean_query"] = clean_query
+        debug_info["expanded_queries"] = expanded_queries
 
         # 1. Embeddings (Dense)
         t0 = time.time()
-        query_vector = self.embedder.embed(clean_query)
+        query_vectors = [self.embedder.embed(q) for q in expanded_queries]
         debug_info["timings"]["embedding"] = round(time.time() - t0, 3)
 
         # 2. Recherche Hybride (Qdrant) Multi-Collection
@@ -181,32 +192,56 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         else:
             dynamic_top_k = top_k
             
-        merged_candidates = []
+        # Parallélisation des appels Qdrant (RAG Fusion)
+        max_threads = max(1, min(20, num_colls * len(expanded_queries)))
         
-        # Parallélisation des appels Qdrant (Max 20 threads)
-        max_threads = max(1, min(20, num_colls))
+        results_by_query: Dict[int, List[Dict[str, Any]]] = {i: [] for i in range(len(expanded_queries))}
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-            future_to_coll = {
-                executor.submit(
-                    self.vdb.search,
-                    query_text=clean_query,
-                    query_vector=query_vector,
-                    limit=dynamic_top_k,
-                    collection_name=coll,
-                    metadata_filter=strict_filter,
-                    acl_groups=acl_groups,
-                ): coll for coll in final_collections
-            }
+            future_to_search = {}
+            for i, (q_text, q_vector) in enumerate(zip(expanded_queries, query_vectors)):
+                for coll in final_collections:
+                    fut = executor.submit(
+                        self.vdb.search,
+                        query_text=q_text,
+                        query_vector=q_vector,
+                        limit=dynamic_top_k,
+                        collection_name=coll,
+                        metadata_filter=strict_filter,
+                        acl_groups=acl_groups,
+                    )
+                    future_to_search[fut] = (coll, i)
             
-            for future in concurrent.futures.as_completed(future_to_coll):
-                coll = future_to_coll[future]
+            for future in concurrent.futures.as_completed(future_to_search):
+                coll, q_index = future_to_search[future]
                 try:
                     candidates = future.result()
                     for candidate in candidates:
                         candidate["metadata"]["collection"] = coll
-                    merged_candidates.extend(candidates)
+                    results_by_query[q_index].extend(candidates)
                 except Exception as e:
-                    logger.error(f"Concurrent search failed for collection {coll}: {e}")
+                    logger.error(f"Concurrent search failed for collection {coll}, query {q_index}: {e}")
+        
+        # RRF (Reciprocal Rank Fusion)
+        rrf_scores: Dict[str, float] = {}
+        candidate_map: Dict[str, Dict[str, Any]] = {}
+        
+        for q_index, candidates in results_by_query.items():
+            for rank, candidate in enumerate(candidates):
+                uid = candidate.get("metadata", {}).get("uid") or candidate.get("id")
+                if not uid:
+                    import hashlib
+                    # Fallback au hash du texte si l'UID n'est pas présent
+                    text_content = candidate.get("text", "")
+                    uid = hashlib.md5(text_content.encode('utf-8')).hexdigest()
+                
+                score = 1.0 / (60 + rank + 1)
+                rrf_scores[uid] = rrf_scores.get(uid, 0.0) + score
+                if uid not in candidate_map:
+                    candidate_map[uid] = candidate
+
+        # Trier par score RRF
+        sorted_uids = sorted(rrf_scores.keys(), key=lambda uid: rrf_scores[uid], reverse=True)
+        merged_candidates = [candidate_map[uid] for uid in sorted_uids[:MAX_TOTAL_DOCS]]
             
         debug_info["timings"]["hybrid_search"] = round(time.time() - t0, 3)
         debug_info["counts"]["merged_candidates"] = len(merged_candidates)
