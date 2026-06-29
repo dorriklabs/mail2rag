@@ -1,7 +1,7 @@
 import json
 import os
 import requests
-import streamlit as st
+import streamlit as st  # type: ignore
 
 WORKSPACES_CONFIG_FILE = "/etc/mail2rag/workspaces_config.json"
 
@@ -110,4 +110,5 @@ def log_audit_event(user: str, source: str, query: str, workspaces: str):
         with open(AUDIT_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
     except Exception as e:
-        print(f"Erreur d'écriture dans le log d'audit: {e}")
+        import logging
+        logging.error(f"Erreur d'écriture dans le log d'audit: {e}")

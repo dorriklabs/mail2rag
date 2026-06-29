@@ -1,7 +1,7 @@
-import streamlit as st
+import streamlit as st  # type: ignore
 import sqlite3
-import pandas as pd
-from datetime import datetime
+import pandas as pd  # type: ignore
+from datetime import datetime, timezone
 import os
 
 st.set_page_config(page_title="SLA & Délais de Réponse", page_icon="📈", layout="wide")
@@ -44,7 +44,7 @@ pending_df = df[df['status'] == 'PENDING'].copy()
 replied_df = df[df['status'] == 'REPLIED'].copy()
 
 # Recalculer l'âge en heures pour les Pending
-now = datetime.utcnow()
+now = datetime.now(timezone.utc).replace(tzinfo=None)
 if not pending_df.empty:
     pending_df['current_delay_hours'] = (now - pending_df['dispatched_at']).dt.total_seconds() / 3600.0
 else:
