@@ -297,6 +297,19 @@ class Config:
         self.enable_smart_ingestion_filter = self._get_bool("ENABLE_SMART_INGESTION_FILTER", False)
 
         # ------------------------------------------------------------------
+        # HYBRID METADATA EXTRACTION (Dynamic specific fields)
+        # ------------------------------------------------------------------
+        mapping_str = os.getenv("METADATA_EXTRACTION_MAPPING", "FACTURE:montant,fournisseur|URBANISME:commune,zone,parcelle")
+        self.metadata_extraction_mapping: dict[str, list[str]] = {}
+        if mapping_str.strip():
+            for pair in mapping_str.split("|"):
+                if ":" in pair:
+                    doc_type, fields = pair.split(":")
+                    self.metadata_extraction_mapping[doc_type.strip().upper()] = [
+                        f.strip() for f in fields.split(",") if f.strip()
+                    ]
+
+        # ------------------------------------------------------------------
         # LLM DIRECT (pour RAG Proxy : génération finale)
         # ------------------------------------------------------------------
         # Si LLM_BASE_URL est défini, on construit le endpoint /chat/completions.

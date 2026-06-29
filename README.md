@@ -38,6 +38,7 @@ Mail2RAG monitors your inbox and **automatically**:
 
 **Send an email → Get it indexed → Query via email or dashboard**
 
+> 🚀 **v4.14.0**: **Hybrid Dynamic Metadata Extraction** - Centralized mapping (`METADATA_EXTRACTION_MAPPING`), dynamic prompt injection, and hybrid Qdrant routing for official vs discovered metadata.
 > 🚀 **v4.2.0**: **Dynamic Soft Filtering** - Configurable metadata extraction (`RAG_ALLOWED_FILTERS`) and weighted reranking (`RAG_FILTER_WEIGHTS`), with automatic malus for obsolete documents.
 > 🚀 **v4.0.0**: **Architecture V4 (Enterprise RAG)** - Strict RBAC vector filtering, Parent-Child Retrieval (fetch email body when an attachment matches), AI Query Router (Factual vs Exploratory), and strict Answerability Checks (anti-hallucination).
 > 🆕 **v3.37.0**: **Soft Filtering & Advanced Context** - Dynamic metadata extraction (e.g., year) via LLM with Reranker bonus (+0.10) to prevent data loss.
@@ -539,6 +540,7 @@ Mail2RAG surveille votre boîte mail et **automatiquement** :
 1. 📥 Ingère emails + pièces jointes dans Qdrant (base vectorielle)
 2. 🔍 Indexe avec recherche hybride (Vecteur + BM25 + Reranking Cross-Encoder)
 3. 💬 Répond aux questions par email ou via le dashboard Streamlit
+> 🚀 **v4.14.0** : **Extraction Hybride de Métadonnées** - Routage dynamique, injection de prompt à la volée et séparation stricte dans Qdrant via `METADATA_EXTRACTION_MAPPING`.
 > 🚀 **v4.2.0** : **Dynamic Soft Filtering** - Extraction de métadonnées configurable (`RAG_ALLOWED_FILTERS`) et pondération dynamique au reranking (`RAG_FILTER_WEIGHTS`), avec malus automatique pour les documents obsolètes.
 > 🚀 **v4.0.0** : **Architecture V4 (Enterprise RAG)** - Filtrage vectoriel RBAC strict, Parent-Child Retrieval (remontée du corps de l'email si une PJ matche), AI Query Router (Factuel vs Exploratoire), et Answerability Check strict (anti-hallucination).
 > 🆕 **v3.37.0** : **Soft Filtering & Contexte Avancé** - Extraction dynamique de métadonnées (ex: année) via LLM avec bonus Reranker (+0.10) anti-perte de données.

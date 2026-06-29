@@ -408,6 +408,24 @@ class IngestionService:
         if email.is_synthetic:
             metadata["is_synthetic"] = True
             
+        # Hybrid Metadata extraction
+        specific_data = doc_intel.get("specific_data", {})
+        if specific_data and isinstance(specific_data, dict):
+            doc_type = doc_intel.get("document_type", "AUTRE").upper()
+            allowed_fields = []
+            if hasattr(self.config, "metadata_extraction_mapping"):
+                allowed_fields = self.config.metadata_extraction_mapping.get(doc_type, [])
+                
+            discovered = {}
+            for k, v in specific_data.items():
+                if k in allowed_fields:
+                    metadata[k] = v
+                else:
+                    discovered[k] = v
+                    
+            if discovered:
+                metadata["discovered_metadata"] = discovered
+            
         page = ExtractedPage(
             page_number=1,
             page_hash=page_hash,

@@ -1,5 +1,8 @@
 # Changelog
 
+## [v4.14.0] - Unreleased
+- **Feat**: Routage dynamique et extraction de métadonnées spécifiques (Approche Hybride - V3 Finale) via `METADATA_EXTRACTION_MAPPING`.
+
 ## [v4.13.1] - Stable (Production / Main)
 - **Fix**: Résolution des erreurs de typage strict et des faux positifs Pylance sur tous les services.
 

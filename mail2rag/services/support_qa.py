@@ -207,20 +207,37 @@ class SupportQAService:
         self, subject: str, cleaned_body: str
     ) -> dict:
         """
-        Extrait l'intelligence documentaire d'un email (Résumé, Score, Type).
+        Extrait l'intelligence documentaire d'un email (Résumé, Score, Type, Métadonnées).
 
         Returns:
             dict: {
                 "summary": str,
                 "business_value_score": int (1-5),
-                "document_type": str
+                "document_type": str,
+                "specific_data": dict
             }
         """
         import json
         logger.debug("SupportQAService.analyze_document_intelligence appelé.")
 
+        base_types = ["PROCEDURE", "DECISION", "DISCUSSION", "INFORMATIF", "BRUIT", "AUTRE"]
+        dynamic_types = []
+        extra_fields_instructions = ""
+        
+        if hasattr(self.config, "metadata_extraction_mapping") and self.config.metadata_extraction_mapping:
+            dynamic_types = list(self.config.metadata_extraction_mapping.keys())
+            extra_fields_instructions += "\n- 'specific_data': Un objet JSON contenant des métadonnées extraites. "
+            extra_fields_instructions += "Si le document correspond à l'un des types suivants, extrais ces champs :\n"
+            for doc_type, fields in self.config.metadata_extraction_mapping.items():
+                extra_fields_instructions += f"    * {doc_type} : {', '.join(fields)}\n"
+            extra_fields_instructions += "  Place aussi toute autre information clé que tu trouves (ex: référence, montant) dans 'specific_data'."
+        else:
+            extra_fields_instructions = "\n- 'specific_data': Un objet JSON contenant toute métadonnée clé trouvée (ex: nom, montant, référence, date)."
+
+        allowed_types_str = ", ".join(base_types + dynamic_types)
+
         system_prompt = textwrap.dedent(
-            """
+            f"""
         Tu es un expert en gestion documentaire. Ton rôle est d'analyser cet email et de l'indexer.
         
         RÈGLES :
@@ -231,15 +248,16 @@ class SupportQAService:
             3 = Résolution de problème technique, discussion informative
             2 = Échange courant, conversation métier sans grande valeur de référence
             1 = Bruit, spam, remerciement, e-mail éphémère (ex: "Ok on se voit à 14h")
-        - 'document_type': Choisis exactement UNE catégorie parmi : PROCEDURE, DECISION, DISCUSSION, INFORMATIF, BRUIT, AUTRE.
+        - 'document_type': Choisis exactement UNE catégorie parmi : {allowed_types_str}.{extra_fields_instructions}
 
         FORMAT DE SORTIE :
         Tu dois répondre UNIQUEMENT avec un objet JSON valide, sans markdown, avec la structure stricte suivante :
-        {
+        {{
           "summary": "...",
           "business_value_score": 3,
-          "document_type": "DISCUSSION"
-        }
+          "document_type": "DISCUSSION",
+          "specific_data": {{}}
+        }}
         """
         ).strip()
 
@@ -281,12 +299,16 @@ class SupportQAService:
             score = int(result.get("business_value_score", 3))
             doc_type = str(result.get("document_type", "AUTRE")).upper()
             summary = str(result.get("summary", ""))
+            specific_data = result.get("specific_data", {})
+            if not isinstance(specific_data, dict):
+                specific_data = {}
             
             logger.info(f"✅ Intelligence documentaire extraite : Score={score}/5, Type={doc_type}")
             return {
                 "summary": summary,
                 "business_value_score": score,
-                "document_type": doc_type
+                "document_type": doc_type,
+                "specific_data": specific_data
             }
 
         except Exception as e:
@@ -297,7 +319,8 @@ class SupportQAService:
             return {
                 "summary": self.generate_email_summary(subject, cleaned_body),
                 "business_value_score": 3,
-                "document_type": "AUTRE"
+                "document_type": "AUTRE",
+                "specific_data": {}
             }
 
     def _call_llm(self, messages: list, temperature: float, max_tokens: int, response_format: dict = None) -> str:
