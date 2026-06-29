@@ -575,7 +575,21 @@ class DocumentProcessor:
             page_count = len(doc)
             logger.info("Le PDF %s contient %d pages.", path.name, page_count)
             
+            # Extraction des métadonnées du PDF
+            meta = doc.metadata or {}
+            pdf_metadata = {"filename": path.name}
+            if meta.get("title"): pdf_metadata["title"] = meta["title"]
+            if meta.get("author"): pdf_metadata["author"] = meta["author"]
+            if meta.get("subject"): pdf_metadata["subject"] = meta["subject"]
+            if meta.get("creationDate"): pdf_metadata["creationDate"] = meta["creationDate"]
+            
             result_parts = [f"--- EXTRACTION PDF ({page_count} pages) ---\n"]
+            if pdf_metadata:
+                result_parts.append("--- MÉTADONNÉES PDF ---\n")
+                for k, v in pdf_metadata.items():
+                    result_parts.append(f"{k.capitalize()}: {v}\n")
+                result_parts.append("\n")
+                
             extracted_pages = []
             
             vision_calls_count = 0
@@ -672,7 +686,8 @@ class DocumentProcessor:
                     file_hash=fhash,
                     total_pages=page_count,
                     source_type="pdf",
-                    pages=extracted_pages
+                    pages=extracted_pages,
+                    global_metadata=pdf_metadata
                 )
                 
             return "".join(result_parts)

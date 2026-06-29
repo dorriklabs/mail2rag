@@ -56,7 +56,7 @@ class LLMClient:
         """Configure LiteLLM based on the selected provider."""
         if self.provider == "lmstudio":
             # LM Studio uses OpenAI-compatible API
-            self.base_url = self.config.ai_api_url.rsplit("/", 1)[0]  # Remove /chat/completions
+            self.base_url = self.config.ai_api_url.replace("/chat/completions", "")
             self.api_key = self.config.ai_api_key or "lm-studio"
             
             # Use existing model names from config

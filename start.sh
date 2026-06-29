@@ -7,7 +7,7 @@
 echo "🚀 Démarrage du serveur LM Studio en arrière-plan..."
 # On lance le serveur LM Studio sur l'adresse 0.0.0.0 pour qu'il soit accessible par Docker
 # Les logs sont redirigés vers lms_server.log
-nohup lms server start --bind 0.0.0.0 > lms_server.log 2>&1 &
+nohup lms server start --bind 0.0.0.0 --port 1234 --cors > lms_server.log 2>&1 &
 
 echo "⏳ Attente du démarrage du serveur (5 secondes)..."
 sleep 5

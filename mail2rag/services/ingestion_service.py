@@ -556,6 +556,36 @@ class IngestionService:
 
                 if analysis_result:
                     if isinstance(analysis_result, ExtractedDocument):
+                        # Option 2: Extraction de métadonnées par IA sur les 5 premières pages
+                        if self.config.structured_ingestion_enabled and getattr(self.config, "metadata_extraction_mapping", None):
+                            first_pages_text = "\n".join(p.text for p in analysis_result.pages[:5])
+                            if first_pages_text:
+                                try:
+                                    self.logger.info("🧠 Analyse IA (Document Intelligence) sur les 5 premières pages de la pièce jointe: %s", filename)
+                                    doc_intel = self.support_qa_service.analyze_document_intelligence(
+                                        subject=f"Document joint : {filename}",
+                                        cleaned_body=first_pages_text
+                                    )
+                                    specific_data = doc_intel.get("specific_data", {})
+                                    if specific_data and isinstance(specific_data, dict):
+                                        doc_type = doc_intel.get("document_type", "AUTRE").upper()
+                                        allowed_fields = self.config.metadata_extraction_mapping.get(doc_type, [])
+                                        
+                                        discovered = {}
+                                        for k, v in specific_data.items():
+                                            if k in allowed_fields:
+                                                analysis_result.global_metadata[k] = v
+                                            else:
+                                                discovered[k] = v
+                                        if discovered:
+                                            analysis_result.global_metadata["discovered_metadata"] = discovered
+                                        
+                                        if doc_type != "AUTRE":
+                                            analysis_result.global_metadata["document_type"] = doc_type
+                                            # On garde le source_type d'origine (ex: pdf) mais on ajoute le doc_type aux métadonnées
+                                except Exception as e:
+                                    self.logger.warning("⚠️ Échec extraction IA sur pièce jointe %s : %s", filename, e)
+
                         analysis_path = secure_folder / f"{safe_pj_name}_analysis.json"
                         with analysis_path.open("w", encoding="utf-8") as f:
                             json.dump(analysis_result.model_dump(), f, ensure_ascii=False)
