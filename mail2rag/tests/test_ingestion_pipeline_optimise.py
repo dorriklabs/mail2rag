@@ -56,15 +56,19 @@ def ingestion_service(mock_config, processor):
     service.ragproxy_client = MagicMock()
     return service
 
-def test_pdf_natif_sans_vision(processor):
-    """Vérifie qu'un PDF propre natif ne déclenche pas Qwen3-VL."""
+@pytest.mark.parametrize("filename, text_content, expected_tag", [
+    ("dummy.pdf", "Texte natif très propre avec des vraies phrases.", "Texte natif très propre"),
+    ("plui_reglement.pdf", "Article 1: Dispositions Générales du PLUI. Les zones urbaines...", "PLUI")
+])
+def test_pdf_natif_sans_vision(processor, filename, text_content, expected_tag):
+    """Vérifie qu'un PDF propre natif (standard ou PLUI) ne déclenche pas Qwen3-VL."""
     with patch("fitz.open") as mock_fitz_open, \
          patch("services.quality_scorer.QualityScorer.score_extraction_quality") as mock_scorer:
         
         mock_doc = MagicMock()
         mock_doc.__len__.return_value = 2
         mock_page = MagicMock()
-        mock_page.get_text.return_value = "Texte natif très propre avec des vraies phrases."
+        mock_page.get_text.return_value = text_content
         mock_doc.load_page.return_value = mock_page
         mock_fitz_open.return_value = mock_doc
         
@@ -75,10 +79,10 @@ def test_pdf_natif_sans_vision(processor):
             "reasons": []
         }
         
-        result = processor._process_pdf(Path("dummy.pdf"))
+        result = processor._process_pdf(Path(filename))
         
         # Vérification
-        assert "Texte natif très propre" in result
+        assert expected_tag in result
         assert "Méthode : pymupdf" in result
         assert "Méthode : mixed" not in result
         processor.llm_client.vision.assert_not_called()
@@ -316,3 +320,4 @@ def test_structured_format(processor, mock_config, tmp_path):
         dump = doc.model_dump()
         assert "pages" in dump
         assert dump["pages"][0]["text"] == "Texte propre"
+
