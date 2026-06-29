@@ -8,7 +8,7 @@ avec préservation des frontières de phrases et métadonnées enrichies.
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,73 @@ class RecursiveTextSplitter:
         return chunks
 
 
+
+class MarkdownHeaderSplitter:
+    """
+    Découpe le texte en fonction des en-têtes Markdown (# Titre, ## Sous-titre)
+    et conserve la hiérarchie pour chaque bloc de texte.
+    """
+    def __init__(self, headers_to_split_on: Optional[List[Tuple[str, str]]] = None):
+        if headers_to_split_on is None:
+            self.headers_to_split_on = [
+                ("#", "H1"),
+                ("##", "H2"),
+                ("###", "H3"),
+                ("####", "H4"),
+                ("#####", "H5"),
+                ("######", "H6"),
+            ]
+        else:
+            self.headers_to_split_on = headers_to_split_on
+
+    def split_text(self, text: str) -> List[Dict[str, Any]]:
+        lines = text.split('\n')
+        chunks = []
+        current_content = []
+        current_metadata = {}
+        
+        sorted_headers = sorted(self.headers_to_split_on, key=lambda x: len(x[0]), reverse=True)
+        
+        for line in lines:
+            header_match = None
+            for sep, name in sorted_headers:
+                stripped_line = line.strip()
+                if stripped_line.startswith(sep):
+                    next_char_idx = len(sep)
+                    if next_char_idx >= len(stripped_line) or stripped_line[next_char_idx] in (" ", "*", "~", "_", "<"):
+                        raw_text = stripped_line[next_char_idx:].strip()
+                        # Nettoyer universellement tout type de formatage Markdown (*, ~, _, <, >)
+                        clean_text = re.sub(r'[*~_<]+(.*?)[*~_>]+', r'\1', raw_text)
+                        clean_text = clean_text.strip()
+                        header_match = (sep, name, clean_text)
+                        break
+            
+            if header_match:
+                sep, name, header_text = header_match
+                content_str = '\n'.join(current_content).strip()
+                if content_str:
+                    chunks.append({"text": content_str, "metadata": current_metadata.copy()})
+                current_content = []
+                
+                sep_level = len(sep)
+                keys_to_remove = []
+                for k in current_metadata.keys():
+                    for s, n in sorted_headers:
+                        if n == k and len(s) >= sep_level:
+                            keys_to_remove.append(k)
+                for k in keys_to_remove:
+                    current_metadata.pop(k, None)
+                
+                current_metadata[name] = header_text
+            else:
+                current_content.append(line)
+                
+        content_str = '\n'.join(current_content).strip()
+        if content_str or current_metadata:
+            chunks.append({"text": content_str, "metadata": current_metadata.copy()})
+            
+        return chunks
+
 class TextChunker:
     """
     Classe principale pour le chunking de documents.
@@ -226,15 +293,11 @@ class TextChunker:
         self.chunk_overlap = chunk_overlap
         self.strategy = strategy
         
-        if strategy != "recursive":
-            logger.warning(
-                f"Strategy '{strategy}' non supportée, utilisation de 'recursive'"
-            )
-        
-        self.splitter = RecursiveTextSplitter(
+        self.recursive_splitter = RecursiveTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
+        self.markdown_splitter = MarkdownHeaderSplitter()
         
         logger.info(
             f"TextChunker initialized: strategy={strategy}, "
@@ -260,25 +323,55 @@ class TextChunker:
             logger.warning("Texte vide fourni au chunker")
             return []
         
-        # Découper le texte
-        text_chunks = self.splitter.split_text(text)
-        total_chunks = len(text_chunks)
+        # Choix de la stratégie
+        final_text_chunks = []
+        if self.strategy == "markdown":
+            md_chunks = self.markdown_splitter.split_text(text)
+            for md_chunk in md_chunks:
+                md_text = md_chunk["text"]
+                md_meta = md_chunk["metadata"]
+                
+                # Ignorer les blocs vides sans métadonnées intéressantes
+                if not md_text and not md_meta:
+                    continue
+                    
+                breadcrumb = " > ".join(md_meta.values())
+                context_prefix = f"[Contexte: {breadcrumb}]\n" if breadcrumb else ""
+                
+                # Si pas de texte mais on a un contexte, on ignore
+                if not md_text:
+                    continue
+                    
+                sub_chunks = self.recursive_splitter.split_text(md_text)
+                for sc in sub_chunks:
+                    # On évite de dupliquer le préfixe s'il est déjà au début (au cas où)
+                    if context_prefix and not sc.startswith(context_prefix):
+                        final_chunk_text = context_prefix + sc
+                    else:
+                        final_chunk_text = sc
+                    
+                    # Fusion des métadonnées markdown avec base
+                    combo_meta = {**md_meta}
+                    final_text_chunks.append((final_chunk_text, combo_meta))
+        else:
+            splits = self.recursive_splitter.split_text(text)
+            final_text_chunks = [(s, {}) for s in splits]
+
+        total_chunks = len(final_text_chunks)
+        logger.debug(f"Texte découpé en {total_chunks} chunks avec la stratégie {self.strategy}")
         
-        logger.debug(f"Texte découpé en {total_chunks} chunks")
-        
-        # Créer les objets Chunk avec métadonnées
         chunks = []
         char_position = 0
         base_metadata = base_metadata or {}
         
-        for i, chunk_text in enumerate(text_chunks):
-            # Calcul du contexte étendu (Parent-Child) : +400 chars avant/après
+        for i, (chunk_text, md_meta) in enumerate(final_text_chunks):
             start_ext = max(0, char_position - 400)
             end_ext = min(len(text), char_position + len(chunk_text) + 400)
             extended_text = text[start_ext:end_ext]
             
             chunk_metadata = {
                 **base_metadata,
+                **md_meta,
                 "chunk_index": i,
                 "chunk_total": total_chunks,
                 "chunk_size": len(chunk_text),

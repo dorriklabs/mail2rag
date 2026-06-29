@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Tuple, List
 
 import requests
 import fitz  # PyMuPDF
+import pymupdf4llm
 from PIL import Image
 
 from config import Config
@@ -483,6 +484,8 @@ class DocumentProcessor:
                     e,
                     exc_info=True,
                 )
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error("Détail de l'erreur: %s", e.response.text)
                 raise
             except ValueError as e:
                 logger.error(
@@ -595,9 +598,19 @@ class DocumentProcessor:
             vision_calls_count = 0
             max_vision_pages = self.config.vision_pdf_max_pages
             
+            # Generate markdown for all pages using pymupdf4llm
+            try:
+                md_pages = pymupdf4llm.to_markdown(doc, page_chunks=True)
+            except Exception as e:
+                logger.warning(f"pymupdf4llm échoué, fallback sur texte brut : {e}")
+                md_pages = None
+            
             for i in range(page_count):
                 page = doc.load_page(i)
-                text = page.get_text("text").strip()
+                if md_pages and i < len(md_pages):
+                    text = md_pages[i].get("text", "").strip()
+                else:
+                    text = page.get_text("text").strip()
                 
                 # Évaluer la qualité de l'extraction texte
                 quality_res = QualityScorer.score_extraction_quality(text)

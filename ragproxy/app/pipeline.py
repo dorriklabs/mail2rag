@@ -125,11 +125,9 @@ Si aucun filtre n'est trouvé, mets "filters": {{}}."""
         clean_query = routing_info.get("clean_query", query)
         
         strict_filter = None
-        if confidence == "high" and filters:
-            strict_filter = filters
-            logger.info(f"Application de filtres stricts : {strict_filter}")
-            debug_info["strict_filters"] = strict_filter
-        elif filters:
+        # On utilise systématiquement les filtres en mode "Boost" (via le Reranker)
+        # pour éviter de rendre le RAG aveugle si les métadonnées sont imparfaites.
+        if filters:
             logger.info(f"Boost de métadonnées (confiance {confidence}) : {filters}")
             debug_info["boost_filters"] = filters
 

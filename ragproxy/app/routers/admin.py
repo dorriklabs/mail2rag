@@ -74,7 +74,7 @@ def ingest_document(req: IngestRequest):
             elif "source" in req.metadata:
                 cleanup_filter["source"] = req.metadata["source"]
 
-        if cleanup_filter:
+        if cleanup_filter and not req.skip_cleanup:
             try:
                 deleted_count = pipeline.vdb.delete_by_metadata(
                     collection_name=req.collection,
@@ -89,6 +89,7 @@ def ingest_document(req: IngestRequest):
         chunker = TextChunker(
             chunk_size=req.chunk_size,
             chunk_overlap=req.chunk_overlap,
+            strategy=req.chunking_strategy,
         )
         
         chunks = chunker.chunk_document(

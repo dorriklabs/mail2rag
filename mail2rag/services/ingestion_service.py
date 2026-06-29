@@ -749,6 +749,7 @@ class IngestionService:
                         document=doc,
                         chunk_size=dynamic_chunk_size,
                         chunk_overlap=self.config.chunk_overlap,
+                        chunking_strategy=self.config.chunking_strategy,
                     )
                     
                     if result.get("status") == "ok":

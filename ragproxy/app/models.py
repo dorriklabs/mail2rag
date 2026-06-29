@@ -3,7 +3,7 @@ Pydantic models for RAG Proxy API.
 """
 
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -56,11 +56,13 @@ class ReadyResponse(BaseModel):
 
 class IngestRequest(BaseModel):
     """Request to ingest a document."""
-    collection: str
-    text: str
-    metadata: Dict[str, Any] = {}
-    chunk_size: int = 800
-    chunk_overlap: int = 100
+    collection: str = Field(..., description="Nom de la collection Qdrant (ex: factures)")
+    text: str = Field(..., description="Le texte intégral du document")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Métadonnées associées")
+    chunk_size: int = Field(default=800, description="Taille maximale d'un chunk")
+    chunk_overlap: int = Field(default=100, description="Chevauchement entre les chunks")
+    chunking_strategy: str = Field(default="recursive", description="Stratégie: 'recursive' ou 'semantic'")
+    skip_cleanup: bool = Field(default=False, description="Skip anti-duplicate cleanup (useful for multi-page ingest)")
 
 
 class IngestResponse(BaseModel):

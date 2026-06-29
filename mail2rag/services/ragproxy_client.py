@@ -59,6 +59,8 @@ class RAGProxyClient:
         metadata: Dict[str, Any],
         chunk_size: int = 800,
         chunk_overlap: int = 100,
+        chunking_strategy: str = "recursive",
+        skip_cleanup: bool = False,
     ) -> Dict[str, Any]:
         """
         Ingère un document dans RAG Proxy avec chunking et indexation.
@@ -69,6 +71,8 @@ class RAGProxyClient:
             metadata: Métadonnées (subject, sender, date, filename, uid, etc.)
             chunk_size: Taille des chunks (défaut: 800)
             chunk_overlap: Chevauchement entre chunks (défaut: 100)
+            chunking_strategy: Stratégie de découpage
+            skip_cleanup: Indique au proxy de ne pas supprimer les anciens chunks
             
         Returns:
             Dict avec clés: status, collection, chunks_created, message
@@ -81,9 +85,11 @@ class RAGProxyClient:
         payload = {
             "collection": collection,
             "text": text,
-            "metadata": metadata,
+            "metadata": metadata or {},
             "chunk_size": chunk_size,
             "chunk_overlap": chunk_overlap,
+            "chunking_strategy": chunking_strategy,
+            "skip_cleanup": skip_cleanup,
         }
         
         logger.info(
@@ -146,6 +152,7 @@ class RAGProxyClient:
         document: ExtractedDocument,
         chunk_size: int = 800,
         chunk_overlap: int = 100,
+        chunking_strategy: str = "recursive",
     ) -> Dict[str, Any]:
         """
         Ingère un document structuré (ExtractedDocument) de manière DRY.
@@ -177,6 +184,8 @@ class RAGProxyClient:
                 metadata=page_meta,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
+                chunking_strategy=chunking_strategy,
+                skip_cleanup=True,
             )
 
             if result.get("status") == "ok":

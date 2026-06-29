@@ -24,9 +24,24 @@ TEST_CASES = [
         "criteria": "La réponse doit aborder l'implantation des piscines et les distances ou interdictions par rapport aux limites séparatives."
     },
     {
-        "name": "Niveau 4 - Aspect extérieur spécifique",
-        "question": "Donne-moi les règles d'aspect extérieur pour les toitures en centre-ville (zone UA).",
-        "criteria": "La réponse doit lister des règles sur les matériaux, la pente ou l'aspect visuel des toits en zone UA."
+        "name": "Niveau 4 - Implantation en Zone UA (Modifié)",
+        "question": "Dans la zone UA, pour un pignon sur rue, est-ce que les décrochés de façade sont autorisés sur la limite d'emprise de la voie ?",
+        "criteria": "La réponse doit affirmer que les décrochés de façade sont interdits sur la limite d'emprise de la voie."
+    },
+    {
+        "name": "Niveau 5 - Annexe en Zone UL",
+        "question": "Je veux construire un petit cabanon (annexe) de 3 mètres de haut dans mon jardin en Zone UL. Quelles sont les règles d'alignement ou d'implantation pour ce cabanon précis ?",
+        "criteria": "La réponse doit préciser de manière explicite que pour les annexes dont la hauteur est inférieure ou égale à 4 mètres en Zone UL, ce n'est pas réglementé."
+    },
+    {
+        "name": "Niveau 6 - Renvoi d'information (Multi-documents)",
+        "question": "Quelles sont les règles précises d'aspect extérieur pour les clôtures en zone UA ?",
+        "criteria": "La réponse doit indiquer qu'il faut se reporter aux dispositions communes à toutes les zones (partie 1.6 ou équivalent) pour l'aspect extérieur."
+    },
+    {
+        "name": "Niveau 7 - Cas complexe RDC Commercial",
+        "question": "Je souhaite transformer un commerce en logement au rez-de-chaussée dans le secteur UA. Est-ce autorisé et y a-t-il des prescriptions sur la façade ou les vitrines ?",
+        "criteria": "La réponse doit rechercher les dispositions concernant les changements de destination en rez-de-chaussée dans la zone UA (ou indiquer si le règlement l'interdit pour préserver la vocation commerciale)."
     }
 ]
 
@@ -70,12 +85,29 @@ def setup_and_ingest_plui(config, rag_client):
 
     collection_name = "test-plui-evaluation"
     
-    print(f"\n[SETUP] Extraction du PDF {pdf_path.name}...")
-    config.structured_ingestion_enabled = True
-    processor = DocumentProcessor(config)
+    import os
+    import pickle
     
-    doc = processor._process_pdf(pdf_path, return_structured=True)
-    assert doc is not None, "L'extraction du PDF a échoué"
+    # Paramètres d'ingestion depuis les variables d'environnement
+    chunk_size = int(os.getenv("CHUNK_SIZE", "1500"))
+    chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "400"))
+    chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive")
+    
+    cache_path = Path("/app/cache_doc.pkl") if Path("/app").exists() else Path("cache_doc.pkl")
+    
+    if cache_path.exists():
+        print(f"\n[SETUP] Chargement rapide du PDF depuis le cache {cache_path}...")
+        with open(cache_path, "rb") as f:
+            doc = pickle.load(f)
+    else:
+        print(f"\n[SETUP] Extraction du PDF {pdf_path.name} (long)...")
+        config.structured_ingestion_enabled = True
+        processor = DocumentProcessor(config)
+        doc = processor._process_pdf(pdf_path, return_structured=True)
+        assert doc is not None, "L'extraction du PDF a échoué"
+        print(f"[SETUP] Sauvegarde du document dans {cache_path}...")
+        with open(cache_path, "wb") as f:
+            pickle.dump(doc, f)
     
     print(f"[SETUP] Type de document détecté : {doc.source_type}")
     if doc.global_metadata:
@@ -85,9 +117,13 @@ def setup_and_ingest_plui(config, rag_client):
     rag_client.delete_by_metadata(collection=collection_name, filters={"filename": doc.filename})
     
     print(f"[SETUP] Ingestion des {len(doc.pages)} pages dans la collection '{collection_name}'...")
+    print(f"[SETUP] Paramètres : chunk_size={chunk_size}, chunk_overlap={chunk_overlap}, strategy={chunking_strategy}")
     result = rag_client.ingest_structured_document(
         collection=collection_name, 
-        document=doc
+        document=doc,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        chunking_strategy=chunking_strategy
     )
     assert result.get("status") == "ok", f"Erreur d'ingestion : {result.get('message')}"
     
@@ -172,15 +208,32 @@ def test_rag_proxy_responses(rag_client, llm_judge, setup_and_ingest_plui, test_
     question = test_case["question"]
     criteria = test_case["criteria"]
     
+    import os
+    
+    # Paramètres de recherche
+    top_k = int(os.getenv("TOP_K", "15"))
+    final_k = int(os.getenv("FINAL_K", "5"))
+    use_bm25 = os.getenv("USE_BM25", "true").lower() == "true"
+    temperature = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+    max_tokens = int(os.getenv("LLM_MAX_TOKENS", "1000"))
+    
     print(f"\n\n{'='*60}")
     print(f"📌 TEST : {test_case['name']}")
     print(f"{'='*60}")
     print(f"❓ Question posée : {question}")
     print(f"🎯 Critère attendu : {criteria}\n")
-    print(f"⏳ Interrogation de la base vectorielle et génération...")
+    print(f"⏳ Interrogation (top_k={top_k}, final_k={final_k}, hybrid={use_bm25}, temp={temperature})...")
     
     # Étape 1 : Interroger le système RAG sur la collection de test spécifiquement
-    response = rag_client.chat(query=question, collection=collection_name, top_k=15, final_k=5)
+    response = rag_client.chat(
+        query=question, 
+        collection=collection_name, 
+        top_k=top_k, 
+        final_k=final_k,
+        use_bm25=use_bm25,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
     
     assert "answer" in response, "Le RAG Proxy n'a pas retourné de champ 'answer'"
     
@@ -192,27 +245,23 @@ def test_rag_proxy_responses(rag_client, llm_judge, setup_and_ingest_plui, test_
     if sources:
         print(f"\n📚 Sources utilisées par le RAG ({len(sources)}) :")
         for i, src in enumerate(sources, 1):
-            # Extraire la première ligne (qui contient la balise [Page... | Méthode...])
             content = src.get('text', '')
-            first_line = content.split('\n')[0] if content else 'Source inconnue'
             
             # Extraire les métadonnées utiles pour le debug
             meta = src.get('metadata', {})
             page = meta.get('page_number', '?')
             chunk_idx = meta.get('chunk_index', '?')
             chunk_tot = meta.get('chunk_total', '?')
-            c_start = meta.get('char_start', '?')
-            c_end = meta.get('char_end', '?')
             score = src.get('score', 0)
             
             # Récupérer les autres métadonnées intéressantes (titre, auteur, etc.)
             ignore_keys = {'text', 'page_number', 'page_hash', 'chunk_index', 'chunk_total', 'chunk_size', 'extended_text', 'char_start', 'char_end', 'collection', 'rerank_score'}
             other_meta = {k: v for k, v in meta.items() if k not in ignore_keys}
             
-            print(f"  {i}. {first_line}")
-            print(f"     ↳ Détails : Page {page} | Chunk {chunk_idx}/{chunk_tot} | Caractères {c_start} à {c_end} | Score RAG : {score:.3f}")
+            print(f"\n  [{i}] --- Page {page} | Chunk {chunk_idx}/{chunk_tot} | Score RAG : {score:.3f} ---")
             if other_meta:
-                print(f"     ↳ Méta   : {other_meta}")
+                print(f"      Méta : {other_meta}")
+            print(f"      Extrait :\n{content}\n  " + "-"*40)
         
     # Si la réponse est en erreur technique, on fail directement
     if "Erreur HTTP" in actual_answer or "Timeout" in actual_answer:

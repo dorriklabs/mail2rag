@@ -8,3 +8,4 @@ urllib3
 litellm>=1.50.0
 PyMuPDF
 pandas
+pymupdf4llm
